@@ -4,7 +4,8 @@ const fs = require("fs");
 const path = require("path");
 const express = require("express");
 const cors = require("cors");
-const puppeteer = require("puppeteer");
+const puppeteer = require("puppeteer-core");
+const chromium = require("@sparticuz/chromium");
 const { Resend } = require("resend");
 const Stripe = require("stripe");
 
@@ -62,12 +63,6 @@ const EMAIL_REPLY_TO = String(process.env.EMAIL_REPLY_TO || "").trim();
 const stripeSecretKey = String(process.env.STRIPE_SECRET_KEY || "").trim();
 const stripe = stripeSecretKey ? new Stripe(stripeSecretKey) : null;
 const resend = resendApiKey ? new Resend(resendApiKey) : null;
-const PUPPETEER_CACHE_DIR = String(
-  process.env.PUPPETEER_CACHE_DIR || path.join(process.cwd(), "node_modules", ".puppeteer_cache")
-).trim();
-
-process.env.PUPPETEER_CACHE_DIR = PUPPETEER_CACHE_DIR;
-
 app.use("/api/stripe-webhook", express.raw({ type: "application/json" }));
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
@@ -193,31 +188,57 @@ function findChromeInDirectory(rootDir) {
   return null;
 }
 
-function getBrowserDiagnostics() {
+
+async function resolveChromiumExecutablePath() {
+  const envCandidates = [
+    process.env.PUPPETEER_EXECUTABLE_PATH,
+    process.env.GOOGLE_CHROME_BIN,
+    process.env.CHROME_BIN,
+    process.env.CHROMIUM_PATH,
+  ]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
+
+  for (const candidate of envCandidates) {
+    if (fileExists(candidate)) {
+      return candidate;
+    }
+  }
+
+  const bundledPath = await chromium.executablePath();
+  if (fileExists(bundledPath)) {
+    return bundledPath;
+  }
+
+  throw new Error(
+    "Chromium executable could not be resolved. Set PUPPETEER_EXECUTABLE_PATH or install @sparticuz/chromium correctly."
+  );
+}
+
+async function getBrowserDiagnostics() {
   const envPaths = {
     PUPPETEER_EXECUTABLE_PATH: process.env.PUPPETEER_EXECUTABLE_PATH || null,
     GOOGLE_CHROME_BIN: process.env.GOOGLE_CHROME_BIN || null,
     CHROME_BIN: process.env.CHROME_BIN || null,
     CHROMIUM_PATH: process.env.CHROMIUM_PATH || null,
-    PUPPETEER_CACHE_DIR,
   };
 
-  let puppeteerPath = null;
-  try {
-    puppeteerPath = puppeteer.executablePath();
-  } catch (_error) {
-    puppeteerPath = null;
-  }
+  let bundledChromiumPath = null;
+  let resolvedExecutablePath = null;
+  let resolutionError = null;
 
-  const discoveredCacheChrome = findChromeInDirectory(PUPPETEER_CACHE_DIR);
+  try {
+    bundledChromiumPath = await chromium.executablePath();
+  } catch (error) {
+    resolutionError = error?.message || String(error);
+  }
 
   const candidateOrder = [
     { source: "PUPPETEER_EXECUTABLE_PATH", path: envPaths.PUPPETEER_EXECUTABLE_PATH },
     { source: "GOOGLE_CHROME_BIN", path: envPaths.GOOGLE_CHROME_BIN },
     { source: "CHROME_BIN", path: envPaths.CHROME_BIN },
     { source: "CHROMIUM_PATH", path: envPaths.CHROMIUM_PATH },
-    { source: "puppeteer.executablePath()", path: puppeteerPath },
-    { source: "PUPPETEER_CACHE_DIR scan", path: discoveredCacheChrome },
+    { source: "@sparticuz/chromium", path: bundledChromiumPath },
     { source: "system google-chrome", path: "/usr/bin/google-chrome-stable" },
     { source: "system chromium-browser", path: "/usr/bin/chromium-browser" },
     { source: "system chromium", path: "/usr/bin/chromium" },
@@ -225,19 +246,24 @@ function getBrowserDiagnostics() {
 
   const candidates = candidateOrder.map((item) => ({
     source: item.source,
-    path: item.path,
+    path: item.path || null,
     exists: fileExists(item.path),
   }));
 
-  const usableCandidate = candidates.find((item) => item.exists);
+  try {
+    resolvedExecutablePath = await resolveChromiumExecutablePath();
+  } catch (error) {
+    resolutionError = resolutionError || error?.message || String(error);
+  }
 
   return {
     env: envPaths,
-    puppeteerExecutablePath: puppeteerPath,
-    cacheDirectoryExists: fileExists(PUPPETEER_CACHE_DIR),
-    discoveredCacheChrome,
+    chromiumHeadless: chromium.headless,
+    chromiumArgsCount: Array.isArray(chromium.args) ? chromium.args.length : 0,
+    bundledChromiumPath,
     candidates,
-    launchExecutablePath: usableCandidate ? usableCandidate.path : null,
+    launchExecutablePath: resolvedExecutablePath,
+    resolutionError,
   };
 }
 
@@ -301,31 +327,24 @@ function buildFallbackDocumentHtml(payload = {}) {
 }
 
 async function generatePdfFromHtml(html) {
-  const diagnostics = getBrowserDiagnostics();
   const trimmedHtml = String(html || "").trim();
 
   if (!trimmedHtml) {
     throw new Error("No HTML provided for PDF generation.");
   }
 
-  if (!diagnostics.launchExecutablePath) {
-    const error = new Error(
-      `Could not find Chrome in ${PUPPETEER_CACHE_DIR}. Run \"npx puppeteer browsers install chrome\" during build.`
-    );
-    error.browser = diagnostics;
-    throw error;
-  }
+  const executablePath = await resolveChromiumExecutablePath();
 
   const launchOptions = {
-    headless: "new",
-    executablePath: diagnostics.launchExecutablePath,
     args: [
+      ...chromium.args,
       "--no-sandbox",
       "--disable-setuid-sandbox",
       "--disable-dev-shm-usage",
-      "--disable-gpu",
-      "--no-zygote",
     ],
+    defaultViewport: chromium.defaultViewport,
+    executablePath,
+    headless: chromium.headless ?? true,
   };
 
   let browser;
@@ -346,9 +365,6 @@ async function generatePdfFromHtml(html) {
     });
 
     return pdfBuffer;
-  } catch (error) {
-    error.browser = diagnostics;
-    throw error;
   } finally {
     try {
       if (page) await page.close();
@@ -357,6 +373,14 @@ async function generatePdfFromHtml(html) {
       if (browser) await browser.close();
     } catch (_error) {}
   }
+}
+
+
+function normaliseBase64Attachment(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const match = raw.match(/^data:application\/pdf;base64,(.+)$/i);
+  return (match ? match[1] : raw).replace(/\s+/g, "");
 }
 
 async function sendEmailWithPdf({
@@ -368,6 +392,7 @@ async function sendEmailWithPdf({
   filename,
   replyTo,
   fallbackPdfPayload,
+  attachmentBase64,
 }) {
   if (!resend) throw new Error("RESEND_API_KEY is missing in environment variables.");
 
@@ -377,13 +402,34 @@ async function sendEmailWithPdf({
   const normalisedHtml = String(htmlForPdf || "").trim();
   const resolvedHtml = normalisedHtml || buildFallbackDocumentHtml(fallbackPdfPayload || {});
 
-  let pdfBuffer;
-  try {
-    pdfBuffer = await generatePdfFromHtml(resolvedHtml);
-  } catch (error) {
-    const fallbackError = new Error(`PDF generation failed: ${error.message}`);
-    fallbackError.cause = error;
-    throw fallbackError;
+  let pdfBuffer = null;
+  let attachmentSource = "none";
+  let pdfError = null;
+
+  const normalisedAttachmentBase64 = normaliseBase64Attachment(attachmentBase64);
+  if (normalisedAttachmentBase64) {
+    try {
+      const candidateBuffer = Buffer.from(normalisedAttachmentBase64, "base64");
+      if (candidateBuffer.slice(0, 5).toString() === "%PDF-") {
+        pdfBuffer = candidateBuffer;
+        attachmentSource = "client";
+      } else {
+        throw new Error("Client PDF attachment was not a valid PDF.");
+      }
+    } catch (error) {
+      pdfError = error;
+      console.warn("Client PDF attachment could not be used:", error?.message || error);
+    }
+  }
+
+  if (!pdfBuffer) {
+    try {
+      pdfBuffer = await generatePdfFromHtml(resolvedHtml);
+      attachmentSource = "server";
+    } catch (error) {
+      pdfError = error;
+      console.warn("Server PDF generation failed. Sending email without attachment.", error?.message || error);
+    }
   }
 
   const payload = {
@@ -391,21 +437,51 @@ async function sendEmailWithPdf({
     to: recipients,
     subject: subject || "Your document",
     html: emailHtml || "<p>Please find your PDF attached.</p>",
-    attachments: [
-      {
-    filename: filename || "document.pdf",
-    content: pdfBuffer.toString("base64"),
-    encoding: "base64",
-    contentType: "application/pdf",
-      },
-    ],
   };
+
+  if (pdfBuffer && Buffer.isBuffer(pdfBuffer)) {
+    const pdfHeader = pdfBuffer.slice(0, 5).toString();
+    console.log("PDF check", {
+      isBuffer: Buffer.isBuffer(pdfBuffer),
+      length: pdfBuffer?.length,
+      header: pdfHeader,
+      filename: filename || "document.pdf",
+      attachmentSource,
+    });
+
+    const debugPdfPath = path.join(process.cwd(), "debug-last-pdf.pdf");
+    try {
+      fs.writeFileSync(debugPdfPath, pdfBuffer);
+      console.log("Saved debug PDF copy:", debugPdfPath);
+    } catch (debugWriteError) {
+      console.warn("Could not save debug PDF copy:", debugWriteError?.message || debugWriteError);
+    }
+
+    if (pdfHeader === "%PDF-") {
+      payload.attachments = [
+        {
+          filename: filename || "document.pdf",
+          content: pdfBuffer.toString("base64"),
+          content_type: "application/pdf",
+        },
+      ];
+    } else {
+      pdfError = new Error(`Generated file is not a valid PDF. Header received: ${pdfHeader}`);
+      console.warn(pdfError.message);
+    }
+  }
 
   const resolvedReplyTo = String(replyTo || EMAIL_REPLY_TO || "").trim();
   if (resolvedReplyTo) payload.replyTo = resolvedReplyTo;
   if (emailText) payload.text = emailText;
 
-  return await resend.emails.send(payload);
+  const sendResult = await resend.emails.send(payload);
+  return {
+    ...sendResult,
+    attachmentIncluded: Array.isArray(payload.attachments) && payload.attachments.length > 0,
+    attachmentSource,
+    pdfError: pdfError ? (pdfError.message || String(pdfError)) : null,
+  };
 }
 
 app.get("/", (_req, res) => {
@@ -415,20 +491,21 @@ app.get("/", (_req, res) => {
   return res.json({ ok: true, message: `Server running on port ${PORT}` });
 });
 
-app.get("/health", (_req, res) => {
+app.get("/health", async (_req, res) => {
+  const browserDiagnostics = await getBrowserDiagnostics();
   res.json({
     ok: true,
     message: `Server running on port ${PORT}`,
     resendConfigured: !!resendApiKey,
     stripeConfigured: !!stripeSecretKey,
-    puppeteerCacheDir: PUPPETEER_CACHE_DIR,
-    chromeExecutable: getBrowserDiagnostics().launchExecutablePath,
+    chromeExecutable: browserDiagnostics.launchExecutablePath,
+    browser: browserDiagnostics,
   });
 });
 
-app.get("/api/debug-browser", (_req, res) => {
+app.get("/api/debug-browser", async (_req, res) => {
   try {
-    return res.json({ ok: true, diagnostics: getBrowserDiagnostics() });
+    return res.json({ ok: true, diagnostics: await getBrowserDiagnostics() });
   } catch (error) {
     return res.status(500).json({ ok: false, error: error.message });
   }
@@ -465,7 +542,7 @@ app.get("/api/test-pdf", async (_req, res) => {
       error: "PDF test failed.",
       details: error.message,
       stack: error.stack,
-      browser: getBrowserDiagnostics(),
+      browser: await getBrowserDiagnostics(),
     });
   }
 });
@@ -648,6 +725,7 @@ app.post("/api/send-document-email", async (req, res) => {
       hidePhoneNumber,
       message,
       documentHtml,
+      attachmentBase64,
     } = payload;
 
     const recipients = normaliseRecipients(to || payload.recipients);
@@ -701,6 +779,7 @@ app.post("/api/send-document-email", async (req, res) => {
       emailText: text || undefined,
       filename: safeFilename,
       replyTo,
+      attachmentBase64,
       fallbackPdfPayload: {
         documentType: safeDocumentType,
         businessName,
@@ -739,9 +818,16 @@ app.post("/api/send-document-email", async (req, res) => {
       documentType: safeDocumentType,
       recipients,
       number: resolvedNumber,
+      attachmentIncluded: emailResult?.attachmentIncluded,
+      attachmentSource: emailResult?.attachmentSource,
+      pdfError: emailResult?.pdfError || null,
     });
 
-    return res.json({ ok: true, message: `${safeDocumentType} email sent successfully.`, result: emailResult });
+    const deliveryMessage = emailResult?.attachmentIncluded
+      ? `${safeDocumentType} email sent successfully.`
+      : `${safeDocumentType} email sent without PDF attachment.`;
+
+    return res.json({ ok: true, message: deliveryMessage, result: emailResult });
   } catch (error) {
     console.error("Send document email failed:", error);
     return res.status(500).json({ ok: false, error: "Failed to send document email.", details: error.message });
@@ -772,6 +858,7 @@ app.post("/api/send-invoice-attachment-email", async (req, res) => {
       htmlForPdf: invoiceHtml,
       emailHtml: `<p>Hello ${escapeHtml(clientName)},</p><p>Please find your invoice attached.</p>`,
       filename: `invoice-${invoiceNumber}.pdf`,
+      attachmentBase64: payload.attachmentBase64,
       fallbackPdfPayload: {
         documentType: "invoice",
         businessName: payload.businessName,
@@ -805,9 +892,16 @@ app.post("/api/send-invoice-attachment-email", async (req, res) => {
     console.log("send-invoice-attachment-email success:", {
       recipients,
       invoiceNumber,
+      attachmentIncluded: emailResult?.attachmentIncluded,
+      attachmentSource: emailResult?.attachmentSource,
+      pdfError: emailResult?.pdfError || null,
     });
 
-    return res.json({ ok: true, message: `Invoice emailed to ${recipients.join(", ")}`, result: emailResult });
+    const deliveryMessage = emailResult?.attachmentIncluded
+      ? `Invoice emailed to ${recipients.join(", ")}`
+      : `Invoice emailed to ${recipients.join(", ")} without PDF attachment`;
+
+    return res.json({ ok: true, message: deliveryMessage, result: emailResult });
   } catch (error) {
     console.error("Email failed:", error);
     return res.status(500).json({ ok: false, error: error.message });
@@ -861,7 +955,9 @@ app.use((error, _req, res, _next) => {
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   console.log("Allowed CORS origins:", CLIENT_URLS);
-  console.log("Puppeteer diagnostics:", getBrowserDiagnostics());
+  getBrowserDiagnostics()
+    .then((diagnostics) => console.log("Chromium diagnostics:", diagnostics))
+    .catch((error) => console.error("Chromium diagnostics failed:", error));
   if (!stripeSecretKey) console.warn("WARNING: STRIPE_SECRET_KEY is not set.");
   if (!resendApiKey) console.warn("WARNING: RESEND_API_KEY is not set.");
 });
