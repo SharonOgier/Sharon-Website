@@ -1,12 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "./client";
 
-console.log("SHARON PORTAL WEBSITE LIVE BUILD TEST");
 
-<div style={{ background: "yellow", padding: 8 }}>LIVE BUILD TEST</div>
-
-console.log("SUPABASE URL:", import.meta.env.VITE_SUPABASE_URL);
-console.log("ALL ENV:", import.meta.env);
 
 const colours = {
   purple: "#6A1B9A",
@@ -1366,6 +1361,11 @@ const html = buildInvoiceHtml(invoice, stripeCheckoutUrl, options, ctx);
 w.document.open();
 w.document.write(html);
 w.document.close();
+try {
+  w.focus();
+} catch (error) {
+  console.warn("Preview window focus failed", error);
+}
 }
 
 
@@ -3472,6 +3472,11 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     w.document.open();
     w.document.write(html);
     w.document.close();
+    try {
+      w.focus();
+    } catch (error) {
+      console.warn("Preview window focus failed", error);
+    }
     };
 
     const openSavedQuotePreview = (quote) => {
@@ -3812,6 +3817,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     w.document.close();
 
     let stripeCheckoutUrl = invoice.stripeCheckoutUrl || "";
+    let previewInvoice = { ...invoice };
 
     try {
       if (!stripeCheckoutUrl && resolveInvoiceStripeAmount(invoice) > 0) {
@@ -3819,6 +3825,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
         stripeCheckoutUrl = await createStripeCheckoutForInvoice(invoice);
 
         if (stripeCheckoutUrl) {
+          previewInvoice = { ...invoice, stripeCheckoutUrl };
           setInvoices((prev) =>
             prev.map((item) =>
               item.id === invoice.id ? { ...item, stripeCheckoutUrl } : item
@@ -3830,7 +3837,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       console.error("STRIPE PREVIEW ERROR:", error);
     }
 
-    writeInvoicePreviewToWindow(w, invoice, stripeCheckoutUrl, { allowEmail: true }, { profile, clients });
+    writeInvoicePreviewToWindow(w, previewInvoice, stripeCheckoutUrl, { allowEmail: true }, { profile, clients });
     w.simulateInvoicePayment = () => simulateInvoicePayment(invoice.id);
     };
 
@@ -3867,7 +3874,22 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
 
     const w = window.open("", "_blank");
     if (!w) return;
-    writeInvoicePreviewToWindow(w, previewInvoice, "", { allowEmail: true }, { profile, clients }); // Always true
+
+    let stripeCheckoutUrl = "";
+    try {
+      if (resolveInvoiceStripeAmount(previewInvoice) > 0) {
+        stripeCheckoutUrl = await createStripeCheckoutForInvoice(previewInvoice);
+      }
+    } catch (error) {
+      console.error("STRIPE PREVIEW ERROR:", error);
+    }
+
+    const previewInvoiceWithStripe = {
+      ...previewInvoice,
+      stripeCheckoutUrl,
+    };
+
+    writeInvoicePreviewToWindow(w, previewInvoiceWithStripe, stripeCheckoutUrl, { allowEmail: true }, { profile, clients });
     w.simulateInvoicePayment = () => simulateInvoicePayment(previewInvoice.id);
     };
 
