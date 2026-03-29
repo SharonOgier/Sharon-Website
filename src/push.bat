@@ -1,5 +1,3 @@
-Save this in push.bat:
-
 @echo off
 cd /d %~dp0
 git add .
