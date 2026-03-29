@@ -10,15 +10,16 @@
     "preview": "vite preview",
     "start": "node server.cjs",
     "server": "node server.cjs",
-    "server:dev": "nodemon server.cjs",
-    "postinstall": "npx puppeteer browsers install chrome"
+    "server:dev": "nodemon server.cjs"
   },
   "dependencies": {
+    "@sparticuz/chromium": "^143.0.4",
     "@supabase/supabase-js": "^2.56.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.21.2",
-    "puppeteer": "^24.40.0",
+    "html2pdf.js": "^0.14.0",
+    "puppeteer-core": "^24.40.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "resend": "^4.0.1",
