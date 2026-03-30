@@ -4399,11 +4399,17 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
 
     const financialInsights = useMemo(() => {
       const topClientValue = clientRevenueRows[0]?.value || 0;
+      const topThreeClientValue = clientRevenueRows.slice(0, 3).reduce((sum, row) => sum + safeNumber(row.value), 0);
       const topClientShare = totals.paidIncome > 0 ? (topClientValue / totals.paidIncome) * 100 : 0;
+      const topThreeClientShare = totals.paidIncome > 0 ? (topThreeClientValue / totals.paidIncome) * 100 : 0;
       const averageInvoiceValue = invoices.length ? totals.totalIncome / invoices.length : 0;
+      const averageMonthlyRevenue = monthlyFinance.length
+        ? monthlyFinance.reduce((sum, month) => sum + safeNumber(month.revenue), 0) / monthlyFinance.length
+        : 0;
       const usableCashRatio = totals.paidIncome > 0 ? (totals.safeToSpend / totals.paidIncome) * 100 : 0;
       const expenseRatio = totals.paidIncome > 0 ? (totals.totalExpenses / totals.paidIncome) * 100 : 0;
       const gstRatio = totals.paidIncome > 0 ? (totals.gstPayable / totals.paidIncome) * 100 : 0;
+      const taxRatio = totals.paidIncome > 0 ? (totals.estimatedTax / totals.paidIncome) * 100 : 0;
       const volatility = monthlyFinance.length > 1
         ? monthlyFinance.slice(1).map((month, index) => {
             const previous = monthlyFinance[index]?.revenue || 0;
@@ -4414,6 +4420,28 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       const averageVolatility = volatility.length
         ? volatility.reduce((sum, row) => sum + Math.abs(row.change), 0) / volatility.length
         : 0;
+      const bestMonth = monthlyFinance.length
+        ? monthlyFinance.reduce((best, month) => safeNumber(month.revenue) > safeNumber(best.revenue) ? month : best, monthlyFinance[0])
+        : null;
+      const worstMonth = monthlyFinance.length
+        ? monthlyFinance.reduce((worst, month) => safeNumber(month.revenue) < safeNumber(worst.revenue) ? month : worst, monthlyFinance[0])
+        : null;
+      const latestMonth = monthlyFinance.length ? monthlyFinance[monthlyFinance.length - 1] : null;
+      const previousMonth = monthlyFinance.length > 1 ? monthlyFinance[monthlyFinance.length - 2] : null;
+      const revenueChangePct = previousMonth && safeNumber(previousMonth.revenue) > 0
+        ? ((safeNumber(latestMonth?.revenue) - safeNumber(previousMonth.revenue)) / safeNumber(previousMonth.revenue)) * 100
+        : 0;
+      const expenseByMonth = expenses.reduce((acc, expense) => {
+        const key = String(expense?.date || '').slice(0, 7);
+        if (!key) return acc;
+        acc[key] = (acc[key] || 0) + safeNumber(expense?.amount);
+        return acc;
+      }, {});
+      const sortedExpenseMonths = Object.entries(expenseByMonth).sort((a, b) => a[0].localeCompare(b[0]));
+      const latestExpenseValue = sortedExpenseMonths.length ? safeNumber(sortedExpenseMonths[sortedExpenseMonths.length - 1][1]) : 0;
+      const previousExpenseValue = sortedExpenseMonths.length > 1 ? safeNumber(sortedExpenseMonths[sortedExpenseMonths.length - 2][1]) : 0;
+      const expenseChangePct = previousExpenseValue > 0 ? ((latestExpenseValue - previousExpenseValue) / previousExpenseValue) * 100 : 0;
+      const largestExpenseCategory = expenseCategoryRows[0] || null;
       const healthScore = Math.max(
         0,
         Math.min(
@@ -4424,17 +4452,32 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       let healthLabel = "Needs attention";
       if (healthScore >= 75) healthLabel = "Healthy";
       else if (healthScore >= 55) healthLabel = "Watch list";
+      const alerts = [];
+      if (topThreeClientShare >= 60) alerts.push(`Client concentration is elevated: ${topThreeClientShare.toFixed(1)}% of paid revenue comes from your top 3 clients.`);
+      if (revenueChangePct <= -10) alerts.push(`Revenue is down ${Math.abs(revenueChangePct).toFixed(1)}% versus the prior month.`);
+      if (expenseChangePct >= 10) alerts.push(`Expenses are up ${expenseChangePct.toFixed(1)}% versus the prior month.`);
+      if (usableCashRatio <= 35 && totals.paidIncome > 0) alerts.push(`Only ${Math.max(usableCashRatio, 0).toFixed(1)}% of paid income is currently safe to spend.`);
+      if (!alerts.length) alerts.push("No immediate financial alerts. The current trend looks relatively stable.");
       return {
         topClientShare,
+        topThreeClientShare,
         averageInvoiceValue,
+        averageMonthlyRevenue,
         usableCashRatio,
         expenseRatio,
         gstRatio,
+        taxRatio,
         averageVolatility,
+        bestMonth,
+        worstMonth,
+        revenueChangePct,
+        expenseChangePct,
+        largestExpenseCategory,
         healthScore,
         healthLabel,
+        alerts,
       };
-    }, [clientRevenueRows, totals, invoices, monthlyFinance]);
+    }, [clientRevenueRows, totals, invoices, monthlyFinance, expenses, expenseCategoryRows]);
 
     const renderDashboard = () => (
     <div style={{ display: "grid", gap: 20 }}>
@@ -4591,12 +4634,12 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     <div style={{ display: "grid", gap: 20 }}>
       <DashboardHero
         title="Financial Insights"
-        subtitle="A focused view of revenue quality, cash reality, expenses, and tax so the numbers stay useful without feeling crowded."
+        subtitle="A lighter analysis page that keeps the current look, but focuses on interpretation instead of repeating the dashboard."
         highlight={`${financialInsights.healthScore.toFixed(0)}/100`}
       >
         <InsightChip label="Health" value={financialInsights.healthLabel} />
-        <InsightChip label="Top client share" value={`${financialInsights.topClientShare.toFixed(1)}%`} />
-        <InsightChip label="Usable cash" value={`${financialInsights.usableCashRatio.toFixed(1)}%`} />
+        <InsightChip label="Top 3 client share" value={`${financialInsights.topThreeClientShare.toFixed(1)}%`} />
+        <InsightChip label="You keep" value={`${Math.max(financialInsights.usableCashRatio, 0).toFixed(1)}%`} />
       </DashboardHero>
 
       <div
@@ -4606,9 +4649,9 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
           gap: 16,
         }}
       >
-        <MetricCard title="Average invoice value" value={currency(financialInsights.averageInvoiceValue)} subtitle="Average across all invoices currently in the portal." accent={colours.navy} />
+        <MetricCard title="Average monthly revenue" value={currency(financialInsights.averageMonthlyRevenue)} subtitle="Average paid revenue across the months currently shown." accent={colours.navy} />
+        <MetricCard title="Revenue change" value={`${financialInsights.revenueChangePct >= 0 ? "+" : ""}${financialInsights.revenueChangePct.toFixed(1)}%`} subtitle="Movement versus the previous month." accent={colours.teal} />
         <MetricCard title="Expense ratio" value={`${financialInsights.expenseRatio.toFixed(1)}%`} subtitle="Recorded expenses as a share of paid income." accent={colours.purple} />
-        <MetricCard title="GST load" value={`${financialInsights.gstRatio.toFixed(1)}%`} subtitle="Net GST payable as a share of paid income." accent={colours.teal} />
         <MetricCard title="Revenue volatility" value={`${financialInsights.averageVolatility.toFixed(1)}%`} subtitle="Average month-to-month movement across recent months." accent={colours.navy} />
       </div>
 
@@ -4619,9 +4662,32 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
           gap: 20,
         }}
       >
-        <SectionCard title="Revenue quality" right={<div style={{ fontSize: 12, color: colours.muted }}>Recent months</div>}>
+        <SectionCard title="Revenue reliability" right={<div style={{ fontSize: 12, color: colours.muted }}>Best, worst, and recent movement</div>}>
           {monthlyFinance.length ? (
-            <div style={{ display: "grid", gap: 14 }}>
+            <div style={{ display: "grid", gap: 16 }}>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                  gap: 12,
+                }}
+              >
+                <div style={{ ...cardStyle, padding: 14, background: colours.bg }}>
+                  <div style={{ fontSize: 12, fontWeight: 800, textTransform: "uppercase", color: colours.muted }}>Best month</div>
+                  <div style={{ fontSize: 16, fontWeight: 800, color: colours.text, marginTop: 6 }}>{financialInsights.bestMonth?.label || "—"}</div>
+                  <div style={{ fontSize: 13, color: colours.muted, marginTop: 6 }}>{currency(financialInsights.bestMonth?.revenue || 0)}</div>
+                </div>
+                <div style={{ ...cardStyle, padding: 14, background: colours.bg }}>
+                  <div style={{ fontSize: 12, fontWeight: 800, textTransform: "uppercase", color: colours.muted }}>Worst month</div>
+                  <div style={{ fontSize: 16, fontWeight: 800, color: colours.text, marginTop: 6 }}>{financialInsights.worstMonth?.label || "—"}</div>
+                  <div style={{ fontSize: 13, color: colours.muted, marginTop: 6 }}>{currency(financialInsights.worstMonth?.revenue || 0)}</div>
+                </div>
+                <div style={{ ...cardStyle, padding: 14, background: colours.bg }}>
+                  <div style={{ fontSize: 12, fontWeight: 800, textTransform: "uppercase", color: colours.muted }}>Average invoice</div>
+                  <div style={{ fontSize: 16, fontWeight: 800, color: colours.text, marginTop: 6 }}>{currency(financialInsights.averageInvoiceValue)}</div>
+                  <div style={{ fontSize: 13, color: colours.muted, marginTop: 6 }}>Across all invoices in the portal.</div>
+                </div>
+              </div>
               {monthlyFinance.map((month, index) => {
                 const maxRevenue = Math.max(...monthlyFinance.map((item) => item.revenue), 0);
                 const width = maxRevenue > 0 ? (month.revenue / maxRevenue) * 100 : 0;
@@ -4644,12 +4710,12 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
               })}
             </div>
           ) : (
-            <div style={{ fontSize: 14, color: colours.muted }}>Add paid invoices to see revenue quality insights.</div>
+            <div style={{ fontSize: 14, color: colours.muted }}>Add paid invoices to see revenue reliability insights.</div>
           )}
         </SectionCard>
 
         <WaterfallCard
-          title="Cash reality"
+          title="Cash efficiency"
           rows={[
             { label: "Paid income", value: totals.paidIncome },
             { label: "Less GST payable", value: -totals.gstPayable },
@@ -4667,33 +4733,59 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
           gap: 20,
         }}
       >
-        <TrendBarsCard title="Top clients" subtitle="Highest paid revenue contributors" data={clientRevenueRows.slice(0, 4)} valueKey="value" formatValue={(value) => currency(value)} accent={colours.teal} emptyText="No paid client revenue yet." />
-        <TrendBarsCard title="Expense categories" subtitle="Largest recorded categories" data={expenseCategoryRows.slice(0, 5)} valueKey="value" formatValue={(value) => currency(value)} accent={colours.purple} emptyText="No expenses recorded yet." />
+        <SectionCard title="Client risk" right={<div style={{ fontSize: 12, color: colours.muted }}>Concentration view</div>}>
+          <div style={{ display: "grid", gap: 14 }}>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+                gap: 12,
+              }}
+            >
+              <div style={{ ...cardStyle, padding: 14, background: colours.bg }}>
+                <div style={{ fontSize: 12, fontWeight: 800, textTransform: "uppercase", color: colours.muted }}>Top client share</div>
+                <div style={{ fontSize: 22, fontWeight: 900, color: colours.text, marginTop: 6 }}>{financialInsights.topClientShare.toFixed(1)}%</div>
+              </div>
+              <div style={{ ...cardStyle, padding: 14, background: colours.bg }}>
+                <div style={{ fontSize: 12, fontWeight: 800, textTransform: "uppercase", color: colours.muted }}>Top 3 clients</div>
+                <div style={{ fontSize: 22, fontWeight: 900, color: colours.text, marginTop: 6 }}>{financialInsights.topThreeClientShare.toFixed(1)}%</div>
+              </div>
+            </div>
+            <TrendBarsCard title="Top clients" subtitle="Highest paid revenue contributors" data={clientRevenueRows.slice(0, 4)} valueKey="value" formatValue={(value) => currency(value)} accent={colours.teal} emptyText="No paid client revenue yet." />
+          </div>
+        </SectionCard>
+
+        <SectionCard title="Expense behaviour" right={<div style={{ fontSize: 12, color: colours.muted }}>Largest categories and recent change</div>}>
+          <div style={{ display: "grid", gap: 14 }}>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+                gap: 12,
+              }}
+            >
+              <div style={{ ...cardStyle, padding: 14, background: colours.bg }}>
+                <div style={{ fontSize: 12, fontWeight: 800, textTransform: "uppercase", color: colours.muted }}>Latest expense move</div>
+                <div style={{ fontSize: 22, fontWeight: 900, color: colours.text, marginTop: 6 }}>{`${financialInsights.expenseChangePct >= 0 ? "+" : ""}${financialInsights.expenseChangePct.toFixed(1)}%`}</div>
+              </div>
+              <div style={{ ...cardStyle, padding: 14, background: colours.bg }}>
+                <div style={{ fontSize: 12, fontWeight: 800, textTransform: "uppercase", color: colours.muted }}>Largest category</div>
+                <div style={{ fontSize: 16, fontWeight: 800, color: colours.text, marginTop: 6 }}>{financialInsights.largestExpenseCategory?.label || "—"}</div>
+                <div style={{ fontSize: 13, color: colours.muted, marginTop: 6 }}>{currency(financialInsights.largestExpenseCategory?.value || 0)}</div>
+              </div>
+            </div>
+            <TrendBarsCard title="Expense categories" subtitle="Largest recorded categories" data={expenseCategoryRows.slice(0, 5)} valueKey="value" formatValue={(value) => currency(value)} accent={colours.purple} emptyText="No expenses recorded yet." />
+          </div>
+        </SectionCard>
       </div>
 
-      <SectionCard title="GST and tax snapshot" right={<div style={{ fontSize: 12, color: colours.muted }}>Current position</div>}>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-            gap: 16,
-          }}
-        >
-          <div style={{ ...cardStyle, padding: 18, background: colours.bg }}>
-            <div style={{ fontSize: 12, fontWeight: 800, textTransform: "uppercase", color: colours.muted }}>GST collected</div>
-            <div style={{ fontSize: 28, fontWeight: 900, color: colours.text, marginTop: 8 }}>{currency(totals.gstCollected)}</div>
-            <div style={{ fontSize: 13, color: colours.muted, marginTop: 8 }}>Sales GST from invoices already marked Paid.</div>
-          </div>
-          <div style={{ ...cardStyle, padding: 18, background: colours.bg }}>
-            <div style={{ fontSize: 12, fontWeight: 800, textTransform: "uppercase", color: colours.muted }}>GST credits</div>
-            <div style={{ fontSize: 28, fontWeight: 900, color: colours.text, marginTop: 8 }}>{currency(totals.gstOnExpenses)}</div>
-            <div style={{ fontSize: 13, color: colours.muted, marginTop: 8 }}>Input GST currently recognised from expenses.</div>
-          </div>
-          <div style={{ ...cardStyle, padding: 18, background: colours.bg }}>
-            <div style={{ fontSize: 12, fontWeight: 800, textTransform: "uppercase", color: colours.muted }}>Estimated tax reserve</div>
-            <div style={{ fontSize: 28, fontWeight: 900, color: colours.text, marginTop: 8 }}>{currency(totals.estimatedTax)}</div>
-            <div style={{ fontSize: 13, color: colours.muted, marginTop: 8 }}>Reserved from paid income excluding GST.</div>
-          </div>
+      <SectionCard title="Simple alerts" right={<div style={{ fontSize: 12, color: colours.muted }}>Automatic observations</div>}>
+        <div style={{ display: "grid", gap: 12 }}>
+          {financialInsights.alerts.map((alert, index) => (
+            <div key={index} style={{ ...cardStyle, padding: 14, background: colours.bg, borderLeft: `4px solid ${index === 0 && alert.includes("No immediate") ? colours.teal : colours.purple}` }}>
+              <div style={{ fontSize: 14, color: colours.text, lineHeight: 1.6 }}>{alert}</div>
+            </div>
+          ))}
         </div>
       </SectionCard>
     </div>
