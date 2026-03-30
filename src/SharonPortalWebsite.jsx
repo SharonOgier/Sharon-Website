@@ -20,6 +20,7 @@ const colours = {
 
 const navItems = [
   "dashboard",
+  "financial insights",
   "clients",
   "invoices",
   "quotes",
@@ -505,6 +506,225 @@ function SummaryBox({ title, value, subtitle }) {
         </div>
       ) : null}
     </div>
+  );
+}
+
+const formatMonthKey = (value) => {
+  if (!value) return "Unknown";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "Unknown";
+  return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, "0")}`;
+};
+
+const formatMonthLabel = (value) => {
+  if (!value || value === "Unknown") return "Unknown";
+  const parsed = new Date(`${value}-01T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleDateString("en-AU", { month: "short", year: "numeric" });
+};
+
+function DashboardHero({ title, subtitle, highlight, children }) {
+  return (
+    <div
+      style={{
+        background: `linear-gradient(135deg, ${colours.navy} 0%, ${colours.purple} 58%, ${colours.teal} 100%)`,
+        borderRadius: 24,
+        padding: 28,
+        color: "#FFFFFF",
+        display: "grid",
+        gridTemplateColumns: "minmax(0, 1.7fr) minmax(280px, 1fr)",
+        gap: 24,
+        alignItems: "stretch",
+        boxShadow: "0 18px 40px rgba(43, 47, 107, 0.18)",
+      }}
+    >
+      <div>
+        <div
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
+            padding: "8px 12px",
+            borderRadius: 999,
+            background: "rgba(255,255,255,0.14)",
+            fontSize: 12,
+            fontWeight: 700,
+            letterSpacing: 0.2,
+          }}
+        >
+          Live financial reporting
+        </div>
+        <div style={{ fontSize: 34, fontWeight: 900, lineHeight: 1.1, marginTop: 16 }}>{title}</div>
+        <div style={{ fontSize: 15, lineHeight: 1.6, opacity: 0.92, marginTop: 12, maxWidth: 780 }}>{subtitle}</div>
+      </div>
+      <div
+        style={{
+          background: "rgba(255,255,255,0.14)",
+          border: "1px solid rgba(255,255,255,0.16)",
+          borderRadius: 22,
+          padding: 22,
+          display: "grid",
+          gap: 16,
+          alignContent: "space-between",
+          minHeight: 200,
+        }}
+      >
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.6, opacity: 0.82 }}>
+            Current focus
+          </div>
+          <div style={{ fontSize: 30, fontWeight: 900, marginTop: 10 }}>{highlight}</div>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function InsightChip({ label, value }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        gap: 12,
+        borderRadius: 14,
+        padding: "12px 14px",
+        background: "rgba(255,255,255,0.14)",
+      }}
+    >
+      <div style={{ fontSize: 12, opacity: 0.84 }}>{label}</div>
+      <div style={{ fontSize: 14, fontWeight: 800 }}>{value}</div>
+    </div>
+  );
+}
+
+function MetricCard({ title, value, subtitle, accent = colours.purple }) {
+  return (
+    <div
+      style={{
+        ...cardStyle,
+        padding: 18,
+        position: "relative",
+        overflow: "hidden",
+        minHeight: 132,
+      }}
+    >
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          background: `linear-gradient(180deg, ${accent}12 0%, rgba(255,255,255,0) 76%)`,
+          pointerEvents: "none",
+        }}
+      />
+      <div style={{ position: "relative" }}>
+        <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 0.2, color: colours.muted, textTransform: "uppercase" }}>{title}</div>
+        <div style={{ fontSize: 30, fontWeight: 900, color: colours.text, marginTop: 10 }}>{value}</div>
+        <div style={{ fontSize: 12, color: colours.muted, marginTop: 10, lineHeight: 1.5 }}>{subtitle}</div>
+      </div>
+    </div>
+  );
+}
+
+function TrendBarsCard({ title, subtitle, data, valueKey, labelKey = "label", formatValue = (value) => value, accent = colours.teal, emptyText = "No data yet." }) {
+  const max = Math.max(...(data || []).map((item) => safeNumber(item?.[valueKey])), 0);
+  return (
+    <SectionCard title={title} right={<div style={{ fontSize: 12, color: colours.muted }}>{subtitle}</div>}>
+      {data && data.length ? (
+        <div style={{ display: "grid", gap: 14 }}>
+          {data.map((item) => {
+            const value = safeNumber(item?.[valueKey]);
+            const width = max > 0 ? Math.max(10, (value / max) * 100) : 0;
+            return (
+              <div key={`${item?.[labelKey]}-${value}`} style={{ display: "grid", gap: 8 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "center" }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: colours.text }}>{item?.[labelKey]}</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: colours.text }}>{formatValue(value, item)}</div>
+                </div>
+                <div style={{ height: 12, borderRadius: 999, background: colours.bg, overflow: "hidden" }}>
+                  <div style={{ width: `${width}%`, height: "100%", borderRadius: 999, background: `linear-gradient(90deg, ${accent} 0%, ${colours.purple} 100%)` }} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div style={{ fontSize: 14, color: colours.muted }}>{emptyText}</div>
+      )}
+    </SectionCard>
+  );
+}
+
+function WaterfallCard({ title, rows }) {
+  const max = Math.max(...(rows || []).map((row) => Math.abs(safeNumber(row?.value))), 0);
+  return (
+    <SectionCard title={title}>
+      <div style={{ display: "grid", gap: 14 }}>
+        {(rows || []).map((row) => {
+          const value = safeNumber(row?.value);
+          const width = max > 0 ? Math.max(8, (Math.abs(value) / max) * 100) : 0;
+          const background = value >= 0 ? `linear-gradient(90deg, ${colours.teal} 0%, ${colours.navy} 100%)` : `linear-gradient(90deg, #F59E0B 0%, ${colours.purple} 100%)`;
+          return (
+            <div key={row.label} style={{ display: "grid", gap: 8 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 14 }}>
+                <div style={{ fontWeight: 700, color: colours.text }}>{row.label}</div>
+                <div style={{ fontWeight: 800, color: colours.text }}>{currency(value)}</div>
+              </div>
+              <div style={{ display: "flex", justifyContent: value >= 0 ? "flex-start" : "flex-end" }}>
+                <div style={{ width: `${width}%`, minWidth: width ? 54 : 0, height: 12, borderRadius: 999, background }} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </SectionCard>
+  );
+}
+
+function ActivityListCard({ title, rows, emptyText = "No recent activity yet." }) {
+  return (
+    <SectionCard title={title}>
+      {rows && rows.length ? (
+        <div style={{ display: "grid", gap: 12 }}>
+          {rows.map((row) => (
+            <div
+              key={`${row.type}-${row.label}-${row.date}`}
+              style={{
+                display: "grid",
+                gridTemplateColumns: "auto 1fr auto",
+                gap: 12,
+                alignItems: "center",
+                padding: 14,
+                borderRadius: 16,
+                background: colours.bg,
+                border: `1px solid ${colours.border}`,
+              }}
+            >
+              <div
+                style={{
+                  width: 12,
+                  height: 12,
+                  borderRadius: 999,
+                  background: row.type === "Expense" ? colours.purple : colours.teal,
+                }}
+              />
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: colours.text }}>{row.label}</div>
+                <div style={{ fontSize: 12, color: colours.muted, marginTop: 2 }}>{row.caption}</div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontSize: 14, fontWeight: 800, color: colours.text }}>{row.value}</div>
+                <div style={{ fontSize: 12, color: colours.muted, marginTop: 2 }}>{row.date}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div style={{ fontSize: 14, color: colours.muted }}>{emptyText}</div>
+      )}
+    </SectionCard>
   );
 }
 
@@ -4014,7 +4234,16 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     };
 
     const exportToATOForm = () => {
-      // Map paid invoices to ATO income records
+      const classifyIncomeType = (src) => {
+        const raw = String(src?.incomeType || "").toLowerCase();
+        if (raw.includes("casual") || raw.includes("salary") || raw.includes("wage")) return "Salary/Wages";
+        if (raw.includes("business") || raw.includes("sole trader")) return "Business (sole trader)";
+        if (raw.includes("interest")) return "Interest";
+        if (raw.includes("dividend")) return "Dividends";
+        if (raw.includes("foreign")) return "Other";
+        return "Other";
+      };
+
       const incomeRecords = invoices
         .filter((inv) => inv.status === "Paid")
         .map((inv) => {
@@ -4031,120 +4260,318 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
           };
         });
 
-      // Also add income sources
       incomeSources.forEach((src) => {
-        if (src.beforeTax > 0) {
-          incomeRecords.push({
-            date: new Date().toISOString().slice(0, 10),
-            type: src.incomeType || "Salary or wages",
-            payer: src.name || "",
-            gross: safeNumber(src.beforeTax),
-            withheld: safeNumber(src.taxWithheld || 0),
-            franked: 0,
-            franking: 0,
-            abn: "",
-          });
-        }
+        const beforeTax = safeNumber(src.beforeTax);
+        if (beforeTax <= 0) return;
+        const incomeType = classifyIncomeType(src);
+        incomeRecords.push({
+          date: new Date().toISOString().slice(0, 10),
+          type: incomeType,
+          payer: src.name || "",
+          gross: beforeTax,
+          withheld: safeNumber(src.taxWithheld || 0),
+          franked: incomeType === "Dividends" ? beforeTax : 0,
+          franking: safeNumber(src.frankingCredit || 0),
+          abn: "",
+        });
       });
 
-      // Map expenses to ATO expense records
       const expenseRecords = expenses.map((exp) => ({
         date: exp.date || "",
-        type: exp.category || "Other",
+        type: exp.category || exp.expenseType || "Other",
         supplier: exp.supplier || exp.description || "",
         amount: safeNumber(exp.amount),
-        gst: exp.gstIncluded !== false ? "yes" : "no",
+        gstIncl: exp.gstIncluded !== false ? "yes" : "no",
       }));
 
       const atoState = { income: incomeRecords, expenses: expenseRecords };
-
-      // Write to localStorage then open the ATO form
-      try {
-        localStorage.setItem("sas_tax_bas_state_v2", JSON.stringify(atoState));
-        window.open("https://www.sharonogier.com/australian-ato-tax-form.html", "_blank");
-      } catch (e) {
-        // localStorage may not be shared across domains - use URL hash instead
-        const encoded = encodeURIComponent(JSON.stringify(atoState));
-        window.open(
-          `https://www.sharonogier.com/australian-ato-tax-form.html#import=${encoded}`,
-          "_blank"
-        );
-      }
+      const encoded = encodeURIComponent(JSON.stringify(atoState));
+      window.open(`https://www.sharonogier.com/australian-ato-tax-form.html#import=${encoded}`, "_blank");
     };
+
+    const monthlyFinance = useMemo(() => {
+      const bucket = new Map();
+      const ensureBucket = (key) => {
+        if (!bucket.has(key)) {
+          bucket.set(key, {
+            monthKey: key,
+            label: formatMonthLabel(key),
+            revenue: 0,
+            expenses: 0,
+            gst: 0,
+            net: 0,
+          });
+        }
+        return bucket.get(key);
+      };
+
+      invoiceAllocations.forEach((invoice) => {
+        const key = formatMonthKey(invoice.paidAt || invoice.invoiceDate);
+        const row = ensureBucket(key);
+        row.revenue += safeNumber(invoice.gross);
+        row.gst += safeNumber(invoice.gst);
+        row.net += safeNumber(invoice.netAvailable);
+      });
+
+      expenses.forEach((expense) => {
+        const key = formatMonthKey(expense.date);
+        const row = ensureBucket(key);
+        row.expenses += safeNumber(expense.amount);
+        row.net -= safeNumber(expense.amount);
+      });
+
+      return [...bucket.values()]
+        .sort((a, b) => String(a.monthKey).localeCompare(String(b.monthKey)))
+        .slice(-6);
+    }, [invoiceAllocations, expenses]);
+
+    const clientRevenueRows = useMemo(() => {
+      const grouped = new Map();
+      invoiceAllocations.forEach((invoice) => {
+        const key = getClientName(invoice.clientId) || "Unknown client";
+        grouped.set(key, (grouped.get(key) || 0) + safeNumber(invoice.gross));
+      });
+      return [...grouped.entries()]
+        .map(([label, value]) => ({ label, value }))
+        .sort((a, b) => b.value - a.value)
+        .slice(0, 5);
+    }, [invoiceAllocations]);
+
+    const expenseCategoryRows = useMemo(() => {
+      const grouped = new Map();
+      expenses.forEach((expense) => {
+        const key = expense.category || expense.expenseType || "Other";
+        grouped.set(key, (grouped.get(key) || 0) + safeNumber(expense.amount));
+      });
+      return [...grouped.entries()]
+        .map(([label, value]) => ({ label, value }))
+        .sort((a, b) => b.value - a.value)
+        .slice(0, 6);
+    }, [expenses]);
+
+    const invoiceStatusRows = useMemo(() => {
+      const grouped = new Map();
+      invoices.forEach((invoice) => {
+        const key = invoice.status || "Draft";
+        grouped.set(key, (grouped.get(key) || 0) + 1);
+      });
+      return [...grouped.entries()]
+        .map(([label, value]) => ({ label, value }))
+        .sort((a, b) => b.value - a.value);
+    }, [invoices]);
+
+    const recentActivityRows = useMemo(() => {
+      const invoiceRows = invoices.map((invoice) => ({
+        type: "Invoice",
+        sortDate: invoice.paidAt || invoice.invoiceDate || "",
+        date: formatDateAU(invoice.paidAt || invoice.invoiceDate),
+        label: `${invoice.invoiceNumber || "Invoice"} · ${getClientName(invoice.clientId)}`,
+        caption: `${invoice.status || "Draft"} invoice`,
+        value: currency(invoice.total),
+      }));
+
+      const expenseRows = expenses.map((expense) => ({
+        type: "Expense",
+        sortDate: expense.date || "",
+        date: formatDateAU(expense.date),
+        label: expense.supplier || expense.description || "Expense",
+        caption: expense.category || expense.expenseType || "Expense",
+        value: currency(expense.amount),
+      }));
+
+      return [...invoiceRows, ...expenseRows]
+        .sort((a, b) => String(b.sortDate).localeCompare(String(a.sortDate)))
+        .slice(0, 6);
+    }, [invoices, expenses]);
+
+    const dashboardInsights = useMemo(() => {
+      const collectionRate = totals.totalIncome > 0 ? (totals.paidIncome / totals.totalIncome) * 100 : 0;
+      const averagePaidInvoice = invoiceAllocations.length ? totals.paidIncome / invoiceAllocations.length : 0;
+      const expenseCoverage = totals.totalExpenses > 0 ? totals.safeToSpend / totals.totalExpenses : 0;
+      return {
+        collectionRate,
+        averagePaidInvoice,
+        expenseCoverage,
+        paidInvoiceCount: invoiceAllocations.length,
+      };
+    }, [totals, invoiceAllocations]);
+
+
+    const financialInsights = useMemo(() => {
+      const topClientValue = clientRevenueRows[0]?.value || 0;
+      const topClientShare = totals.paidIncome > 0 ? (topClientValue / totals.paidIncome) * 100 : 0;
+      const averageInvoiceValue = invoices.length ? totals.totalIncome / invoices.length : 0;
+      const usableCashRatio = totals.paidIncome > 0 ? (totals.safeToSpend / totals.paidIncome) * 100 : 0;
+      const expenseRatio = totals.paidIncome > 0 ? (totals.totalExpenses / totals.paidIncome) * 100 : 0;
+      const gstRatio = totals.paidIncome > 0 ? (totals.gstPayable / totals.paidIncome) * 100 : 0;
+      const volatility = monthlyFinance.length > 1
+        ? monthlyFinance.slice(1).map((month, index) => {
+            const previous = monthlyFinance[index]?.revenue || 0;
+            const change = previous > 0 ? ((month.revenue - previous) / previous) * 100 : 0;
+            return { ...month, change };
+          })
+        : [];
+      const averageVolatility = volatility.length
+        ? volatility.reduce((sum, row) => sum + Math.abs(row.change), 0) / volatility.length
+        : 0;
+      const healthScore = Math.max(
+        0,
+        Math.min(
+          100,
+          100 - Math.min(topClientShare, 100) * 0.35 - Math.min(expenseRatio, 100) * 0.25 - Math.min(averageVolatility, 100) * 0.2 + Math.max(usableCashRatio, 0) * 0.2,
+        ),
+      );
+      let healthLabel = "Needs attention";
+      if (healthScore >= 75) healthLabel = "Healthy";
+      else if (healthScore >= 55) healthLabel = "Watch list";
+      return {
+        topClientShare,
+        averageInvoiceValue,
+        usableCashRatio,
+        expenseRatio,
+        gstRatio,
+        averageVolatility,
+        healthScore,
+        healthLabel,
+      };
+    }, [clientRevenueRows, totals, invoices, monthlyFinance]);
 
     const renderDashboard = () => (
     <div style={{ display: "grid", gap: 20 }}>
+      <DashboardHero
+        title={profile.businessName || "Sharon’s Accounting Service"}
+        subtitle="Your dashboard now reads live from the SaaS records already stored in the portal. Paid invoices, expenses, GST, tax reserves, and client performance are summarised here automatically so reporting stays in one place."
+        highlight={currency(totals.safeToSpend)}
+      >
+        <InsightChip label="Collection rate" value={`${dashboardInsights.collectionRate.toFixed(1)}%`} />
+        <InsightChip label="Average paid invoice" value={currency(dashboardInsights.averagePaidInvoice)} />
+        <InsightChip label="Paid invoices" value={String(dashboardInsights.paidInvoiceCount)} />
+      </DashboardHero>
+
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+          gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
           gap: 16,
         }}
       >
-        <SummaryBox title="Gross Invoiced" value={currency(totals.totalIncome)} subtitle="All invoices including unpaid and draft" />
-        <SummaryBox title="Gross Paid" value={currency(totals.paidIncome)} subtitle="Cash received from paid invoices" />
-        <SummaryBox title="Income ex GST" value={currency(totals.incomeExGst)} subtitle="Paid income less GST collected" />
-        <SummaryBox
-          title="GST Payable"
-          value={currency(totals.gstPayable)}
-          subtitle={`Sales GST ${currency(totals.gstCollected)} less expense GST ${currency(
-            totals.gstOnExpenses
-          )}`}
-        />
-        <SummaryBox title="Estimated Tax Reserve" value={currency(totals.estimatedTax)} subtitle="Amount to set aside for tax" />
-        <SummaryBox title="Platform Fee Reserve" value={currency(totals.totalFees)} subtitle="Fee allocation on paid invoices" />
-        <SummaryBox title="Tax Withheld by Clients" value={currency(totals.totalTaxWithheld)} subtitle="Tax deducted before payment" />
-        <SummaryBox title="Available Before Expenses" value={currency(totals.preExpenseAvailable)} subtitle="After GST, tax, fees, and withholding" />
-        <SummaryBox title="Expenses Paid" value={currency(totals.totalExpenses)} subtitle="Cash out for recorded expenses" />
-        <SummaryBox title="Safe to Spend" value={currency(totals.safeToSpend)} subtitle="Available after GST, tax, fees, and expenses" />
+        <MetricCard title="Gross invoiced" value={currency(totals.totalIncome)} subtitle="All invoice values currently stored in the SaaS." accent={colours.navy} />
+        <MetricCard title="Gross paid" value={currency(totals.paidIncome)} subtitle="Cash received from invoices marked Paid." accent={colours.teal} />
+        <MetricCard title="GST payable" value={currency(totals.gstPayable)} subtitle={`Sales GST ${currency(totals.gstCollected)} less expense credits ${currency(totals.gstOnExpenses)}.`} accent={colours.purple} />
+        <MetricCard title="Estimated tax reserve" value={currency(totals.estimatedTax)} subtitle="Set aside based on paid income excluding GST." accent={colours.navy} />
+        <MetricCard title="Fees and withholding" value={currency(totals.totalFees + totals.totalTaxWithheld)} subtitle={`Fees ${currency(totals.totalFees)} · withheld ${currency(totals.totalTaxWithheld)}.`} accent={colours.purple} />
+        <MetricCard title="Safe to spend" value={currency(totals.safeToSpend)} subtitle="After GST, estimated tax, platform fees, withholding, and recorded expenses." accent={colours.teal} />
       </div>
 
-      <SectionCard
-        title="ATO Tax Form"
-        right={
-          <button
-            style={buttonPrimary}
-            onClick={exportToATOForm}
-          >
-            Export to ATO Tax Form →
-          </button>
-        }
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "minmax(0, 1.4fr) minmax(320px, 0.9fr)",
+          gap: 20,
+        }}
       >
-        <p style={{ margin: 0, fontSize: 13, color: colours.subtext }}>
-          Exports all paid invoices and expenses to your ATO tax form. Opens in a new tab.
-        </p>
-      </SectionCard>
+        <SectionCard title="Monthly financial momentum" right={<div style={{ fontSize: 12, color: colours.muted }}>Latest 6 months</div>}>
+          {monthlyFinance.length ? (
+            <div style={{ display: "grid", gap: 16 }}>
+              {monthlyFinance.map((month) => {
+                const maxValue = Math.max(...monthlyFinance.map((item) => Math.max(item.revenue, item.expenses, Math.abs(item.net))), 0);
+                const revenueWidth = maxValue > 0 ? (month.revenue / maxValue) * 100 : 0;
+                const expenseWidth = maxValue > 0 ? (month.expenses / maxValue) * 100 : 0;
+                const netWidth = maxValue > 0 ? (Math.abs(month.net) / maxValue) * 100 : 0;
+                return (
+                  <div key={month.monthKey} style={{ display: "grid", gap: 8 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "center" }}>
+                      <div style={{ fontSize: 14, fontWeight: 800, color: colours.text }}>{month.label}</div>
+                      <div style={{ fontSize: 12, color: colours.muted }}>Net {currency(month.net)}</div>
+                    </div>
+                    <div style={{ display: "grid", gap: 8 }}>
+                      <div>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: colours.muted, marginBottom: 6 }}><span>Revenue</span><span>{currency(month.revenue)}</span></div>
+                        <div style={{ height: 12, borderRadius: 999, background: colours.bg }}><div style={{ width: `${Math.max(revenueWidth, month.revenue ? 8 : 0)}%`, height: "100%", borderRadius: 999, background: `linear-gradient(90deg, ${colours.teal} 0%, ${colours.navy} 100%)` }} /></div>
+                      </div>
+                      <div>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: colours.muted, marginBottom: 6 }}><span>Expenses</span><span>{currency(month.expenses)}</span></div>
+                        <div style={{ height: 12, borderRadius: 999, background: colours.bg }}><div style={{ width: `${Math.max(expenseWidth, month.expenses ? 8 : 0)}%`, height: "100%", borderRadius: 999, background: `linear-gradient(90deg, ${colours.purple} 0%, #C084FC 100%)` }} /></div>
+                      </div>
+                      <div>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: colours.muted, marginBottom: 6 }}><span>Net position</span><span>{currency(month.net)}</span></div>
+                        <div style={{ height: 12, borderRadius: 999, background: colours.bg }}><div style={{ width: `${Math.max(netWidth, month.net ? 8 : 0)}%`, height: "100%", borderRadius: 999, background: month.net >= 0 ? `linear-gradient(90deg, ${colours.teal} 0%, ${colours.purple} 100%)` : `linear-gradient(90deg, #F59E0B 0%, ${colours.purple} 100%)` }} /></div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div style={{ fontSize: 14, color: colours.muted }}>Add paid invoices and expenses to unlock the monthly trend view.</div>
+          )}
+        </SectionCard>
 
-      <SectionCard
-        title="Supabase Database"
-        right={
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <button style={buttonSecondary} onClick={restorePortalStateFromSupabase}>
-              Load from Supabase DB
-            </button>
-            <button
-              style={buttonPrimary}
-              onClick={() =>
-                saveAllCurrentStateToSupabase()
-              }
+        <WaterfallCard
+          title="Cash movement"
+          rows={[
+            { label: "Paid income", value: totals.paidIncome },
+            { label: "Less GST payable", value: -totals.gstPayable },
+            { label: "Less estimated tax", value: -totals.estimatedTax },
+            { label: "Less platform fees", value: -totals.totalFees },
+            { label: "Less expenses", value: -totals.totalExpenses },
+            { label: "Safe to spend", value: totals.safeToSpend },
+          ]}
+        />
+      </div>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+          gap: 20,
+        }}
+      >
+        <TrendBarsCard title="Top clients by paid revenue" subtitle="Based on invoices marked Paid" data={clientRevenueRows} valueKey="value" formatValue={(value) => currency(value)} accent={colours.teal} emptyText="No paid invoices yet." />
+        <TrendBarsCard title="Expense categories" subtitle="Largest categories from recorded expenses" data={expenseCategoryRows} valueKey="value" formatValue={(value) => currency(value)} accent={colours.purple} emptyText="No expenses recorded yet." />
+        <TrendBarsCard title="Invoice status mix" subtitle="A quick collections snapshot" data={invoiceStatusRows} valueKey="value" formatValue={(value) => `${value} item${value === 1 ? "" : "s"}`} accent={colours.navy} emptyText="No invoices yet." />
+      </div>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "minmax(0, 1.2fr) minmax(320px, 0.8fr)",
+          gap: 20,
+        }}
+      >
+        <SectionCard title="Reporting actions" right={<div style={{ fontSize: 12, color: colours.muted }}>Use the same SaaS data everywhere</div>}>
+          <div style={{ display: "grid", gap: 16 }}>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                gap: 14,
+              }}
             >
-              Save to Supabase DB
-            </button>
+              <div style={{ ...cardStyle, padding: 16, background: colours.bg }}>
+                <div style={{ fontSize: 12, fontWeight: 800, textTransform: "uppercase", color: colours.muted }}>ATO export</div>
+                <div style={{ fontSize: 14, color: colours.text, lineHeight: 1.6, marginTop: 8 }}>Send paid invoice and expense data straight into the tax form page with the current portal records.</div>
+                <button style={{ ...buttonPrimary, marginTop: 14 }} onClick={exportToATOForm}>Export to ATO Tax Form</button>
+              </div>
+              <div style={{ ...cardStyle, padding: 16, background: colours.bg }}>
+                <div style={{ fontSize: 12, fontWeight: 800, textTransform: "uppercase", color: colours.muted }}>Supabase sync</div>
+                <div style={{ fontSize: 14, color: colours.text, lineHeight: 1.6, marginTop: 8 }}>Your dashboard reflects the same SaaS entities already saved in Supabase: invoices, expenses, clients, services, income sources, and documents.</div>
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 14 }}>
+                  <button style={buttonSecondary} onClick={restorePortalStateFromSupabase}>Load from Supabase DB</button>
+                  <button style={buttonPrimary} onClick={() => saveAllCurrentStateToSupabase()}>Save to Supabase DB</button>
+                </div>
+              </div>
+            </div>
+            <div style={{ fontSize: 13, color: colours.muted, lineHeight: 1.6 }}>
+              Status: {supabaseSyncStatus}
+            </div>
           </div>
-        }
-      >
-        <div style={{ fontSize: 14, color: colours.muted }}>
-          Status: {supabaseSyncStatus}
-        </div>
-        <div style={{ fontSize: 13, color: colours.muted, marginTop: 8 }}>
-          This saves your profile, clients, invoices, quotes, expenses, services, income sources, and documents as database rows in Supabase, not JSON backup files.
-        </div>
-        <div style={{ fontSize: 12, color: colours.muted, marginTop: 8, whiteSpace: "pre-wrap" }}>
-          Tables needed: sas_profile, sas_clients, sas_invoices, sas_quotes, sas_expenses, sas_income_sources, sas_services, sas_documents.
-        </div>
-      </SectionCard>
+        </SectionCard>
 
-      <SectionCard title="Paid Invoice Allocation">
+        <ActivityListCard title="Recent activity" rows={recentActivityRows} />
+      </div>
+
+      <SectionCard title="Paid invoice allocation detail" right={<div style={{ fontSize: 12, color: colours.muted }}>Live from invoices marked Paid</div>}>
         <DataTable
           columns={[
             { key: "invoiceNumber", label: "Invoice" },
@@ -4160,6 +4587,118 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       </SectionCard>
     </div>
     );
+    const renderFinancialInsights = () => (
+    <div style={{ display: "grid", gap: 20 }}>
+      <DashboardHero
+        title="Financial Insights"
+        subtitle="A focused view of revenue quality, cash reality, expenses, and tax so the numbers stay useful without feeling crowded."
+        highlight={`${financialInsights.healthScore.toFixed(0)}/100`}
+      >
+        <InsightChip label="Health" value={financialInsights.healthLabel} />
+        <InsightChip label="Top client share" value={`${financialInsights.topClientShare.toFixed(1)}%`} />
+        <InsightChip label="Usable cash" value={`${financialInsights.usableCashRatio.toFixed(1)}%`} />
+      </DashboardHero>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+          gap: 16,
+        }}
+      >
+        <MetricCard title="Average invoice value" value={currency(financialInsights.averageInvoiceValue)} subtitle="Average across all invoices currently in the portal." accent={colours.navy} />
+        <MetricCard title="Expense ratio" value={`${financialInsights.expenseRatio.toFixed(1)}%`} subtitle="Recorded expenses as a share of paid income." accent={colours.purple} />
+        <MetricCard title="GST load" value={`${financialInsights.gstRatio.toFixed(1)}%`} subtitle="Net GST payable as a share of paid income." accent={colours.teal} />
+        <MetricCard title="Revenue volatility" value={`${financialInsights.averageVolatility.toFixed(1)}%`} subtitle="Average month-to-month movement across recent months." accent={colours.navy} />
+      </div>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "minmax(0, 1.15fr) minmax(320px, 0.85fr)",
+          gap: 20,
+        }}
+      >
+        <SectionCard title="Revenue quality" right={<div style={{ fontSize: 12, color: colours.muted }}>Recent months</div>}>
+          {monthlyFinance.length ? (
+            <div style={{ display: "grid", gap: 14 }}>
+              {monthlyFinance.map((month, index) => {
+                const maxRevenue = Math.max(...monthlyFinance.map((item) => item.revenue), 0);
+                const width = maxRevenue > 0 ? (month.revenue / maxRevenue) * 100 : 0;
+                const previous = index > 0 ? monthlyFinance[index - 1].revenue : 0;
+                const change = previous > 0 ? ((month.revenue - previous) / previous) * 100 : 0;
+                return (
+                  <div key={month.monthKey} style={{ display: "grid", gap: 6 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: colours.text }}>{month.label}</div>
+                      <div style={{ fontSize: 12, color: colours.muted }}>
+                        {index === 0 ? "Starting point" : `${change >= 0 ? "+" : ""}${change.toFixed(1)}% vs prior month`}
+                      </div>
+                    </div>
+                    <div style={{ height: 12, borderRadius: 999, background: colours.bg }}>
+                      <div style={{ width: `${Math.max(width, month.revenue ? 8 : 0)}%`, height: "100%", borderRadius: 999, background: `linear-gradient(90deg, ${colours.teal} 0%, ${colours.navy} 100%)` }} />
+                    </div>
+                    <div style={{ fontSize: 13, color: colours.text }}>{currency(month.revenue)} paid revenue</div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div style={{ fontSize: 14, color: colours.muted }}>Add paid invoices to see revenue quality insights.</div>
+          )}
+        </SectionCard>
+
+        <WaterfallCard
+          title="Cash reality"
+          rows={[
+            { label: "Paid income", value: totals.paidIncome },
+            { label: "Less GST payable", value: -totals.gstPayable },
+            { label: "Less tax reserve", value: -totals.estimatedTax },
+            { label: "Less expenses", value: -totals.totalExpenses },
+            { label: "Safe to spend", value: totals.safeToSpend },
+          ]}
+        />
+      </div>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+          gap: 20,
+        }}
+      >
+        <TrendBarsCard title="Top clients" subtitle="Highest paid revenue contributors" data={clientRevenueRows.slice(0, 4)} valueKey="value" formatValue={(value) => currency(value)} accent={colours.teal} emptyText="No paid client revenue yet." />
+        <TrendBarsCard title="Expense categories" subtitle="Largest recorded categories" data={expenseCategoryRows.slice(0, 5)} valueKey="value" formatValue={(value) => currency(value)} accent={colours.purple} emptyText="No expenses recorded yet." />
+      </div>
+
+      <SectionCard title="GST and tax snapshot" right={<div style={{ fontSize: 12, color: colours.muted }}>Current position</div>}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+            gap: 16,
+          }}
+        >
+          <div style={{ ...cardStyle, padding: 18, background: colours.bg }}>
+            <div style={{ fontSize: 12, fontWeight: 800, textTransform: "uppercase", color: colours.muted }}>GST collected</div>
+            <div style={{ fontSize: 28, fontWeight: 900, color: colours.text, marginTop: 8 }}>{currency(totals.gstCollected)}</div>
+            <div style={{ fontSize: 13, color: colours.muted, marginTop: 8 }}>Sales GST from invoices already marked Paid.</div>
+          </div>
+          <div style={{ ...cardStyle, padding: 18, background: colours.bg }}>
+            <div style={{ fontSize: 12, fontWeight: 800, textTransform: "uppercase", color: colours.muted }}>GST credits</div>
+            <div style={{ fontSize: 28, fontWeight: 900, color: colours.text, marginTop: 8 }}>{currency(totals.gstOnExpenses)}</div>
+            <div style={{ fontSize: 13, color: colours.muted, marginTop: 8 }}>Input GST currently recognised from expenses.</div>
+          </div>
+          <div style={{ ...cardStyle, padding: 18, background: colours.bg }}>
+            <div style={{ fontSize: 12, fontWeight: 800, textTransform: "uppercase", color: colours.muted }}>Estimated tax reserve</div>
+            <div style={{ fontSize: 28, fontWeight: 900, color: colours.text, marginTop: 8 }}>{currency(totals.estimatedTax)}</div>
+            <div style={{ fontSize: 13, color: colours.muted, marginTop: 8 }}>Reserved from paid income excluding GST.</div>
+          </div>
+        </div>
+      </SectionCard>
+    </div>
+    );
+
     const renderClients = () => (
     <div style={{ display: "grid", gap: 20 }}>
       <SectionCard title="Client details">
@@ -6626,6 +7165,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
         <main style={{ padding: 24 }}>
           <div style={{ maxWidth: 1400, margin: "0 auto" }}>
             {activePage === "dashboard" && renderDashboard()}
+            {activePage === "financial insights" && renderFinancialInsights()}
             {activePage === "clients" && renderClients()}
             {activePage === "invoices" && renderInvoices()}
             {activePage === "quotes" && renderQuotes()}
