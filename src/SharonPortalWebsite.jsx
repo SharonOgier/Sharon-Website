@@ -101,7 +101,7 @@ const getApiBaseUrl = (preferredValue = "") => {
   }
 };
 
-const LOCKED_FEE_RATE_PERCENT = 1;
+const LOCKED_MONTHLY_SUBSCRIPTION_FEE = 45;
 
 const SUPABASE_STORAGE_BUCKET = "receipts";
 
@@ -316,7 +316,7 @@ const getClientCurrencyCode = (client) => currencyCodeFromLabel(client?.defaultC
 
 const calculateAdjustmentValues = ({ subtotal = 0, total = 0, client, profile }) => {
   const feeAmount = client?.feesDeducted ?
-    total * (LOCKED_FEE_RATE_PERCENT / 100) : 0;
+    safeNumber(profile?.feeRate || LOCKED_MONTHLY_SUBSCRIPTION_FEE) : 0;
   const taxWithheld = client?.deductsTaxPrior ? subtotal * (safeNumber(profile?.taxRate) / 100) : 0;
   const netExpected = total - feeAmount - taxWithheld;
   return {
@@ -411,7 +411,7 @@ const initialProfile = {
   quotePrefix: "QUO",
   paymentTermsDays: 21,
   taxRate: 30,
-  feeRate: LOCKED_FEE_RATE_PERCENT,
+  feeRate: LOCKED_MONTHLY_SUBSCRIPTION_FEE,
   gstRegistered: true,
 
   bankName: "",
@@ -446,6 +446,7 @@ const initialProfile = {
   twoFactor: false,
   setupComplete: false,
   setupCompletedAt: "",
+  accountClosureRequestedAt: "",
 };
 
 const initialClients = [];
@@ -1972,7 +1973,7 @@ export default function AccountingPortalPrototype() {
 
   useEffect(() => {
     setProfile((prev) => {
-      const nextFeeRate = LOCKED_FEE_RATE_PERCENT;
+      const nextFeeRate = LOCKED_MONTHLY_SUBSCRIPTION_FEE;
       const nextStripeServerUrl = DEFAULT_API_BASE_URL;
       if (
         safeNumber(prev?.feeRate) === nextFeeRate &&
@@ -2073,6 +2074,14 @@ export default function AccountingPortalPrototype() {
       setSetupComplete(true);
     }
   }, [authUser, profile?.setupComplete]);
+
+  useEffect(() => {
+    if (!authUser || !profile?.accountClosureRequestedAt) return;
+    window.setTimeout(() => {
+      alert("This account has been closed. Your business data is still saved, but portal access is disabled.");
+      handleSignOut();
+    }, 0);
+  }, [authUser, profile?.accountClosureRequestedAt]);
 
   useEffect(() => {
     if (!hasHydratedSupabaseState.current || !supabase) return;
@@ -2347,6 +2356,24 @@ export default function AccountingPortalPrototype() {
       setActiveSettingsTab("Profile");
     } catch (error) {
       console.error("SUPABASE SIGN OUT ERROR:", error);
+    }
+  };
+
+  const handleCloseAccount = async () => {
+    const confirmed = window.confirm("Close this account? Your business data will stay saved, but access to the portal will be blocked until the closure request is removed.");
+    if (!confirmed) return;
+
+    const closureTimestamp = new Date().toISOString();
+    const nextProfile = { ...profile, accountClosureRequestedAt: closureTimestamp };
+
+    try {
+      await saveProfileToSupabase(nextProfile);
+      setProfile(nextProfile);
+      alert("Account closed. Your data has been kept, and this portal login will now be signed out.");
+      await handleSignOut();
+    } catch (error) {
+      console.error("ACCOUNT CLOSE ERROR:", error);
+      alert(error.message || "Account close failed");
     }
   };
 
@@ -3122,21 +3149,22 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
 
     const totals = useMemo(() => {
     const totalIncome = invoices.reduce((sum, inv) => sum + safeNumber(inv.total), 0);
-    const paidIncome = invoices
-      .filter((x) => x.status === "Paid")
-      .reduce((sum, inv) => sum + safeNumber(inv.total), 0);
+    const paidAllocations = invoiceAllocations.filter((x) => String(x.status || "").toLowerCase() === "paid");
+    const paidIncome = paidAllocations.reduce((sum, inv) => sum + safeNumber(inv.gross), 0);
     const totalExpenses = expenses.reduce((sum, ex) => sum + safeNumber(ex.amount), 0);
 
-    const gstCollected = invoiceAllocations.reduce((sum, x) => sum + x.gst, 0);
+    const gstCollected = paidAllocations.reduce((sum, x) => sum + safeNumber(x.gst), 0);
     const gstOnExpenses = expenses.reduce((sum, ex) => sum + safeNumber(ex.gst), 0);
     const gstPayable = gstCollected - gstOnExpenses;
 
-    const incomeExGst = invoiceAllocations.reduce((sum, x) => sum + x.incomeExGst, 0);
-    const estimatedTax = invoiceAllocations.reduce((sum, x) => sum + x.estimatedTax, 0);
-    const totalFees = invoiceAllocations.reduce((sum, x) => sum + x.fee, 0);
-    const totalTaxWithheld = invoiceAllocations.reduce((sum, x) => sum + x.taxWithheld, 0);
-    const preExpenseAvailable = invoiceAllocations.reduce((sum, x) => sum + x.netAvailable, 0);
-    const safeToSpend = preExpenseAvailable - totalExpenses;
+    const paidIncomeExGst = paidAllocations.reduce((sum, x) => sum + safeNumber(x.incomeExGst), 0);
+    const totalTaxWithheld = paidAllocations.reduce((sum, x) => sum + safeNumber(x.taxWithheld), 0);
+    const totalFees = safeNumber(profile?.feeRate || LOCKED_MONTHLY_SUBSCRIPTION_FEE);
+    const taxableProfit = Math.max(0, paidIncomeExGst - totalExpenses - totalFees);
+    const grossEstimatedTax = taxableProfit * (safeNumber(profile.taxRate) / 100);
+    const estimatedTax = Math.max(0, grossEstimatedTax - totalTaxWithheld);
+    const preExpenseAvailable = paidIncome - gstPayable - totalFees - estimatedTax;
+    const safeToSpend = paidIncome - gstPayable - totalExpenses - totalFees - estimatedTax;
 
     return {
       totalIncome,
@@ -3145,14 +3173,14 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       gstCollected,
       gstOnExpenses,
       gstPayable,
-      incomeExGst,
+      incomeExGst: paidIncomeExGst,
       estimatedTax,
       totalFees,
       totalTaxWithheld,
       preExpenseAvailable,
       safeToSpend,
     };
-    }, [invoices, expenses, invoiceAllocations]);
+    }, [invoices, expenses, invoiceAllocations, profile.taxRate, profile.feeRate]);
 
 
     const buildClientEditorForm = (client) => ({ ...blankClient,
@@ -4286,7 +4314,17 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
 
       const atoState = { income: incomeRecords, expenses: expenseRecords };
       const encoded = encodeURIComponent(JSON.stringify(atoState));
-      window.open(`https://www.sharonogier.com/australian-ato-tax-form.html#import=${encoded}`, "_blank");
+      const taxFormUrl = `https://www.sharonogier.com/australian-ato-tax-form.html#import=${encoded}`;
+      const taxWindow = window.open(taxFormUrl, "_blank");
+      if (taxWindow) {
+        window.setTimeout(() => {
+          try {
+            taxWindow.postMessage({ type: "sas-tax-import", payload: atoState }, "*");
+          } catch (error) {
+            console.warn("ATO postMessage import failed", error);
+          }
+        }, 700);
+      }
     };
 
     const monthlyFinance = useMemo(() => {
@@ -6984,14 +7022,14 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
             </div>
 
             <div>
-              <label style={labelStyle}>Fee Rate %</label>
+              <label style={labelStyle}>Monthly subscription fee</label>
               <input
                 type="number"
                 style={{ ...inputStyle, background: "#F8FAFC", color: colours.muted }}
-                value={LOCKED_FEE_RATE_PERCENT}
+                value={LOCKED_MONTHLY_SUBSCRIPTION_FEE}
                 readOnly
                 disabled
-                title="Locked at 1%"
+                title="Locked at $45 per month"
               />
             </div>
 
@@ -7150,6 +7188,43 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
               />
               Enable two-factor authentication
             </label>
+
+            <div
+              style={{
+                border: `1px solid ${colours.border}`,
+                borderRadius: 16,
+                padding: 16,
+                background: "#FFF7F7",
+                display: "grid",
+                gap: 10,
+              }}
+            >
+              <div style={{ fontSize: 15, fontWeight: 800, color: colours.text }}>Close account</div>
+              <div style={{ fontSize: 13, color: colours.muted, lineHeight: 1.6 }}>
+                This keeps all business data saved, but blocks access to the portal for this login.
+              </div>
+              {profile.accountClosureRequestedAt ? (
+                <div style={{ fontSize: 12, color: colours.muted }}>
+                  Closure requested on {formatDateAU(profile.accountClosureRequestedAt)}
+                </div>
+              ) : null}
+              <div>
+                <button
+                  style={{
+                    background: "#FFFFFF",
+                    color: "#B42318",
+                    border: "1px solid #F04438",
+                    borderRadius: 10,
+                    padding: "10px 14px",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                  onClick={handleCloseAccount}
+                >
+                  Close account
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </SectionCard>
