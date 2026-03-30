@@ -1051,7 +1051,7 @@ th { text-align:left; color:#667085; }
 <div id="preview-email-status" class="preview-status"></div>
 <div class="toolbar-actions">
   ${allowEmail ? `<button id="preview-email-button" class="email-button" onclick="window.opener && window.opener.sendQuoteFromPreview && window.opener.sendQuoteFromPreview(${JSON.stringify(quote.id)}, window)">Email Quote</button>` : ""}
-  <button class="print-button" onclick="window.print()">Print / Download PDF</button>
+  <button class="print-button" onclick="setTimeout(function(){ window.print(); }, 100)">Print / Download PDF</button>
 </div>
 </div>
 
@@ -1301,7 +1301,7 @@ th { text-align:left; color:#64748B; }
 <div id="preview-email-status" class="preview-status"></div>
 <div class="toolbar-actions">
   ${allowEmail ? `<button id="preview-email-button" class="email-button" onclick="window.opener && window.opener.sendInvoiceFromPreview && window.opener.sendInvoiceFromPreview(${JSON.stringify(invoice.id)}, window)">Email Invoice</button>` : ""}
-  <button class="print-button" onclick="window.print()">Print / Download PDF</button>
+  <button class="print-button" onclick="setTimeout(function(){ window.print(); }, 100)">Print / Download PDF</button>
 </div>
 </div>
 
