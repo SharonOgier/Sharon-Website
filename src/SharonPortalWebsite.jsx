@@ -21,12 +21,12 @@ const colours = {
 const navItems = [
   "dashboard",
   "financial insights",
-  "ato / tax",
   "clients",
   "invoices",
   "quotes",
   "services",
   "expenses",
+  "bills / payables",
   "income sources",
   "documents",
   "settings",
@@ -102,7 +102,7 @@ const getApiBaseUrl = (preferredValue = "") => {
   }
 };
 
-const LOCKED_MONTHLY_SUBSCRIPTION_FEE = 45;
+const LOCKED_FEE_RATE_PERCENT = 1;
 
 const SUPABASE_STORAGE_BUCKET = "receipts";
 
@@ -317,7 +317,7 @@ const getClientCurrencyCode = (client) => currencyCodeFromLabel(client?.defaultC
 
 const calculateAdjustmentValues = ({ subtotal = 0, total = 0, client, profile }) => {
   const feeAmount = client?.feesDeducted ?
-    safeNumber(profile?.feeRate || LOCKED_MONTHLY_SUBSCRIPTION_FEE) : 0;
+    total * (LOCKED_FEE_RATE_PERCENT / 100) : 0;
   const taxWithheld = client?.deductsTaxPrior ? subtotal * (safeNumber(profile?.taxRate) / 100) : 0;
   const netExpected = total - feeAmount - taxWithheld;
   return {
@@ -412,7 +412,7 @@ const initialProfile = {
   quotePrefix: "QUO",
   paymentTermsDays: 21,
   taxRate: 30,
-  feeRate: LOCKED_MONTHLY_SUBSCRIPTION_FEE,
+  feeRate: LOCKED_FEE_RATE_PERCENT,
   gstRegistered: true,
 
   bankName: "",
@@ -447,7 +447,6 @@ const initialProfile = {
   twoFactor: false,
   setupComplete: false,
   setupCompletedAt: "",
-  accountClosureRequestedAt: "",
 };
 
 const initialClients = [];
@@ -1821,6 +1820,7 @@ export default function AccountingPortalPrototype() {
   const [documentEditorForm, setDocumentEditorForm] = useState(null);
   const [expenseForm, setExpenseForm] = useState({
     date: new Date().toISOString().slice(0, 10),
+    dueDate: new Date().toISOString().slice(0, 10),
     supplier: "",
     category: "",
     description: "",
@@ -1974,7 +1974,7 @@ export default function AccountingPortalPrototype() {
 
   useEffect(() => {
     setProfile((prev) => {
-      const nextFeeRate = LOCKED_MONTHLY_SUBSCRIPTION_FEE;
+      const nextFeeRate = LOCKED_FEE_RATE_PERCENT;
       const nextStripeServerUrl = DEFAULT_API_BASE_URL;
       if (
         safeNumber(prev?.feeRate) === nextFeeRate &&
@@ -2075,14 +2075,6 @@ export default function AccountingPortalPrototype() {
       setSetupComplete(true);
     }
   }, [authUser, profile?.setupComplete]);
-
-  useEffect(() => {
-    if (!authUser || !profile?.accountClosureRequestedAt) return;
-    window.setTimeout(() => {
-      alert("This account has been closed. Your business data is still saved, but portal access is disabled.");
-      handleSignOut();
-    }, 0);
-  }, [authUser, profile?.accountClosureRequestedAt]);
 
   useEffect(() => {
     if (!hasHydratedSupabaseState.current || !supabase) return;
@@ -2357,24 +2349,6 @@ export default function AccountingPortalPrototype() {
       setActiveSettingsTab("Profile");
     } catch (error) {
       console.error("SUPABASE SIGN OUT ERROR:", error);
-    }
-  };
-
-  const handleCloseAccount = async () => {
-    const confirmed = window.confirm("Close this account? Your business data will stay saved, but access to the portal will be blocked until the closure request is removed.");
-    if (!confirmed) return;
-
-    const closureTimestamp = new Date().toISOString();
-    const nextProfile = { ...profile, accountClosureRequestedAt: closureTimestamp };
-
-    try {
-      await saveProfileToSupabase(nextProfile);
-      setProfile(nextProfile);
-      alert("Account closed. Your data has been kept, and this portal login will now be signed out.");
-      await handleSignOut();
-    } catch (error) {
-      console.error("ACCOUNT CLOSE ERROR:", error);
-      alert(error.message || "Account close failed");
     }
   };
 
@@ -3150,22 +3124,21 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
 
     const totals = useMemo(() => {
     const totalIncome = invoices.reduce((sum, inv) => sum + safeNumber(inv.total), 0);
-    const paidAllocations = invoiceAllocations.filter((x) => String(x.status || "").toLowerCase() === "paid");
-    const paidIncome = paidAllocations.reduce((sum, inv) => sum + safeNumber(inv.gross), 0);
+    const paidIncome = invoices
+      .filter((x) => x.status === "Paid")
+      .reduce((sum, inv) => sum + safeNumber(inv.total), 0);
     const totalExpenses = expenses.reduce((sum, ex) => sum + safeNumber(ex.amount), 0);
 
-    const gstCollected = paidAllocations.reduce((sum, x) => sum + safeNumber(x.gst), 0);
+    const gstCollected = invoiceAllocations.reduce((sum, x) => sum + x.gst, 0);
     const gstOnExpenses = expenses.reduce((sum, ex) => sum + safeNumber(ex.gst), 0);
     const gstPayable = gstCollected - gstOnExpenses;
 
-    const paidIncomeExGst = paidAllocations.reduce((sum, x) => sum + safeNumber(x.incomeExGst), 0);
-    const totalTaxWithheld = paidAllocations.reduce((sum, x) => sum + safeNumber(x.taxWithheld), 0);
-    const totalFees = safeNumber(profile?.feeRate || LOCKED_MONTHLY_SUBSCRIPTION_FEE);
-    const taxableProfit = Math.max(0, paidIncomeExGst - totalExpenses - totalFees);
-    const grossEstimatedTax = taxableProfit * (safeNumber(profile.taxRate) / 100);
-    const estimatedTax = Math.max(0, grossEstimatedTax - totalTaxWithheld);
-    const preExpenseAvailable = paidIncome - gstPayable - totalFees - estimatedTax;
-    const safeToSpend = paidIncome - gstPayable - totalExpenses - totalFees - estimatedTax;
+    const incomeExGst = invoiceAllocations.reduce((sum, x) => sum + x.incomeExGst, 0);
+    const estimatedTax = invoiceAllocations.reduce((sum, x) => sum + x.estimatedTax, 0);
+    const totalFees = invoiceAllocations.reduce((sum, x) => sum + x.fee, 0);
+    const totalTaxWithheld = invoiceAllocations.reduce((sum, x) => sum + x.taxWithheld, 0);
+    const preExpenseAvailable = invoiceAllocations.reduce((sum, x) => sum + x.netAvailable, 0);
+    const safeToSpend = preExpenseAvailable - totalExpenses;
 
     return {
       totalIncome,
@@ -3174,14 +3147,14 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       gstCollected,
       gstOnExpenses,
       gstPayable,
-      incomeExGst: paidIncomeExGst,
+      incomeExGst,
       estimatedTax,
       totalFees,
       totalTaxWithheld,
       preExpenseAvailable,
       safeToSpend,
     };
-    }, [invoices, expenses, invoiceAllocations, profile.taxRate, profile.feeRate]);
+    }, [invoices, expenses, invoiceAllocations]);
 
 
     const buildClientEditorForm = (client) => ({ ...blankClient,
@@ -3189,6 +3162,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     });
     const buildExpenseEditorForm = (expense) => ({ ...(expense || {}),
     date: expense?.date || new Date().toISOString().slice(0, 10),
+    dueDate: expense?.dueDate || expense?.date || new Date().toISOString().slice(0, 10),
     supplier: expense?.supplier || "",
     category: expense?.category || "",
     description: expense?.description || "",
@@ -3268,6 +3242,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     const saveExpenseEdits = async () => {
     if (!expenseEditorForm) return;
     const payload = { ...expenseEditorForm,
+      dueDate: expenseEditorForm.dueDate || expenseEditorForm.date,
       supplier: String(expenseEditorForm.supplier || "").trim(),
       category: String(expenseEditorForm.category || "").trim(),
       description: String(expenseEditorForm.description || "").trim(),
@@ -3288,6 +3263,37 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       console.error("EXPENSE EDIT SAVE ERROR:", error);
       setSupabaseSyncStatus(error.message || "Expense update failed");
       alert(error.message || "Expense update failed");
+    }
+    };
+
+
+    const markBillPaid = async (expense) => {
+    try {
+      const savedExpense = await upsertRecordInDatabase(SUPABASE_TABLES.expenses, {
+        ...expense,
+        isPaid: true,
+        paidAt: new Date().toISOString(),
+      });
+      setExpenses((prev) => prev.map((item) => (item.id === savedExpense.id ? savedExpense : item)));
+      setSupabaseSyncStatus("Bill marked paid");
+    } catch (error) {
+      console.error("MARK BILL PAID ERROR:", error);
+      alert(error.message || "Could not mark bill paid");
+    }
+    };
+
+    const markBillUnpaid = async (expense) => {
+    try {
+      const savedExpense = await upsertRecordInDatabase(SUPABASE_TABLES.expenses, {
+        ...expense,
+        isPaid: false,
+        paidAt: "",
+      });
+      setExpenses((prev) => prev.map((item) => (item.id === savedExpense.id ? savedExpense : item)));
+      setSupabaseSyncStatus("Bill marked unpaid");
+    } catch (error) {
+      console.error("MARK BILL UNPAID ERROR:", error);
+      alert(error.message || "Could not mark bill unpaid");
     }
     };
 
@@ -3827,8 +3833,11 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       const payload = {
         id: Date.now(),
         ...expenseForm,
+        dueDate: expenseForm.dueDate || expenseForm.date,
         amount,
         gst,
+        isPaid: false,
+        paidAt: "",
         receiptFileName,
         receiptUrl,
       };
@@ -3837,6 +3846,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       setExpenses((prev) => [...prev, savedExpense]);
       setExpenseForm({
         date: new Date().toISOString().slice(0, 10),
+        dueDate: new Date().toISOString().slice(0, 10),
         supplier: "",
         category: "",
         description: "",
@@ -4263,7 +4273,59 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     };
 
     const exportToATOForm = () => {
-      setActivePage("ato / tax");
+      const classifyIncomeType = (src) => {
+        const raw = String(src?.incomeType || "").toLowerCase();
+        if (raw.includes("casual") || raw.includes("salary") || raw.includes("wage")) return "Salary/Wages";
+        if (raw.includes("business") || raw.includes("sole trader")) return "Business (sole trader)";
+        if (raw.includes("interest")) return "Interest";
+        if (raw.includes("dividend")) return "Dividends";
+        if (raw.includes("foreign")) return "Other";
+        return "Other";
+      };
+
+      const incomeRecords = invoices
+        .filter((inv) => inv.status === "Paid")
+        .map((inv) => {
+          const client = getClientById(inv.clientId);
+          return {
+            date: inv.paidAt ? inv.paidAt.slice(0, 10) : (inv.invoiceDate || ""),
+            type: "Business (sole trader)",
+            payer: client?.name || client?.businessName || inv.clientName || "",
+            gross: safeNumber(inv.total),
+            withheld: safeNumber(inv.taxWithheld || 0),
+            franked: 0,
+            franking: 0,
+            abn: client?.abn || "",
+          };
+        });
+
+      incomeSources.forEach((src) => {
+        const beforeTax = safeNumber(src.beforeTax);
+        if (beforeTax <= 0) return;
+        const incomeType = classifyIncomeType(src);
+        incomeRecords.push({
+          date: new Date().toISOString().slice(0, 10),
+          type: incomeType,
+          payer: src.name || "",
+          gross: beforeTax,
+          withheld: safeNumber(src.taxWithheld || 0),
+          franked: incomeType === "Dividends" ? beforeTax : 0,
+          franking: safeNumber(src.frankingCredit || 0),
+          abn: "",
+        });
+      });
+
+      const expenseRecords = expenses.map((exp) => ({
+        date: exp.date || "",
+        type: exp.category || exp.expenseType || "Other",
+        supplier: exp.supplier || exp.description || "",
+        amount: safeNumber(exp.amount),
+        gstIncl: exp.gstIncluded !== false ? "yes" : "no",
+      }));
+
+      const atoState = { income: incomeRecords, expenses: expenseRecords };
+      const encoded = encodeURIComponent(JSON.stringify(atoState));
+      window.open(`https://www.sharonogier.com/australian-ato-tax-form.html#import=${encoded}`, "_blank");
     };
 
     const monthlyFinance = useMemo(() => {
@@ -4456,237 +4518,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       };
     }, [clientRevenueRows, totals, invoices, monthlyFinance, expenses, expenseCategoryRows]);
 
-    const renderAtoTax = () => {
-      const normaliseIncomeTypeForAto = (incomeType = "") => {
-        const value = String(incomeType || "").trim().toLowerCase();
-        if (!value) return "Other";
-        if (value.includes("salary") || value.includes("wage") || value.includes("casual")) return "Salary/Wages";
-        if (value.includes("business") || value.includes("sole trader")) return "Business (sole trader)";
-        if (value.includes("interest")) return "Interest";
-        if (value.includes("dividend")) return "Dividends";
-        if (value.includes("foreign") || value.includes("outside australia")) return "Foreign income";
-        return "Other";
-      };
-
-      const atoIncomeRows = [
-        ...invoices
-          .filter((inv) => inv.status === "Paid")
-          .map((inv) => {
-            const client = getClientById(inv.clientId);
-            return {
-              id: `inv-${inv.id}`,
-              date: inv.paidAt ? inv.paidAt.slice(0, 10) : (inv.invoiceDate || ""),
-              type: "Business (sole trader)",
-              payer: client?.name || client?.businessName || inv.clientName || "",
-              gross: safeNumber(inv.total),
-              withheld: safeNumber(inv.taxWithheld || 0),
-              franked: 0,
-              franking: 0,
-            };
-          }),
-        ...incomeSources
-          .filter((src) => safeNumber(src.beforeTax) > 0)
-          .map((src) => {
-            const incomeType = normaliseIncomeTypeForAto(src.incomeType || "");
-            const gross = safeNumber(src.beforeTax);
-            return {
-              id: `src-${src.id}`,
-              date: new Date().toISOString().slice(0, 10),
-              type: incomeType,
-              payer: src.name || "",
-              gross,
-              withheld: safeNumber(src.taxWithheld || 0),
-              franked: incomeType === "Dividends" ? safeNumber(src.frankedAmount || src.franked || gross) : 0,
-              franking: incomeType === "Dividends" ? safeNumber(src.frankingCredit || src.franking || 0) : 0,
-            };
-          }),
-      ];
-
-      const atoExpenseRows = expenses.map((exp) => ({
-        id: exp.id,
-        date: exp.date || "",
-        type: exp.category || exp.expenseType || "Other",
-        supplier: exp.supplier || exp.description || "",
-        amount: safeNumber(exp.amount),
-        gstIncl: exp.gstIncluded === false ? "no" : String(exp.gstIncl || "yes").toLowerCase(),
-      }));
-
-      const salaryIncome = atoIncomeRows
-        .filter((row) => row.type === "Salary/Wages")
-        .reduce((sum, row) => sum + safeNumber(row.gross), 0);
-
-      const businessIncome = atoIncomeRows
-        .filter((row) => row.type === "Business (sole trader)")
-        .reduce((sum, row) => sum + safeNumber(row.gross), 0);
-
-      const interestIncome = atoIncomeRows
-        .filter((row) => row.type === "Interest")
-        .reduce((sum, row) => sum + safeNumber(row.gross), 0);
-
-      const dividendIncome = atoIncomeRows
-        .filter((row) => row.type === "Dividends")
-        .reduce((sum, row) => sum + safeNumber(row.gross), 0);
-
-      const foreignIncome = atoIncomeRows
-        .filter((row) => row.type === "Foreign income")
-        .reduce((sum, row) => sum + safeNumber(row.gross), 0);
-
-      const otherIncome = atoIncomeRows
-        .filter((row) => row.type === "Other")
-        .reduce((sum, row) => sum + safeNumber(row.gross), 0);
-
-      const totalIncome = atoIncomeRows.reduce((sum, row) => sum + safeNumber(row.gross), 0);
-      const paygWithheld = atoIncomeRows.reduce((sum, row) => sum + safeNumber(row.withheld), 0);
-      const frankingCredits = atoIncomeRows.reduce((sum, row) => sum + safeNumber(row.franking), 0);
-
-      const g1 = businessIncome;
-      const gstOnSales = g1 / 11;
-      const g10 = atoExpenseRows
-        .filter((row) => safeNumber(row.amount) >= 1000)
-        .reduce((sum, row) => sum + safeNumber(row.amount), 0);
-      const g11 = atoExpenseRows
-        .filter((row) => safeNumber(row.amount) < 1000)
-        .reduce((sum, row) => sum + safeNumber(row.amount), 0);
-      const gstOnPurchases = atoExpenseRows.reduce((sum, row) => {
-        return sum + (row.gstIncl === "yes" ? safeNumber(row.amount) / 11 : 0);
-      }, 0);
-      const deductibleExpenses = atoExpenseRows.reduce((sum, row) => {
-        return sum + (row.gstIncl === "yes" ? safeNumber(row.amount) / 1.1 : safeNumber(row.amount));
-      }, 0);
-
-      const taxableIncome = Math.max(0, totalIncome - deductibleExpenses);
-
-      const residentTax = (taxable) => {
-        const t = safeNumber(taxable);
-        if (t <= 18200) return 0;
-        if (t <= 45000) return (t - 18200) * 0.19;
-        if (t <= 120000) return 5092 + (t - 45000) * 0.325;
-        if (t <= 180000) return 29467 + (t - 120000) * 0.37;
-        return 51667 + (t - 180000) * 0.45;
-      };
-
-      const grossTax = residentTax(taxableIncome);
-      const estimatedIncomeTax = Math.max(0, grossTax - frankingCredits);
-      const medicareLevy = taxableIncome * 0.02;
-      const netGst = Math.max(0, gstOnSales - gstOnPurchases);
-      const netTaxBalance = estimatedIncomeTax + medicareLevy + netGst - paygWithheld;
-
-      const incomeMixRows = [
-        { label: "Salary / wages", value: salaryIncome },
-        { label: "Business income", value: businessIncome },
-        { label: "Interest", value: interestIncome },
-        { label: "Dividends", value: dividendIncome },
-        { label: "Foreign income", value: foreignIncome },
-        { label: "Other income", value: otherIncome },
-      ].filter((row) => row.value > 0);
-
-      return (
-        <div style={{ display: "grid", gap: 20 }}>
-          <DashboardHero
-            title="ATO and BAS view"
-            subtitle="This page uses the same portal records already stored in your SaaS and reshapes them into BAS, salary, expenses, and tax-summary information suited to your site."
-            highlight={currency(netTaxBalance)}
-          >
-            <InsightChip label="Business income (G1 base)" value={currency(g1)} />
-            <InsightChip label="PAYG withheld" value={currency(paygWithheld)} />
-            <InsightChip label="Deductible expenses" value={currency(deductibleExpenses)} />
-          </DashboardHero>
-
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-              gap: 16,
-            }}
-          >
-            <MetricCard title="Salary / wages" value={currency(salaryIncome)} subtitle="Employment-style income flowing into the tax view." accent={colours.navy} />
-            <MetricCard title="Business income" value={currency(businessIncome)} subtitle="Paid invoices and business income sources." accent={colours.teal} />
-            <MetricCard title="Deductible expenses" value={currency(deductibleExpenses)} subtitle="Net of GST where GST is included." accent={colours.purple} />
-            <MetricCard title="Net GST" value={currency(netGst)} subtitle={`1A ${currency(gstOnSales)} less 1B ${currency(gstOnPurchases)}.`} accent={colours.navy} />
-            <MetricCard title="Estimated income tax" value={currency(estimatedIncomeTax)} subtitle="Indicative resident-scale estimate after franking credits." accent={colours.purple} />
-            <MetricCard title="Net balance" value={currency(netTaxBalance)} subtitle="Income tax + Medicare + BAS less PAYG withheld." accent={colours.teal} />
-          </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: 20 }}>
-            <SectionCard title="BAS summary" right={<div style={{ fontSize: 12, color: colours.muted }}>Business Activity Statement style totals</div>}>
-              <div style={{ display: "grid", gap: 12 }}>
-                {[
-                  ["G1 Total sales (incl GST)", g1],
-                  ["G10 Capital purchases", g10],
-                  ["G11 Non-capital purchases", g11],
-                  ["1A GST on sales", gstOnSales],
-                  ["1B GST on purchases", gstOnPurchases],
-                  ["Net GST payable", netGst],
-                ].map(([label, value]) => (
-                  <div key={label} style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "12px 14px", background: colours.bg, border: `1px solid ${colours.border}`, borderRadius: 14 }}>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: colours.text }}>{label}</div>
-                    <div style={{ fontSize: 14, fontWeight: 800, color: colours.text }}>{currency(value)}</div>
-                  </div>
-                ))}
-              </div>
-            </SectionCard>
-
-            <SectionCard title="Income tax summary" right={<div style={{ fontSize: 12, color: colours.muted }}>Indicative only</div>}>
-              <div style={{ display: "grid", gap: 12 }}>
-                {[
-                  ["Total income", totalIncome],
-                  ["Franking credits", frankingCredits],
-                  ["Taxable income", taxableIncome],
-                  ["Estimated tax", estimatedIncomeTax],
-                  ["Medicare levy", medicareLevy],
-                  ["PAYG withheld", paygWithheld],
-                ].map(([label, value]) => (
-                  <div key={label} style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "12px 14px", background: colours.bg, border: `1px solid ${colours.border}`, borderRadius: 14 }}>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: colours.text }}>{label}</div>
-                    <div style={{ fontSize: 14, fontWeight: 800, color: colours.text }}>{currency(value)}</div>
-                  </div>
-                ))}
-              </div>
-            </SectionCard>
-          </div>
-
-          <TrendBarsCard
-            title="Income mix"
-            subtitle="A salary, business, and investment split using your existing portal records"
-            data={incomeMixRows}
-            valueKey="value"
-            formatValue={(value) => currency(value)}
-            accent={colours.teal}
-            emptyText="No income records available yet."
-          />
-
-          <SectionCard title="Income ledger" right={<div style={{ fontSize: 12, color: colours.muted }}>Used for salary, business, dividends, interest, and PAYG</div>}>
-            <DataTable
-              columns={[
-                { key: "date", label: "Date" },
-                { key: "type", label: "Type" },
-                { key: "payer", label: "Payer" },
-                { key: "gross", label: "Gross", render: (value) => currency(value) },
-                { key: "withheld", label: "Withheld", render: (value) => currency(value) },
-                { key: "franked", label: "Franked", render: (value) => currency(value) },
-                { key: "franking", label: "Franking credit", render: (value) => currency(value) },
-              ]}
-              rows={atoIncomeRows}
-            />
-          </SectionCard>
-
-          <SectionCard title="Expense ledger" right={<div style={{ fontSize: 12, color: colours.muted }}>Mapped into deductions and BAS purchase totals</div>}>
-            <DataTable
-              columns={[
-                { key: "date", label: "Date" },
-                { key: "type", label: "Type" },
-                { key: "supplier", label: "Supplier" },
-                { key: "amount", label: "Amount", render: (value) => currency(value) },
-                { key: "gstIncl", label: "GST incl" },
-              ]}
-              rows={atoExpenseRows}
-            />
-          </SectionCard>
-        </div>
-      );
-    };
-
-const renderDashboard = () => (
+    const renderDashboard = () => (
     <div style={{ display: "grid", gap: 20 }}>
       <DashboardHero
         title={profile.businessName || "Sharon’s Accounting Service"}
@@ -5227,6 +5059,7 @@ const renderDashboard = () => (
             { key: "name", label: "Client" },
             { key: "contactPerson", label: "Contact" },
             { key: "workType", label: "Work Type" },
+            { key: "isPaid", label: "Status", render: (v, row) => (row.isPaid ? "Paid" : (((row.dueDate || row.date || "") < new Date().toISOString().slice(0, 10)) ? "Overdue" : "Unpaid")) },
             { key: "email", label: "Email" },
             { key: "defaultCurrency", label: "Currency" },
             {
@@ -6728,6 +6561,227 @@ const renderDashboard = () => (
     );
     };
 
+
+    const renderBillsPayables = () => {
+    const today = new Date();
+    const todayKey = today.toISOString().slice(0, 10);
+    const sevenDays = new Date(today);
+    sevenDays.setDate(sevenDays.getDate() + 7);
+    const sevenDayKey = sevenDays.toISOString().slice(0, 10);
+
+    const billRows = expenses.map((item) => {
+      const dueDate = item.dueDate || item.date || "";
+      const isPaid = Boolean(item.isPaid);
+      let status = "Unpaid";
+      if (isPaid) status = "Paid";
+      else if (dueDate && dueDate < todayKey) status = "Overdue";
+      else if (dueDate && dueDate <= sevenDayKey) status = "Due soon";
+      return {
+        ...item,
+        dueDate,
+        status,
+      };
+    });
+
+    const unpaidBills = billRows.filter((item) => !item.isPaid);
+    const overdueBills = billRows.filter((item) => item.status === "Overdue");
+    const dueSoonBills = billRows.filter((item) => item.status === "Due soon");
+    const totalPayable = unpaidBills.reduce((sum, item) => sum + safeNumber(item.amount), 0);
+
+    const supplierTotalsMap = unpaidBills.reduce((acc, item) => {
+      const key = item.supplier || "Unknown supplier";
+      acc[key] = (acc[key] || 0) + safeNumber(item.amount);
+      return acc;
+    }, {});
+    const topSuppliers = Object.entries(supplierTotalsMap)
+      .map(([label, value]) => ({ label, value }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 5);
+
+    return (
+      <div style={{ display: "grid", gap: 20 }}>
+        <DashboardHero
+          title="Bills and payables"
+          subtitle="Track supplier bills, what is due soon, what is overdue, and what is already paid using your existing expense data."
+          highlight={currency(totalPayable)}
+        >
+          <InsightChip label="Due soon" value={`${dueSoonBills.length} bill${dueSoonBills.length === 1 ? "" : "s"}`} />
+          <InsightChip label="Overdue" value={`${overdueBills.length} bill${overdueBills.length === 1 ? "" : "s"}`} />
+          <InsightChip label="Paid" value={`${billRows.filter((item) => item.isPaid).length} bill${billRows.filter((item) => item.isPaid).length === 1 ? "" : "s"}`} />
+        </DashboardHero>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+            gap: 16,
+          }}
+        >
+          <MetricCard title="Total payable" value={currency(totalPayable)} subtitle="All unpaid supplier bills." accent={colours.purple} />
+          <MetricCard title="Due in 7 days" value={currency(dueSoonBills.reduce((sum, item) => sum + safeNumber(item.amount), 0))} subtitle="Bills requiring attention soon." accent={colours.teal} />
+          <MetricCard title="Overdue" value={currency(overdueBills.reduce((sum, item) => sum + safeNumber(item.amount), 0))} subtitle="Bills past their due date." accent={colours.navy} />
+          <MetricCard title="Bills recorded" value={String(billRows.length)} subtitle="All supplier bills from your expense records." accent={colours.purple} />
+        </div>
+
+        <TrendBarsCard
+          title="Top suppliers"
+          subtitle="Largest unpaid commitments by supplier"
+          data={topSuppliers}
+          valueKey="value"
+          formatValue={(value) => currency(value)}
+          accent={colours.teal}
+          emptyText="No unpaid supplier bills yet."
+        />
+
+        <SectionCard
+          title="Enter supplier bill"
+          right={<div style={{ fontSize: 12, color: colours.muted }}>Creates a payable using your existing expense structure</div>}
+        >
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+              gap: 14,
+            }}
+          >
+            <div>
+              <label style={labelStyle}>Bill date</label>
+              <input
+                type="date"
+                style={inputStyle}
+                value={expenseForm.date}
+                onChange={(e) => setExpenseForm((prev) => ({ ...prev, date: e.target.value }))}
+              />
+            </div>
+
+            <div>
+              <label style={labelStyle}>Due date</label>
+              <input
+                type="date"
+                style={inputStyle}
+                value={expenseForm.dueDate || expenseForm.date}
+                onChange={(e) => setExpenseForm((prev) => ({ ...prev, dueDate: e.target.value }))}
+              />
+            </div>
+
+            <div>
+              <label style={labelStyle}>Supplier</label>
+              <input
+                style={inputStyle}
+                value={expenseForm.supplier}
+                onChange={(e) => setExpenseForm((prev) => ({ ...prev, supplier: e.target.value }))}
+                placeholder="Supplier name"
+              />
+            </div>
+
+            <div>
+              <label style={labelStyle}>Category</label>
+              <select
+                style={inputStyle}
+                value={expenseForm.category}
+                onChange={(e) => setExpenseForm((prev) => ({ ...prev, category: e.target.value }))}
+              >
+                <option value="">Select...</option>
+                {expenseCategories.map((item) => (
+                  <option key={item} value={item}>
+                    {item}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label style={labelStyle}>Amount</label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                style={inputStyle}
+                value={expenseForm.amount}
+                onChange={(e) => setExpenseForm((prev) => ({ ...prev, amount: e.target.value }))}
+                placeholder="0.00"
+              />
+            </div>
+
+            <div>
+              <label style={labelStyle}>GST included</label>
+              <select
+                style={inputStyle}
+                value={expenseForm.gstIncl || "yes"}
+                onChange={(e) => setExpenseForm((prev) => ({ ...prev, gstIncl: e.target.value }))}
+              >
+                <option value="yes">Yes</option>
+                <option value="no">No</option>
+              </select>
+            </div>
+
+            <div style={{ gridColumn: "1 / -1" }}>
+              <label style={labelStyle}>Description</label>
+              <textarea
+                style={inputStyle}
+                value={expenseForm.description}
+                onChange={(e) => setExpenseForm((prev) => ({ ...prev, description: e.target.value }))}
+                placeholder="Bill description or notes"
+              />
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 16 }}>
+            <button style={buttonPrimary} onClick={saveExpense}>Save bill</button>
+            <button
+              style={buttonSecondary}
+              onClick={() =>
+                setExpenseForm({
+                  date: new Date().toISOString().slice(0, 10),
+                  dueDate: new Date().toISOString().slice(0, 10),
+                  supplier: "",
+                  category: "",
+                  description: "",
+                  amount: "",
+                  expenseType: "",
+                  workType: profile.workType,
+                  receiptFileName: "",
+                  receiptUrl: "",
+                  gstIncl: "yes",
+                })
+              }
+            >
+              Clear
+            </button>
+          </div>
+        </SectionCard>
+
+        <SectionCard title="Bills list" right={<div style={{ fontSize: 12, color: colours.muted }}>Based on expense records</div>}>
+          <DataTable
+            columns={[
+              { key: "supplier", label: "Supplier" },
+              { key: "category", label: "Category" },
+              { key: "date", label: "Bill date", render: (value) => formatDateAU(value) },
+              { key: "dueDate", label: "Due date", render: (value) => formatDateAU(value) },
+              { key: "amount", label: "Amount", render: (value) => currency(value) },
+              { key: "status", label: "Status" },
+              {
+                key: "actions",
+                label: "Actions",
+                render: (_, row) => (
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    {row.isPaid ? (
+                      <button style={buttonSecondary} onClick={() => markBillUnpaid(row)}>Mark Unpaid</button>
+                    ) : (
+                      <button style={buttonPrimary} onClick={() => markBillPaid(row)}>Mark Paid</button>
+                    )}
+                    <button style={buttonSecondary} onClick={() => openExpenseEditor(row)}>View / Edit</button>
+                  </div>
+                ),
+              },
+            ]}
+            rows={billRows}
+          />
+        </SectionCard>
+      </div>
+    );
+    };
+
     const renderExpenses = () => (
     <div style={{ display: "grid", gap: 20 }}>
       <SectionCard
@@ -6758,6 +6812,17 @@ const renderDashboard = () => (
               style={inputStyle}
               value={expenseForm.date}
               onChange={(e) => setExpenseForm({ ...expenseForm, date: e.target.value })}
+            />
+          </div>
+
+
+          <div>
+            <label style={labelStyle}>Due Date</label>
+            <input
+              type="date"
+              style={inputStyle}
+              value={expenseForm.dueDate || expenseForm.date}
+              onChange={(e) => setExpenseForm({ ...expenseForm, dueDate: e.target.value })}
             />
           </div>
 
@@ -6862,6 +6927,7 @@ const renderDashboard = () => (
         <DataTable
           columns={[
             { key: "date", label: "Date", render: (v) => formatDateAU(v) },
+            { key: "dueDate", label: "Due Date", render: (v, row) => formatDateAU(v || row.date) },
             { key: "supplier", label: "Supplier" },
             { key: "category", label: "Category" },
             { key: "description", label: "Description" },
@@ -7191,14 +7257,14 @@ const renderDashboard = () => (
             </div>
 
             <div>
-              <label style={labelStyle}>Monthly subscription fee</label>
+              <label style={labelStyle}>Fee Rate %</label>
               <input
                 type="number"
                 style={{ ...inputStyle, background: "#F8FAFC", color: colours.muted }}
-                value={LOCKED_MONTHLY_SUBSCRIPTION_FEE}
+                value={LOCKED_FEE_RATE_PERCENT}
                 readOnly
                 disabled
-                title="Locked at $45 per month"
+                title="Locked at 1%"
               />
             </div>
 
@@ -7357,43 +7423,6 @@ const renderDashboard = () => (
               />
               Enable two-factor authentication
             </label>
-
-            <div
-              style={{
-                border: `1px solid ${colours.border}`,
-                borderRadius: 16,
-                padding: 16,
-                background: "#FFF7F7",
-                display: "grid",
-                gap: 10,
-              }}
-            >
-              <div style={{ fontSize: 15, fontWeight: 800, color: colours.text }}>Close account</div>
-              <div style={{ fontSize: 13, color: colours.muted, lineHeight: 1.6 }}>
-                This keeps all business data saved, but blocks access to the portal for this login.
-              </div>
-              {profile.accountClosureRequestedAt ? (
-                <div style={{ fontSize: 12, color: colours.muted }}>
-                  Closure requested on {formatDateAU(profile.accountClosureRequestedAt)}
-                </div>
-              ) : null}
-              <div>
-                <button
-                  style={{
-                    background: "#FFFFFF",
-                    color: "#B42318",
-                    border: "1px solid #F04438",
-                    borderRadius: 10,
-                    padding: "10px 14px",
-                    fontWeight: 700,
-                    cursor: "pointer",
-                  }}
-                  onClick={handleCloseAccount}
-                >
-                  Close account
-                </button>
-              </div>
-            </div>
           </div>
         )}
       </SectionCard>
@@ -7502,12 +7531,12 @@ const renderDashboard = () => (
           <div style={{ maxWidth: 1400, margin: "0 auto" }}>
             {activePage === "dashboard" && renderDashboard()}
             {activePage === "financial insights" && renderFinancialInsights()}
-            {activePage === "ato / tax" && renderAtoTax()}
             {activePage === "clients" && renderClients()}
             {activePage === "invoices" && renderInvoices()}
             {activePage === "quotes" && renderQuotes()}
             {activePage === "services" && renderServices()}
             {activePage === "expenses" && renderExpenses()}
+            {activePage === "bills / payables" && renderBillsPayables()}
             {activePage === "income sources" && renderIncomeSources()}
             {activePage === "documents" && renderDocuments()}
             {activePage === "settings" && renderSettings()}
