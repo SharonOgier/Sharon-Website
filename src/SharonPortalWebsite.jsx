@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import html2pdf from "html2pdf.js";
 import { supabase } from "./client";
 
 
@@ -331,6 +332,50 @@ const fileToDataUrl = (file) =>
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
+
+const blobToBase64 = (blob) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const result = String(reader.result || "");
+      const parts = result.split(",");
+      resolve(parts[1] || "");
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+
+const generatePdfBase64FromHtml = async (html, filename = "document.pdf") => {
+  const markup = String(html || "").trim();
+  if (!markup) return "";
+
+  const container = document.createElement("div");
+  container.style.position = "fixed";
+  container.style.left = "-100000px";
+  container.style.top = "0";
+  container.style.width = "794px";
+  container.style.background = "#ffffff";
+  container.style.zIndex = "-1";
+  container.innerHTML = markup;
+  document.body.appendChild(container);
+
+  try {
+    const worker = html2pdf()
+      .set({
+        margin: 10,
+        filename,
+        image: { type: "jpeg", quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, logging: false },
+        jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+      })
+      .from(container);
+
+    const pdfBlob = await worker.outputPdf("blob");
+    return await blobToBase64(pdfBlob);
+  } finally {
+    container.remove();
+  }
+};
 
 const blankClient = {
   name: "",
@@ -2633,6 +2678,15 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     hidePhoneNumber: Boolean(emailDocumentRecord?.hidePhoneNumber),
     stripeCheckoutUrl: stripeCheckoutUrl || emailDocumentRecord?.stripeCheckoutUrl || "",
   };
+
+  try {
+    payload.attachmentBase64 = await generatePdfBase64FromHtml(
+      payload.documentHtml || payload.html,
+      payload.filename
+    );
+  } catch (error) {
+    console.error("CLIENT PDF GENERATION ERROR:", error);
+  }
 
   const endpoint =
     documentType === "invoice"
