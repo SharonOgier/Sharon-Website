@@ -1828,10 +1828,22 @@ export default function AccountingPortalPrototype() {
     const invoiceId = params.get("invoiceId");
 
     if (stripeStatus === "success" && authUser) {
-      restorePortalStateFromSupabase();
       if (invoiceId) {
         setActivePage("invoices");
+        const invoice = invoices.find((inv) => String(inv.id) === String(invoiceId));
+        if (invoice && invoice.status !== "Paid") {
+          const updatedInvoice = { ...invoice, status: "Paid", paidAt: new Date().toISOString(), paidVia: "Stripe" };
+          (async () => {
+            try {
+              const savedInvoice = await upsertRecordInDatabase("sas_invoices", updatedInvoice);
+              setInvoices((prev) => prev.map((inv) => String(inv.id) === String(invoiceId) ? savedInvoice : inv));
+            } catch (e) {
+              console.error("Failed to mark invoice paid on stripe success:", e);
+            }
+          })();
+        }
       }
+      restorePortalStateFromSupabase();
     }
   }, [authUser]);
 
@@ -3595,11 +3607,11 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     }
     };
 
-    const markInvoicePaid = async (invoiceId) => {
+    const markInvoicePaid = async (invoiceId, paidVia = "Manual") => {
     const invoice = invoices.find((inv) => inv.id === invoiceId);
     if (!invoice) return;
 
-    const updatedInvoice = { ...invoice, status: "Paid", paidAt: new Date().toISOString() };
+    const updatedInvoice = { ...invoice, status: "Paid", paidAt: new Date().toISOString(), paidVia };
     try {
       const savedInvoice = await upsertRecordInDatabase(SUPABASE_TABLES.invoices, updatedInvoice);
       setInvoices((prev) =>
@@ -4685,7 +4697,19 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
               { key: "invoiceDate", label: "Date", render: (v) => formatDateAU(v) },
               { key: "dueDate", label: "Due", render: (v) => formatDateAU(v) },
               { key: "total", label: "Total", render: (v, row) => formatCurrencyByCode(v, row.currencyCode || getClientCurrencyCode(getClientById(row.clientId))) },
-              { key: "status", label: "Status" },
+              { key: "status", label: "Status", render: (v) => (
+                <span style={{
+                  display: "inline-block",
+                  padding: "3px 10px",
+                  borderRadius: 20,
+                  fontSize: 12,
+                  fontWeight: 700,
+                  background: v === "Paid" ? "#dcfce7" : v === "Draft" ? "#f1f5f9" : "#fef9c3",
+                  color: v === "Paid" ? "#16a34a" : v === "Draft" ? "#64748b" : "#b45309",
+                }}>
+                  {v === "Paid" ? "✓ PAID" : v || "Draft"}
+                </span>
+              )},
               {
                 key: "actions",
                 label: "",
@@ -4699,16 +4723,31 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
                     </button>
 
                     {row.status !== "Paid" ? (
-                      <button style={buttonSecondary} onClick={() => markInvoicePaid(row.id)}>
-                        Mark Paid
-                      </button>
+                      <>
+                        <button style={buttonSecondary} onClick={() => markInvoicePaid(row.id, "Bank Transfer")}>
+                          Mark Paid (Bank)
+                        </button>
+                        <button style={buttonSecondary} onClick={() => markInvoicePaid(row.id, "PayPal")}>
+                          Mark Paid (PayPal)
+                        </button>
+                      </>
                     ) : (
-                      <span style={{ color: colours.successText, fontWeight: 700, alignSelf: "center" }}>Paid</span>
+                      <span style={{ color: "#16a34a", fontWeight: 700, alignSelf: "center", fontSize: 13 }}>
+                        ✓ Paid{row.paidVia ? ` via ${row.paidVia}` : ""}
+                      </span>
                     )}
 
-                  <button style={buttonSecondary} onClick={() => deleteInvoice(row.id)}>
-                      Delete
-                    </button>
+                  <button
+                    style={{
+                      ...buttonSecondary,
+                      ...(row.status === "Paid" ? { opacity: 0.4, cursor: "not-allowed" } : {}),
+                    }}
+                    onClick={() => row.status !== "Paid" && deleteInvoice(row.id)}
+                    title={row.status === "Paid" ? "Cannot delete a paid invoice" : "Delete invoice"}
+                    disabled={row.status === "Paid"}
+                  >
+                    Delete
+                  </button>
                   </div>
                 ),
               },
