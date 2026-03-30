@@ -4013,6 +4013,65 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     writeQuotePreviewToWindow(w, previewQuote, { allowEmail: true });
     };
 
+    const exportToATOForm = () => {
+      // Map paid invoices to ATO income records
+      const incomeRecords = invoices
+        .filter((inv) => inv.status === "Paid")
+        .map((inv) => {
+          const client = getClientById(inv.clientId);
+          return {
+            date: inv.paidAt ? inv.paidAt.slice(0, 10) : (inv.invoiceDate || ""),
+            type: "Business (sole trader)",
+            payer: client?.name || client?.businessName || inv.clientName || "",
+            gross: safeNumber(inv.total),
+            withheld: safeNumber(inv.taxWithheld || 0),
+            franked: 0,
+            franking: 0,
+            abn: client?.abn || "",
+          };
+        });
+
+      // Also add income sources
+      incomeSources.forEach((src) => {
+        if (src.beforeTax > 0) {
+          incomeRecords.push({
+            date: new Date().toISOString().slice(0, 10),
+            type: src.incomeType || "Salary or wages",
+            payer: src.name || "",
+            gross: safeNumber(src.beforeTax),
+            withheld: safeNumber(src.taxWithheld || 0),
+            franked: 0,
+            franking: 0,
+            abn: "",
+          });
+        }
+      });
+
+      // Map expenses to ATO expense records
+      const expenseRecords = expenses.map((exp) => ({
+        date: exp.date || "",
+        type: exp.category || "Other",
+        supplier: exp.supplier || exp.description || "",
+        amount: safeNumber(exp.amount),
+        gst: exp.gstIncluded !== false ? "yes" : "no",
+      }));
+
+      const atoState = { income: incomeRecords, expenses: expenseRecords };
+
+      // Write to localStorage then open the ATO form
+      try {
+        localStorage.setItem("sas_tax_bas_state_v2", JSON.stringify(atoState));
+        window.open("https://www.sharonogier.com/australian-ato-tax-form.html", "_blank");
+      } catch (e) {
+        // localStorage may not be shared across domains - use URL hash instead
+        const encoded = encodeURIComponent(JSON.stringify(atoState));
+        window.open(
+          `https://www.sharonogier.com/australian-ato-tax-form.html#import=${encoded}`,
+          "_blank"
+        );
+      }
+    };
+
     const renderDashboard = () => (
     <div style={{ display: "grid", gap: 20 }}>
       <div
@@ -4039,6 +4098,22 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
         <SummaryBox title="Expenses Paid" value={currency(totals.totalExpenses)} subtitle="Cash out for recorded expenses" />
         <SummaryBox title="Safe to Spend" value={currency(totals.safeToSpend)} subtitle="Available after GST, tax, fees, and expenses" />
       </div>
+
+      <SectionCard
+        title="ATO Tax Form"
+        right={
+          <button
+            style={buttonPrimary}
+            onClick={exportToATOForm}
+          >
+            Export to ATO Tax Form →
+          </button>
+        }
+      >
+        <p style={{ margin: 0, fontSize: 13, color: colours.subtext }}>
+          Exports all paid invoices and expenses to your ATO tax form. Opens in a new tab.
+        </p>
+      </SectionCard>
 
       <SectionCard
         title="Supabase Database"
