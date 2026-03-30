@@ -2679,16 +2679,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     stripeCheckoutUrl: stripeCheckoutUrl || emailDocumentRecord?.stripeCheckoutUrl || "",
   };
 
-  try {
-    payload.attachmentBase64 = await generatePdfBase64FromHtml(
-      payload.documentHtml || payload.html,
-      payload.filename
-    );
-  } catch (error) {
-    console.error("CLIENT PDF GENERATION ERROR:", error);
-  }
-
-  const endpoint =
+   const endpoint =
     documentType === "invoice"
       ? `${serverBaseUrl}/api/send-invoice-attachment-email`
       : `${serverBaseUrl}/api/send-document-email`;
