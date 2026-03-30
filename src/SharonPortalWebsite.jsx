@@ -21,6 +21,7 @@ const colours = {
 const navItems = [
   "dashboard",
   "financial insights",
+  "ato / tax",
   "clients",
   "invoices",
   "quotes",
@@ -4262,69 +4263,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     };
 
     const exportToATOForm = () => {
-      const classifyIncomeType = (src) => {
-        const raw = String(src?.incomeType || "").toLowerCase();
-        if (raw.includes("casual") || raw.includes("salary") || raw.includes("wage")) return "Salary/Wages";
-        if (raw.includes("business") || raw.includes("sole trader")) return "Business (sole trader)";
-        if (raw.includes("interest")) return "Interest";
-        if (raw.includes("dividend")) return "Dividends";
-        if (raw.includes("foreign")) return "Other";
-        return "Other";
-      };
-
-      const incomeRecords = invoices
-        .filter((inv) => inv.status === "Paid")
-        .map((inv) => {
-          const client = getClientById(inv.clientId);
-          return {
-            date: inv.paidAt ? inv.paidAt.slice(0, 10) : (inv.invoiceDate || ""),
-            type: "Business (sole trader)",
-            payer: client?.name || client?.businessName || inv.clientName || "",
-            gross: safeNumber(inv.total),
-            withheld: safeNumber(inv.taxWithheld || 0),
-            franked: 0,
-            franking: 0,
-            abn: client?.abn || "",
-          };
-        });
-
-      incomeSources.forEach((src) => {
-        const beforeTax = safeNumber(src.beforeTax);
-        if (beforeTax <= 0) return;
-        const incomeType = classifyIncomeType(src);
-        incomeRecords.push({
-          date: new Date().toISOString().slice(0, 10),
-          type: incomeType,
-          payer: src.name || "",
-          gross: beforeTax,
-          withheld: safeNumber(src.taxWithheld || 0),
-          franked: incomeType === "Dividends" ? beforeTax : 0,
-          franking: safeNumber(src.frankingCredit || 0),
-          abn: "",
-        });
-      });
-
-      const expenseRecords = expenses.map((exp) => ({
-        date: exp.date || "",
-        type: exp.category || exp.expenseType || "Other",
-        supplier: exp.supplier || exp.description || "",
-        amount: safeNumber(exp.amount),
-        gstIncl: exp.gstIncluded !== false ? "yes" : "no",
-      }));
-
-      const atoState = { income: incomeRecords, expenses: expenseRecords };
-      const encoded = encodeURIComponent(JSON.stringify(atoState));
-      const taxFormUrl = `https://www.sharonogier.com/australian-ato-tax-form.html#import=${encoded}`;
-      const taxWindow = window.open(taxFormUrl, "_blank");
-      if (taxWindow) {
-        window.setTimeout(() => {
-          try {
-            taxWindow.postMessage({ type: "sas-tax-import", payload: atoState }, "*");
-          } catch (error) {
-            console.warn("ATO postMessage import failed", error);
-          }
-        }, 700);
-      }
+      setActivePage("ato / tax");
     };
 
     const monthlyFinance = useMemo(() => {
@@ -4517,7 +4456,237 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       };
     }, [clientRevenueRows, totals, invoices, monthlyFinance, expenses, expenseCategoryRows]);
 
-    const renderDashboard = () => (
+    const renderAtoTax = () => {
+      const normaliseIncomeTypeForAto = (incomeType = "") => {
+        const value = String(incomeType || "").trim().toLowerCase();
+        if (!value) return "Other";
+        if (value.includes("salary") || value.includes("wage") || value.includes("casual")) return "Salary/Wages";
+        if (value.includes("business") || value.includes("sole trader")) return "Business (sole trader)";
+        if (value.includes("interest")) return "Interest";
+        if (value.includes("dividend")) return "Dividends";
+        if (value.includes("foreign") || value.includes("outside australia")) return "Foreign income";
+        return "Other";
+      };
+
+      const atoIncomeRows = [
+        ...invoices
+          .filter((inv) => inv.status === "Paid")
+          .map((inv) => {
+            const client = getClientById(inv.clientId);
+            return {
+              id: `inv-${inv.id}`,
+              date: inv.paidAt ? inv.paidAt.slice(0, 10) : (inv.invoiceDate || ""),
+              type: "Business (sole trader)",
+              payer: client?.name || client?.businessName || inv.clientName || "",
+              gross: safeNumber(inv.total),
+              withheld: safeNumber(inv.taxWithheld || 0),
+              franked: 0,
+              franking: 0,
+            };
+          }),
+        ...incomeSources
+          .filter((src) => safeNumber(src.beforeTax) > 0)
+          .map((src) => {
+            const incomeType = normaliseIncomeTypeForAto(src.incomeType || "");
+            const gross = safeNumber(src.beforeTax);
+            return {
+              id: `src-${src.id}`,
+              date: new Date().toISOString().slice(0, 10),
+              type: incomeType,
+              payer: src.name || "",
+              gross,
+              withheld: safeNumber(src.taxWithheld || 0),
+              franked: incomeType === "Dividends" ? safeNumber(src.frankedAmount || src.franked || gross) : 0,
+              franking: incomeType === "Dividends" ? safeNumber(src.frankingCredit || src.franking || 0) : 0,
+            };
+          }),
+      ];
+
+      const atoExpenseRows = expenses.map((exp) => ({
+        id: exp.id,
+        date: exp.date || "",
+        type: exp.category || exp.expenseType || "Other",
+        supplier: exp.supplier || exp.description || "",
+        amount: safeNumber(exp.amount),
+        gstIncl: exp.gstIncluded === false ? "no" : String(exp.gstIncl || "yes").toLowerCase(),
+      }));
+
+      const salaryIncome = atoIncomeRows
+        .filter((row) => row.type === "Salary/Wages")
+        .reduce((sum, row) => sum + safeNumber(row.gross), 0);
+
+      const businessIncome = atoIncomeRows
+        .filter((row) => row.type === "Business (sole trader)")
+        .reduce((sum, row) => sum + safeNumber(row.gross), 0);
+
+      const interestIncome = atoIncomeRows
+        .filter((row) => row.type === "Interest")
+        .reduce((sum, row) => sum + safeNumber(row.gross), 0);
+
+      const dividendIncome = atoIncomeRows
+        .filter((row) => row.type === "Dividends")
+        .reduce((sum, row) => sum + safeNumber(row.gross), 0);
+
+      const foreignIncome = atoIncomeRows
+        .filter((row) => row.type === "Foreign income")
+        .reduce((sum, row) => sum + safeNumber(row.gross), 0);
+
+      const otherIncome = atoIncomeRows
+        .filter((row) => row.type === "Other")
+        .reduce((sum, row) => sum + safeNumber(row.gross), 0);
+
+      const totalIncome = atoIncomeRows.reduce((sum, row) => sum + safeNumber(row.gross), 0);
+      const paygWithheld = atoIncomeRows.reduce((sum, row) => sum + safeNumber(row.withheld), 0);
+      const frankingCredits = atoIncomeRows.reduce((sum, row) => sum + safeNumber(row.franking), 0);
+
+      const g1 = businessIncome;
+      const gstOnSales = g1 / 11;
+      const g10 = atoExpenseRows
+        .filter((row) => safeNumber(row.amount) >= 1000)
+        .reduce((sum, row) => sum + safeNumber(row.amount), 0);
+      const g11 = atoExpenseRows
+        .filter((row) => safeNumber(row.amount) < 1000)
+        .reduce((sum, row) => sum + safeNumber(row.amount), 0);
+      const gstOnPurchases = atoExpenseRows.reduce((sum, row) => {
+        return sum + (row.gstIncl === "yes" ? safeNumber(row.amount) / 11 : 0);
+      }, 0);
+      const deductibleExpenses = atoExpenseRows.reduce((sum, row) => {
+        return sum + (row.gstIncl === "yes" ? safeNumber(row.amount) / 1.1 : safeNumber(row.amount));
+      }, 0);
+
+      const taxableIncome = Math.max(0, totalIncome - deductibleExpenses);
+
+      const residentTax = (taxable) => {
+        const t = safeNumber(taxable);
+        if (t <= 18200) return 0;
+        if (t <= 45000) return (t - 18200) * 0.19;
+        if (t <= 120000) return 5092 + (t - 45000) * 0.325;
+        if (t <= 180000) return 29467 + (t - 120000) * 0.37;
+        return 51667 + (t - 180000) * 0.45;
+      };
+
+      const grossTax = residentTax(taxableIncome);
+      const estimatedIncomeTax = Math.max(0, grossTax - frankingCredits);
+      const medicareLevy = taxableIncome * 0.02;
+      const netGst = Math.max(0, gstOnSales - gstOnPurchases);
+      const netTaxBalance = estimatedIncomeTax + medicareLevy + netGst - paygWithheld;
+
+      const incomeMixRows = [
+        { label: "Salary / wages", value: salaryIncome },
+        { label: "Business income", value: businessIncome },
+        { label: "Interest", value: interestIncome },
+        { label: "Dividends", value: dividendIncome },
+        { label: "Foreign income", value: foreignIncome },
+        { label: "Other income", value: otherIncome },
+      ].filter((row) => row.value > 0);
+
+      return (
+        <div style={{ display: "grid", gap: 20 }}>
+          <DashboardHero
+            title="ATO and BAS view"
+            subtitle="This page uses the same portal records already stored in your SaaS and reshapes them into BAS, salary, expenses, and tax-summary information suited to your site."
+            highlight={currency(netTaxBalance)}
+          >
+            <InsightChip label="Business income (G1 base)" value={currency(g1)} />
+            <InsightChip label="PAYG withheld" value={currency(paygWithheld)} />
+            <InsightChip label="Deductible expenses" value={currency(deductibleExpenses)} />
+          </DashboardHero>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+              gap: 16,
+            }}
+          >
+            <MetricCard title="Salary / wages" value={currency(salaryIncome)} subtitle="Employment-style income flowing into the tax view." accent={colours.navy} />
+            <MetricCard title="Business income" value={currency(businessIncome)} subtitle="Paid invoices and business income sources." accent={colours.teal} />
+            <MetricCard title="Deductible expenses" value={currency(deductibleExpenses)} subtitle="Net of GST where GST is included." accent={colours.purple} />
+            <MetricCard title="Net GST" value={currency(netGst)} subtitle={`1A ${currency(gstOnSales)} less 1B ${currency(gstOnPurchases)}.`} accent={colours.navy} />
+            <MetricCard title="Estimated income tax" value={currency(estimatedIncomeTax)} subtitle="Indicative resident-scale estimate after franking credits." accent={colours.purple} />
+            <MetricCard title="Net balance" value={currency(netTaxBalance)} subtitle="Income tax + Medicare + BAS less PAYG withheld." accent={colours.teal} />
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: 20 }}>
+            <SectionCard title="BAS summary" right={<div style={{ fontSize: 12, color: colours.muted }}>Business Activity Statement style totals</div>}>
+              <div style={{ display: "grid", gap: 12 }}>
+                {[
+                  ["G1 Total sales (incl GST)", g1],
+                  ["G10 Capital purchases", g10],
+                  ["G11 Non-capital purchases", g11],
+                  ["1A GST on sales", gstOnSales],
+                  ["1B GST on purchases", gstOnPurchases],
+                  ["Net GST payable", netGst],
+                ].map(([label, value]) => (
+                  <div key={label} style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "12px 14px", background: colours.bg, border: `1px solid ${colours.border}`, borderRadius: 14 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: colours.text }}>{label}</div>
+                    <div style={{ fontSize: 14, fontWeight: 800, color: colours.text }}>{currency(value)}</div>
+                  </div>
+                ))}
+              </div>
+            </SectionCard>
+
+            <SectionCard title="Income tax summary" right={<div style={{ fontSize: 12, color: colours.muted }}>Indicative only</div>}>
+              <div style={{ display: "grid", gap: 12 }}>
+                {[
+                  ["Total income", totalIncome],
+                  ["Franking credits", frankingCredits],
+                  ["Taxable income", taxableIncome],
+                  ["Estimated tax", estimatedIncomeTax],
+                  ["Medicare levy", medicareLevy],
+                  ["PAYG withheld", paygWithheld],
+                ].map(([label, value]) => (
+                  <div key={label} style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "12px 14px", background: colours.bg, border: `1px solid ${colours.border}`, borderRadius: 14 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: colours.text }}>{label}</div>
+                    <div style={{ fontSize: 14, fontWeight: 800, color: colours.text }}>{currency(value)}</div>
+                  </div>
+                ))}
+              </div>
+            </SectionCard>
+          </div>
+
+          <TrendBarsCard
+            title="Income mix"
+            subtitle="A salary, business, and investment split using your existing portal records"
+            data={incomeMixRows}
+            valueKey="value"
+            formatValue={(value) => currency(value)}
+            accent={colours.teal}
+            emptyText="No income records available yet."
+          />
+
+          <SectionCard title="Income ledger" right={<div style={{ fontSize: 12, color: colours.muted }}>Used for salary, business, dividends, interest, and PAYG</div>}>
+            <DataTable
+              columns={[
+                { key: "date", label: "Date" },
+                { key: "type", label: "Type" },
+                { key: "payer", label: "Payer" },
+                { key: "gross", label: "Gross", render: (value) => currency(value) },
+                { key: "withheld", label: "Withheld", render: (value) => currency(value) },
+                { key: "franked", label: "Franked", render: (value) => currency(value) },
+                { key: "franking", label: "Franking credit", render: (value) => currency(value) },
+              ]}
+              rows={atoIncomeRows}
+            />
+          </SectionCard>
+
+          <SectionCard title="Expense ledger" right={<div style={{ fontSize: 12, color: colours.muted }}>Mapped into deductions and BAS purchase totals</div>}>
+            <DataTable
+              columns={[
+                { key: "date", label: "Date" },
+                { key: "type", label: "Type" },
+                { key: "supplier", label: "Supplier" },
+                { key: "amount", label: "Amount", render: (value) => currency(value) },
+                { key: "gstIncl", label: "GST incl" },
+              ]}
+              rows={atoExpenseRows}
+            />
+          </SectionCard>
+        </div>
+      );
+    };
+
+const renderDashboard = () => (
     <div style={{ display: "grid", gap: 20 }}>
       <DashboardHero
         title={profile.businessName || "Sharon’s Accounting Service"}
@@ -7333,6 +7502,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
           <div style={{ maxWidth: 1400, margin: "0 auto" }}>
             {activePage === "dashboard" && renderDashboard()}
             {activePage === "financial insights" && renderFinancialInsights()}
+            {activePage === "ato / tax" && renderAtoTax()}
             {activePage === "clients" && renderClients()}
             {activePage === "invoices" && renderInvoices()}
             {activePage === "quotes" && renderQuotes()}
