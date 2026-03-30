@@ -103,6 +103,7 @@ const getApiBaseUrl = (preferredValue = "") => {
 };
 
 const LOCKED_FEE_RATE_PERCENT = 1;
+const DEFAULT_MONTHLY_SUBSCRIPTION = 45;
 
 const SUPABASE_STORAGE_BUCKET = "receipts";
 
@@ -447,6 +448,7 @@ const initialProfile = {
   twoFactor: false,
   setupComplete: false,
   setupCompletedAt: "",
+  monthlySubscription: DEFAULT_MONTHLY_SUBSCRIPTION,
 };
 
 const initialClients = [];
@@ -628,6 +630,31 @@ function MetricCard({ title, value, subtitle, accent = colours.purple }) {
     </div>
   );
 }
+
+function MiniBarChart({ data, valueKey = "value", labelKey = "label", height = 80, accent = colours.teal }) {
+  const max = Math.max(...(data || []).map((d) => safeNumber(d?.[valueKey])), 1);
+  if (!data || !data.length) return <div style={{ fontSize: 12, color: colours.muted }}>No data yet.</div>;
+  return (
+    <div style={{ display: "flex", alignItems: "flex-end", gap: 4, height, paddingTop: 4 }}>
+      {data.map((d, i) => {
+        const val = safeNumber(d?.[valueKey]);
+        const barH = max > 0 ? Math.max(4, (val / max) * (height - 20)) : 4;
+        return (
+          <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+            <div style={{ fontSize: 9, color: colours.muted, fontWeight: 700, textAlign: "center", whiteSpace: "nowrap", overflow: "hidden", maxWidth: "100%", textOverflow: "ellipsis" }}>
+              {currency ? currency(val) : val}
+            </div>
+            <div style={{ width: "100%", height: barH, borderRadius: "4px 4px 0 0", background: `linear-gradient(180deg, ${accent} 0%, ${colours.navy} 100%)`, minHeight: 4 }} />
+            <div style={{ fontSize: 9, color: colours.muted, textAlign: "center", whiteSpace: "nowrap", overflow: "hidden", maxWidth: "100%", textOverflow: "ellipsis" }}>
+              {d?.[labelKey]}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 
 function TrendBarsCard({ title, subtitle, data, valueKey, labelKey = "label", formatValue = (value) => value, accent = colours.teal, emptyText = "No data yet." }) {
   const max = Math.max(...(data || []).map((item) => safeNumber(item?.[valueKey])), 0);
@@ -1310,13 +1337,22 @@ ${clientDetails}
   </tr>
 </thead>
 <tbody>
-  <tr>
-    <td>${quote.description || "Professional services"}</td>
-    <td>${quote.quantity || 1}</td>
-    <td style="text-align:right">${money(safeNumber(quote.subtotal) / Math.max(1, safeNumber(quote.quantity || 1)))}</td>
-    <td style="text-align:right">${money(quote.gst)}</td>
-    <td style="text-align:right">${money(quote.subtotal)}</td>
-  </tr>
+  ${(quote.lineItems && quote.lineItems.length > 0
+    ? quote.lineItems
+    : [{ description: quote.description || "Professional services", quantity: quote.quantity || 1, unitPrice: safeNumber(quote.subtotal) / Math.max(1, safeNumber(quote.quantity || 1)), rowGst: quote.gst, rowTotal: quote.total }]
+  ).map((item) => {
+    const qty = safeNumber(item.quantity || item.qty || 1);
+    const unit = safeNumber(item.unitPrice || item.unit || 0);
+    const rowSub = unit * qty;
+    const rowGst = safeNumber(item.rowGst != null ? item.rowGst : ((item.gstType || "GST on Income (10%)") === "GST on Income (10%)" ? rowSub * 0.1 : 0));
+    return `<tr>
+    <td>${item.description || "Service"}</td>
+    <td>${qty}</td>
+    <td style="text-align:right">${money(unit)}</td>
+    <td style="text-align:right">${money(rowGst)}</td>
+    <td style="text-align:right">${money(rowSub)}</td>
+  </tr>`;
+  }).join("")}
 </tbody>
 </table>
 
@@ -1565,13 +1601,23 @@ ${purchaseOrderBlock}
   </tr>
 </thead>
 <tbody>
-  <tr>
-    <td>${invoice.description || "Professional services"}</td>
-    <td>${invoice.quantity || 1}</td>
-    <td class="right">${money(safeNumber(invoice.subtotal) / Math.max(1, safeNumber(invoice.quantity || 1)))}</td>
-    <td class="right">${money(invoice.gst)}</td>
-    <td class="right">${money(invoice.total)}</td>
-  </tr>
+  ${(invoice.lineItems && invoice.lineItems.length > 0
+    ? invoice.lineItems
+    : [{ description: invoice.description || "Professional services", quantity: invoice.quantity || 1, unitPrice: safeNumber(invoice.subtotal) / Math.max(1, safeNumber(invoice.quantity || 1)), rowGst: invoice.gst, rowTotal: invoice.total }]
+  ).map((item) => {
+    const qty = safeNumber(item.quantity || item.qty || 1);
+    const unit = safeNumber(item.unitPrice || item.unit || 0);
+    const rowSub = unit * qty;
+    const rowGst = safeNumber(item.rowGst != null ? item.rowGst : ((item.gstType || "GST on Income (10%)") === "GST on Income (10%)" ? rowSub * 0.1 : 0));
+    const rowTotal = rowSub + rowGst;
+    return `<tr>
+    <td>${item.description || "Service"}</td>
+    <td>${qty}</td>
+    <td class="right">${money(unit)}</td>
+    <td class="right">${money(rowGst)}</td>
+    <td class="right">${money(rowTotal)}</td>
+  </tr>`;
+  }).join("")}
 </tbody>
 </table>
 
@@ -1703,6 +1749,8 @@ export default function AccountingPortalPrototype() {
   });
   const [clientForm, setClientForm] = useState(blankClient);
 
+  const blankLineItem = () => ({ id: Date.now() + Math.random(), description: "", quantity: 1, unitPrice: "", gstType: "GST on Income (10%)" });
+
   const [invoiceForm, setInvoiceForm] = useState({
     clientId: "",
     invoiceDate: new Date().toISOString().slice(0, 10),
@@ -1712,7 +1760,7 @@ export default function AccountingPortalPrototype() {
     sendDate: "",
     sendTime: "",
     recurs: "Never",
-    serviceId: "",
+    lineItems: [blankLineItem()],
     gstType: "GST on Income (10%)",
     manualGst: false,
     currencyCode: "AUD",
@@ -1744,7 +1792,9 @@ export default function AccountingPortalPrototype() {
       sendDate: invoice?.sendDate || "",
       sendTime: invoice?.sendTime || "",
       recurs: invoice?.recurs || "Never",
-      serviceId: invoice?.serviceId || "",
+      lineItems: (invoice?.lineItems && invoice.lineItems.length > 0)
+        ? invoice.lineItems
+        : [{ id: Date.now(), description: invoice?.description || "", quantity: invoice?.quantity || 1, unitPrice: invoice?.subtotal ? (safeNumber(invoice.subtotal) / Math.max(1, safeNumber(invoice.quantity || 1))).toFixed(2) : "", gstType: gstExempt ? "GST Free" : invoice?.gstType || "GST on Income (10%)" }],
       gstType: gstExempt ? "GST Free" : invoice?.gstType || "GST on Income (10%)",
       manualGst: false,
       currencyCode: invoice?.currencyCode || getClientCurrencyCode(selectedClient),
@@ -1768,7 +1818,7 @@ export default function AccountingPortalPrototype() {
     clientId: "",
     quoteDate: new Date().toISOString().slice(0, 10),
     expiryDate: addDays(new Date().toISOString().slice(0, 10), 31),
-    serviceId: "",
+    lineItems: [{ id: Date.now() + Math.random(), description: "", quantity: 1, unitPrice: "", gstType: "GST on Income (10%)" }],
     gstType: "GST on Income (10%)",
     manualGst: false,
     currencyCode: "AUD",
@@ -1793,7 +1843,9 @@ export default function AccountingPortalPrototype() {
       clientId: quote?.clientId || clients[0]?.id || "",
       quoteDate: quote?.quoteDate || new Date().toISOString().slice(0, 10),
       expiryDate: quote?.expiryDate || addDays(quote?.quoteDate || new Date().toISOString().slice(0, 10), 31),
-      serviceId: quote?.serviceId || "",
+      lineItems: (quote?.lineItems && quote.lineItems.length > 0)
+        ? quote.lineItems
+        : [{ id: Date.now(), description: quote?.description || "", quantity: quote?.quantity || 1, unitPrice: unitPrice ? unitPrice.toFixed(2) : "", gstType: gstExempt ? "GST Free" : quote?.gstType || "GST on Income (10%)" }],
       gstType: gstExempt ? "GST Free" : quote?.gstType || "GST on Income (10%)",
       manualGst: false,
       currencyCode: quote?.currencyCode || getClientCurrencyCode(selectedClient),
@@ -1830,6 +1882,8 @@ export default function AccountingPortalPrototype() {
     receiptFileName: "",
     receiptUrl: "",
   });
+  const blankBillLine = () => ({ id: Date.now() + Math.random(), description: "", category: "", amount: "", gstIncl: "yes" });
+  const [billLineItems, setBillLineItems] = useState([blankBillLine()]);
   const [receiptFile, setReceiptFile] = useState(null);
 
   const [expenseModalOpen, setExpenseModalOpen] = useState(false);
@@ -2717,6 +2771,18 @@ export default function AccountingPortalPrototype() {
     return subtotalExGst * 0.1;
   };
 
+  const computeLineItemTotals = (lineItems, clientId) => {
+    const exempt = clientIsGstExempt(clientId);
+    return (lineItems || []).map((item) => {
+      const qty = Math.max(1, safeNumber(item.quantity || 1));
+      const unit = safeNumber(item.unitPrice);
+      const rowSubtotal = unit * qty;
+      const effectiveGstType = exempt ? "GST Free" : (item.gstType || "GST on Income (10%)");
+      const rowGst = effectiveGstType === "GST on Income (10%)" ? rowSubtotal * 0.1 : 0;
+      return { ...item, qty, unit, rowSubtotal, rowGst, rowTotal: rowSubtotal + rowGst };
+    });
+  };
+
   const getDocumentBusinessName = () =>
     profile.hideLegalNameOnDocs || !profile.legalBusinessName
       ? profile.businessName
@@ -3138,7 +3204,8 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     const totalFees = invoiceAllocations.reduce((sum, x) => sum + x.fee, 0);
     const totalTaxWithheld = invoiceAllocations.reduce((sum, x) => sum + x.taxWithheld, 0);
     const preExpenseAvailable = invoiceAllocations.reduce((sum, x) => sum + x.netAvailable, 0);
-    const safeToSpend = preExpenseAvailable - totalExpenses;
+    const monthlySubscriptionCost = safeNumber(profile.monthlySubscription ?? DEFAULT_MONTHLY_SUBSCRIPTION);
+    const safeToSpend = preExpenseAvailable - totalExpenses - monthlySubscriptionCost;
 
     return {
       totalIncome,
@@ -3152,6 +3219,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       totalFees,
       totalTaxWithheld,
       preExpenseAvailable,
+      monthlySubscriptionCost,
       safeToSpend,
     };
     }, [invoices, expenses, invoiceAllocations]);
@@ -3367,25 +3435,13 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     };
 
     const saveInvoice = async () => {
-    const invoiceErrors = validateInvoicePayload({ ...invoiceForm,
-      subtotal: safeNumber(invoiceForm.subtotal),
-      quantity: safeNumber(invoiceForm.quantity || 1),
-    });
-    if (invoiceErrors.length) {
-      summariseValidationErrors("Invoice", invoiceErrors);
-      return;
-    }
+    const computedLines = computeLineItemTotals(invoiceForm.lineItems, invoiceForm.clientId);
+    const hasLines = computedLines.some((l) => l.rowSubtotal > 0 || l.description);
+    if (!invoiceForm.clientId) { alert("Invoice client is required."); return; }
+    if (!hasLines) { alert("Add at least one line item with a description and amount."); return; }
 
-    const quantity = Math.max(1, safeNumber(invoiceForm.quantity || 1));
-    const subtotal = safeNumber(invoiceForm.subtotal) * quantity;
-    const gst = calculateFormGst({
-      unitPrice: invoiceForm.subtotal,
-      quantity,
-      gstType: invoiceForm.gstType,
-      clientId: invoiceForm.clientId,
-      manualGst: invoiceForm.manualGst,
-      gstOverride: invoiceForm.gstOverride,
-    });
+    const subtotal = computedLines.reduce((s, l) => s + l.rowSubtotal, 0);
+    const gst = computedLines.reduce((s, l) => s + l.rowGst, 0);
     const total = subtotal + gst;
     const lineItemSummary = buildLineItemSummary({
       clientId: invoiceForm.clientId,
@@ -3396,8 +3452,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     });
     const invoiceNumber = nextNumber(profile.invoicePrefix, invoices, "invoiceNumber");
     const invoiceDate = invoiceForm.invoiceDate || new Date().toISOString().slice(0, 10);
-    const dueDate =
-      invoiceForm.dueDate || addDays(invoiceDate, safeNumber(profile.paymentTermsDays));
+    const dueDate = invoiceForm.dueDate || addDays(invoiceDate, safeNumber(profile.paymentTermsDays));
     const payload = {
       id: Date.now(),
       invoiceNumber,
@@ -3409,11 +3464,11 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       sendDate: invoiceForm.sendDate,
       sendTime: invoiceForm.sendTime,
       recurs: invoiceForm.recurs,
-      serviceId: invoiceForm.serviceId,
+      lineItems: computedLines,
       gstType: invoiceForm.gstType,
       currencyCode: lineItemSummary.currencyCode,
       gstStatus: lineItemSummary.gstStatus,
-      description: invoiceForm.description,
+      description: computedLines.map((l) => l.description).filter(Boolean).join("; "),
       subtotal,
       gst,
       total,
@@ -3424,7 +3479,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       purchaseOrderReference: invoiceForm.purchaseOrderReference,
       includesUntaxedPortion: invoiceForm.includesUntaxedPortion,
       hidePhoneNumber: invoiceForm.hidePhoneNumber,
-      quantity,
+      quantity: computedLines.reduce((s, l) => s + l.qty, 0),
       status: "Draft",
       paymentReference: makePaymentReference(invoiceNumber),
       stripeCheckoutUrl: "",
@@ -3460,17 +3515,10 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     setInvoiceEditorForm(null);
     };
     const saveInvoiceEdits = async () => {
-    if (!invoiceEditorForm?.id || !invoiceEditorForm.clientId || !invoiceEditorForm.subtotal) return;
-    const quantity = Math.max(1, safeNumber(invoiceEditorForm.quantity || 1));
-    const subtotal = safeNumber(invoiceEditorForm.subtotal) * quantity;
-    const gst = calculateFormGst({
-      unitPrice: invoiceEditorForm.subtotal,
-      quantity,
-      gstType: invoiceEditorForm.gstType,
-      clientId: invoiceEditorForm.clientId,
-      manualGst: false,
-      gstOverride: "",
-    });
+    if (!invoiceEditorForm?.id || !invoiceEditorForm.clientId) return;
+    const computedLines = computeLineItemTotals(invoiceEditorForm.lineItems || [], invoiceEditorForm.clientId);
+    const subtotal = computedLines.reduce((s, l) => s + l.rowSubtotal, 0);
+    const gst = computedLines.reduce((s, l) => s + l.rowGst, 0);
     const total = subtotal + gst;
     const lineItemSummary = buildLineItemSummary({
       clientId: invoiceEditorForm.clientId,
@@ -3490,11 +3538,11 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       sendDate: invoiceEditorForm.sendDate,
       sendTime: invoiceEditorForm.sendTime,
       recurs: invoiceEditorForm.recurs,
-      serviceId: invoiceEditorForm.serviceId,
+      lineItems: computedLines,
       gstType: invoiceEditorForm.gstType,
       currencyCode: lineItemSummary.currencyCode,
       gstStatus: lineItemSummary.gstStatus,
-      description: invoiceEditorForm.description,
+      description: computedLines.map((l) => l.description).filter(Boolean).join("; "),
       subtotal,
       gst,
       total,
@@ -3505,7 +3553,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       purchaseOrderReference: invoiceEditorForm.purchaseOrderReference,
       includesUntaxedPortion: invoiceEditorForm.includesUntaxedPortion,
       hidePhoneNumber: invoiceEditorForm.hidePhoneNumber,
-      quantity,
+      quantity: computedLines.reduce((s, l) => s + l.qty, 0),
       status: invoiceEditorForm.status || "Draft",
       paymentReference: invoiceEditorForm.paymentReference || "",
       stripeCheckoutUrl: invoiceEditorForm.stripeCheckoutUrl || "",
@@ -3525,25 +3573,13 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     }
     };
     const saveQuote = async () => {
-    const quoteErrors = validateQuotePayload({ ...quoteForm,
-      subtotal: safeNumber(quoteForm.subtotal),
-      quantity: safeNumber(quoteForm.quantity || 1),
-    });
-    if (quoteErrors.length) {
-      summariseValidationErrors("Quote", quoteErrors);
-      return;
-    }
+    const computedLines = computeLineItemTotals(quoteForm.lineItems, quoteForm.clientId);
+    const hasLines = computedLines.some((l) => l.rowSubtotal > 0 || l.description);
+    if (!quoteForm.clientId) { alert("Quote client is required."); return; }
+    if (!hasLines) { alert("Add at least one line item with a description and amount."); return; }
 
-    const quantity = Math.max(1, safeNumber(quoteForm.quantity || 1));
-    const subtotal = safeNumber(quoteForm.subtotal) * quantity;
-    const gst = calculateFormGst({
-      unitPrice: quoteForm.subtotal,
-      quantity,
-      gstType: quoteForm.gstType,
-      clientId: quoteForm.clientId,
-      manualGst: quoteForm.manualGst,
-      gstOverride: quoteForm.gstOverride,
-    });
+    const subtotal = computedLines.reduce((s, l) => s + l.rowSubtotal, 0);
+    const gst = computedLines.reduce((s, l) => s + l.rowGst, 0);
     const total = subtotal + gst;
     const lineItemSummary = buildLineItemSummary({
       clientId: quoteForm.clientId,
@@ -3560,12 +3596,12 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       clientId: safeNumber(quoteForm.clientId),
       quoteDate,
       expiryDate,
-      serviceId: quoteForm.serviceId,
+      lineItems: computedLines,
       gstType: quoteForm.gstType,
       currencyCode: lineItemSummary.currencyCode,
       gstStatus: lineItemSummary.gstStatus,
-      description: quoteForm.description,
-      quantity,
+      description: computedLines.map((l) => l.description).filter(Boolean).join("; "),
+      quantity: computedLines.reduce((s, l) => s + l.qty, 0),
       subtotal,
       gst,
       total,
@@ -3606,17 +3642,10 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     setQuoteEditorForm(null);
     };
     const saveQuoteEdits = async () => {
-    if (!quoteEditorForm?.id || !quoteEditorForm.clientId || !quoteEditorForm.subtotal) return;
-    const quantity = Math.max(1, safeNumber(quoteEditorForm.quantity || 1));
-    const subtotal = safeNumber(quoteEditorForm.subtotal) * quantity;
-    const gst = calculateFormGst({
-      unitPrice: quoteEditorForm.subtotal,
-      quantity,
-      gstType: quoteEditorForm.gstType,
-      clientId: quoteEditorForm.clientId,
-      manualGst: false,
-      gstOverride: "",
-    });
+    if (!quoteEditorForm?.id || !quoteEditorForm.clientId) return;
+    const computedLines = computeLineItemTotals(quoteEditorForm.lineItems || [], quoteEditorForm.clientId);
+    const subtotal = computedLines.reduce((s, l) => s + l.rowSubtotal, 0);
+    const gst = computedLines.reduce((s, l) => s + l.rowGst, 0);
     const total = subtotal + gst;
     const lineItemSummary = buildLineItemSummary({
       clientId: quoteEditorForm.clientId,
@@ -3630,12 +3659,12 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       clientId: safeNumber(quoteEditorForm.clientId),
       quoteDate: quoteEditorForm.quoteDate,
       expiryDate: quoteEditorForm.expiryDate,
-      serviceId: quoteEditorForm.serviceId,
+      lineItems: computedLines,
       gstType: quoteEditorForm.gstType,
       currencyCode: lineItemSummary.currencyCode,
       gstStatus: lineItemSummary.gstStatus,
-      description: quoteEditorForm.description,
-      quantity,
+      description: computedLines.map((l) => l.description).filter(Boolean).join("; "),
+      quantity: computedLines.reduce((s, l) => s + l.qty, 0),
       subtotal,
       gst,
       total,
@@ -4526,8 +4555,8 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
         highlight={currency(totals.safeToSpend)}
       >
         <InsightChip label="Collection rate" value={`${dashboardInsights.collectionRate.toFixed(1)}%`} />
-        <InsightChip label="Average paid invoice" value={currency(dashboardInsights.averagePaidInvoice)} />
-        <InsightChip label="Paid invoices" value={String(dashboardInsights.paidInvoiceCount)} />
+        <InsightChip label="Subscription/mo" value={currency(totals.monthlySubscriptionCost)} />
+        <InsightChip label="Safe to spend" value={currency(totals.safeToSpend)} />
       </DashboardHero>
 
       <div
@@ -4537,12 +4566,12 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
           gap: 16,
         }}
       >
-        <MetricCard title="Gross invoiced" value={currency(totals.totalIncome)} subtitle="All invoice values currently stored in the SaaS." accent={colours.navy} />
+        <MetricCard title="Gross invoiced" value={currency(totals.totalIncome)} subtitle="All invoice values currently stored in the portal." accent={colours.navy} />
         <MetricCard title="Gross paid" value={currency(totals.paidIncome)} subtitle="Cash received from invoices marked Paid." accent={colours.teal} />
         <MetricCard title="GST payable" value={currency(totals.gstPayable)} subtitle={`Sales GST ${currency(totals.gstCollected)} less expense credits ${currency(totals.gstOnExpenses)}.`} accent={colours.purple} />
         <MetricCard title="Estimated tax reserve" value={currency(totals.estimatedTax)} subtitle="Set aside based on paid income excluding GST." accent={colours.navy} />
-        <MetricCard title="Fees and withholding" value={currency(totals.totalFees + totals.totalTaxWithheld)} subtitle={`Fees ${currency(totals.totalFees)} · withheld ${currency(totals.totalTaxWithheld)}.`} accent={colours.purple} />
-        <MetricCard title="Safe to spend" value={currency(totals.safeToSpend)} subtitle="After GST, estimated tax, platform fees, withholding, and recorded expenses." accent={colours.teal} />
+        <MetricCard title="Portal subscription" value={currency(totals.monthlySubscriptionCost)} subtitle={`$${safeNumber(profile.monthlySubscription ?? DEFAULT_MONTHLY_SUBSCRIPTION)}/mo — set in Settings → Financial.`} accent={colours.purple} />
+        <MetricCard title="Safe to spend" value={currency(totals.safeToSpend)} subtitle={`After GST, tax, fees, expenses & $${safeNumber(profile.monthlySubscription ?? DEFAULT_MONTHLY_SUBSCRIPTION)}/mo subscription.`} accent={colours.teal} />
       </div>
 
       <div
@@ -4597,6 +4626,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
             { label: "Less estimated tax", value: -totals.estimatedTax },
             { label: "Less platform fees", value: -totals.totalFees },
             { label: "Less expenses", value: -totals.totalExpenses },
+            { label: `Less subscription (${currency(totals.monthlySubscriptionCost)}/mo)`, value: -totals.monthlySubscriptionCost },
             { label: "Safe to spend", value: totals.safeToSpend },
           ]}
         />
@@ -4830,8 +4860,34 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     </div>
     );
 
-    const renderClients = () => (
+    const renderClients = () => {
+    const activeClients = clients.filter((c) => {
+      const clientInvoices = invoices.filter((inv) => String(inv.clientId) === String(c.id));
+      return clientInvoices.length > 0;
+    });
+    const gstExemptClients = clients.filter((c) => c.outsideAustraliaOrGstExempt);
+    const totalClientRevenue = invoices
+      .filter((inv) => inv.status === "Paid")
+      .reduce((sum, inv) => sum + safeNumber(inv.total), 0);
+    return (
     <div style={{ display: "grid", gap: 20 }}>
+      <DashboardHero
+        title="Clients"
+        subtitle="Manage your client roster, billing preferences, and GST settings. All clients feed directly into your invoices and quotes."
+        highlight={String(clients.length)}
+      >
+        <InsightChip label="Active (invoiced)" value={String(activeClients.length)} />
+        <InsightChip label="GST exempt" value={String(gstExemptClients.length)} />
+        <InsightChip label="Total paid revenue" value={currency(totalClientRevenue)} />
+      </DashboardHero>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 16 }}>
+        <MetricCard title="Total clients" value={String(clients.length)} subtitle="All clients currently in the portal." accent={colours.navy} />
+        <MetricCard title="Active clients" value={String(activeClients.length)} subtitle="Clients with at least one invoice." accent={colours.teal} />
+        <MetricCard title="GST exempt" value={String(gstExemptClients.length)} subtitle="Clients outside Australia or GST exempt." accent={colours.purple} />
+        <MetricCard title="Paid revenue" value={currency(totalClientRevenue)} subtitle="Total paid invoices across all clients." accent={colours.navy} />
+      </div>
+
       <SectionCard title="Client details">
         <div
           style={{
@@ -5105,43 +5161,51 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       </SectionCard>
     </div>
     );
+    };
     const renderInvoices = () => {
-    const previewSubtotal = safeNumber(invoiceForm.subtotal) * Math.max(1, safeNumber(invoiceForm.quantity || 1));
-    const calculatedInvoiceGst = calculateFormGst({
-      unitPrice: invoiceForm.subtotal,
-      quantity: invoiceForm.quantity,
-      gstType: invoiceForm.gstType,
-      clientId: invoiceForm.clientId,
-      manualGst: invoiceForm.manualGst,
-      gstOverride: invoiceForm.gstOverride,
-    });
-    const previewGst = calculatedInvoiceGst;
+    const invLines = computeLineItemTotals(invoiceForm.lineItems || [], invoiceForm.clientId);
+    const previewSubtotal = invLines.reduce((s, l) => s + l.rowSubtotal, 0);
+    const previewGst = invLines.reduce((s, l) => s + l.rowGst, 0);
     const previewTotal = previewSubtotal + previewGst;
     const invoiceClient = getClientById(invoiceForm.clientId);
     const invoiceCurrencyCode = getClientCurrencyCode(invoiceClient);
     const invoiceMoney = (value) => formatCurrencyByCode(value, invoiceCurrencyCode);
-    const invoiceAdjustments = calculateAdjustmentValues({
-      subtotal: previewSubtotal,
-      total: previewTotal,
-      client: invoiceClient,
-      profile,
-    });
-    const invoiceGstStatus = clientIsGstExempt(invoiceForm.clientId)
-      ? "GST not applicable"
-      : previewGst > 0
-        ? "GST applies"
-        : "GST free";
+    const invoiceAdjustments = calculateAdjustmentValues({ subtotal: previewSubtotal, total: previewTotal, client: invoiceClient, profile });
+    const invoiceGstStatus = clientIsGstExempt(invoiceForm.clientId) ? "GST not applicable" : previewGst > 0 ? "GST applies" : "GST free";
+
+    const totalInvoiced = invoices.reduce((s, inv) => s + safeNumber(inv.total), 0);
+    const totalPaid = invoices.filter((inv) => inv.status === "Paid").reduce((s, inv) => s + safeNumber(inv.total), 0);
+    const totalOutstanding = invoices.filter((inv) => inv.status !== "Paid").reduce((s, inv) => s + safeNumber(inv.total), 0);
+    const overdueInvoices = invoices.filter((inv) => inv.status !== "Paid" && inv.dueDate && new Date(inv.dueDate) < new Date());
+    const draftCount = invoices.filter((inv) => inv.status === "Draft").length;
+    const recentMonths = (() => {
+      const bucket = {};
+      invoices.forEach((inv) => {
+        const key = String(inv.invoiceDate || "").slice(0, 7);
+        if (!key) return;
+        bucket[key] = (bucket[key] || 0) + safeNumber(inv.total);
+      });
+      return Object.entries(bucket).sort((a, b) => a[0].localeCompare(b[0])).slice(-6).map(([k, v]) => ({ label: k.slice(5), value: v }));
+    })();
     return (
       <div style={{ display: "grid", gap: 20 }}>
+        <DashboardHero title="Invoices" subtitle="Create, send and track all your invoices. Live totals update as you add records." highlight={currency(totalPaid)}>
+          <InsightChip label="Outstanding" value={currency(totalOutstanding)} />
+          <InsightChip label="Overdue" value={`${overdueInvoices.length} invoice${overdueInvoices.length === 1 ? "" : "s"}`} />
+          <InsightChip label="Draft" value={`${draftCount}`} />
+        </DashboardHero>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16 }}>
+          <MetricCard title="Total invoiced" value={currency(totalInvoiced)} subtitle="All invoices in the portal." accent={colours.navy} />
+          <MetricCard title="Total paid" value={currency(totalPaid)} subtitle="Invoices marked as paid." accent={colours.teal} />
+          <MetricCard title="Outstanding" value={currency(totalOutstanding)} subtitle="Unpaid invoices." accent={colours.purple} />
+          <MetricCard title="Overdue" value={String(overdueInvoices.length)} subtitle="Past due date, still unpaid." accent={colours.navy} />
+          <div style={{ ...cardStyle, padding: 18, gridColumn: "span 2" }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: colours.muted, textTransform: "uppercase", marginBottom: 10 }}>Invoice totals by month</div>
+            <MiniBarChart data={recentMonths} height={90} accent={colours.teal} />
+          </div>
+        </div>
         <SectionCard title="Create Invoice">
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-              gap: 12,
-              marginBottom: 16,
-            }}
-          >
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12, marginBottom: 16 }}>
             <div style={{ ...cardStyle, padding: 14, background: colours.lightPurple }}>
               <div style={{ fontSize: 12, color: colours.muted, fontWeight: 700 }}>Auto-filled from Profile</div>
               <div style={{ fontSize: 14, fontWeight: 700, color: colours.text, marginTop: 6 }}>{profile.businessName}</div>
@@ -5159,205 +5223,95 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
             </div>
           </div>
 
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-              gap: 16,
-            }}
-          >
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16, marginBottom: 20 }}>
             <div>
               <label style={labelStyle}>Client</label>
-              <select
-                style={inputStyle}
-                value={invoiceForm.clientId}
-                onChange={(e) => {
-                  const selectedClient = getClientById(e.target.value);
-                  setInvoiceForm((prev) => ({ ...prev,
-                    clientId: e.target.value,
-                    currencyCode: getClientCurrencyCode(selectedClient),
-                    manualGst: false,
-                    gstOverride: "",
-                    purchaseOrderReference: selectedClient?.hasPurchaseOrder ? prev.purchaseOrderReference : "",
-                  }));
-                }}
-              >
-                {clients.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
+              <select style={inputStyle} value={invoiceForm.clientId} onChange={(e) => {
+                const sel = getClientById(e.target.value);
+                setInvoiceForm((prev) => ({ ...prev, clientId: e.target.value, currencyCode: getClientCurrencyCode(sel) }));
+              }}>
+                <option value="">Select client...</option>
+                {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
-
             <div>
               <label style={labelStyle}>Invoice Date</label>
-              <input
-                type="date"
-                style={inputStyle}
-                value={invoiceForm.invoiceDate}
-                onChange={(e) => setInvoiceForm({ ...invoiceForm, invoiceDate: e.target.value })}
-              />
+              <input type="date" style={inputStyle} value={invoiceForm.invoiceDate} onChange={(e) => setInvoiceForm({ ...invoiceForm, invoiceDate: e.target.value })} />
             </div>
-
             <div>
               <label style={labelStyle}>Due Date</label>
-              <input
-                type="date"
-                style={inputStyle}
-                value={invoiceForm.dueDate}
-                onChange={(e) => setInvoiceForm({ ...invoiceForm, dueDate: e.target.value })}
-              />
-            </div>
-
-            <div>
-              <label style={labelStyle}>Item / Service Name</label>
-              <select
-                style={inputStyle}
-                value={invoiceForm.description}
-                onChange={(e) => {
-                  const selectedService = services.find((s) => s.name === e.target.value);
-                  if (selectedService) {
-                    setInvoiceForm((prev) => ({ ...prev,
-                      serviceId: selectedService.id,
-                      description: selectedService.name,
-                      subtotal: String(selectedService.price ?? ""),
-                      gstType: selectedService.gstType || "",
-                      manualGst: false,
-                      gstOverride: "",
-                      quantity: 1,
-                    }));
-                  } else {
-                    setInvoiceForm((prev) => ({ ...prev,
-                      serviceId: "",
-                      gstType: prev.gstType || "GST on Income (10%)",
-                      description: e.target.value,
-                      manualGst: false,
-                      gstOverride: "",
-                    }));
-                  }
-                }}
-              >
-                <option value="">Select a service...</option>
-                {services.map((service) => (
-                  <option key={service.id} value={service.name}>
-                    {service.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label style={labelStyle}>Quantity</label>
-              <input
-                type="number"
-                style={inputStyle}
-                value={invoiceForm.quantity}
-                onChange={(e) =>
-                  setInvoiceForm((prev) => ({ ...prev,
-                    quantity: e.target.value,
-                    ...(prev.manualGst ? {} : { gstOverride: "" }),
-                  }))
-                }
-              />
-            </div>
-
-            <div>
-              <label style={labelStyle}>Price (ex GST)</label>
-              <input
-                type="number"
-                style={inputStyle}
-                value={invoiceForm.subtotal}
-                onChange={(e) =>
-                  setInvoiceForm((prev) => ({ ...prev,
-                    subtotal: e.target.value,
-                    ...(prev.manualGst ? {} : { gstOverride: "" }),
-                  }))
-                }
-              />
-            </div>
-
-            <div>
-              <label style={labelStyle}>GST Type</label>
-              <select
-                style={{ ...inputStyle,
-                  background: clientIsGstExempt(invoiceForm.clientId) ? "#F8FAFC" : colours.white,
-                }}
-                value={clientIsGstExempt(invoiceForm.clientId) ? "GST Free" : invoiceForm.gstType || "GST on Income (10%)"}
-                disabled={clientIsGstExempt(invoiceForm.clientId)}
-                onChange={(e) =>
-                  setInvoiceForm((prev) => ({ ...prev,
-                    gstType: e.target.value,
-                    manualGst: false,
-                    gstOverride: "",
-                  }))
-                }
-              >
-                {GST_TYPE_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label style={labelStyle}>GST Amount</label>
-              <input
-                type="number"
-                style={{ ...inputStyle,
-                  background: "#F8FAFC",
-                }}
-                readOnly
-                value={
-                  clientIsGstExempt(invoiceForm.clientId)
-                    ? "0.00"
-                    : calculatedInvoiceGst.toFixed(2)
-                }
-              />
+              <input type="date" style={inputStyle} value={invoiceForm.dueDate} onChange={(e) => setInvoiceForm({ ...invoiceForm, dueDate: e.target.value })} />
             </div>
           </div>
 
-          <div style={{ marginTop: 12, fontSize: 13, color: colours.muted }}>
-            {clientIsGstExempt(invoiceForm.clientId)
-              ? "GST is currently turned off for this client because the client is marked as outside Australia or GST exempt."
-              : invoiceForm.gstType === "GST on Income (10%)"
-                ? "GST is automatically calculated from the GST type, price and quantity."
-                : invoiceForm.description
-                  ? "This line item is currently GST free."
-                  : "Select a service, choose a GST type, and GST will auto-fill."}
+          {/* ── Line items table ── */}
+          <div style={{ overflowX: "auto", marginBottom: 8 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 680 }}>
+              <thead>
+                <tr style={{ background: colours.bg }}>
+                  {["Description", "Qty", "Unit Price (ex GST)", "GST Type", "GST", "Total"].map((h) => (
+                    <th key={h} style={{ padding: "10px 8px", textAlign: "left", fontSize: 12, fontWeight: 700, color: colours.muted, borderBottom: `1px solid ${colours.border}` }}>{h}</th>
+                  ))}
+                  <th style={{ padding: "10px 8px", borderBottom: `1px solid ${colours.border}` }} />
+                </tr>
+              </thead>
+              <tbody>
+                {(invoiceForm.lineItems || []).map((item, idx) => {
+                  const qty = Math.max(1, safeNumber(item.quantity || 1));
+                  const unit = safeNumber(item.unitPrice);
+                  const rowSub = unit * qty;
+                  const exempt = clientIsGstExempt(invoiceForm.clientId);
+                  const effectiveGst = exempt ? "GST Free" : (item.gstType || "GST on Income (10%)");
+                  const rowGst = effectiveGst === "GST on Income (10%)" ? rowSub * 0.1 : 0;
+                  return (
+                    <tr key={item.id} style={{ borderBottom: `1px solid ${colours.border}` }}>
+                      <td style={{ padding: "8px 6px", minWidth: 200 }}>
+                        <input style={{ ...inputStyle, fontSize: 13 }} value={item.description}
+                          onChange={(e) => setInvoiceForm((prev) => ({ ...prev, lineItems: prev.lineItems.map((l, i) => i === idx ? { ...l, description: e.target.value } : l) }))}
+                          placeholder="Description" />
+                      </td>
+                      <td style={{ padding: "8px 6px", width: 70 }}>
+                        <input type="number" min="1" style={{ ...inputStyle, fontSize: 13 }} value={item.quantity}
+                          onChange={(e) => setInvoiceForm((prev) => ({ ...prev, lineItems: prev.lineItems.map((l, i) => i === idx ? { ...l, quantity: e.target.value } : l) }))} />
+                      </td>
+                      <td style={{ padding: "8px 6px", width: 130 }}>
+                        <input type="number" min="0" step="0.01" style={{ ...inputStyle, fontSize: 13 }} value={item.unitPrice}
+                          onChange={(e) => setInvoiceForm((prev) => ({ ...prev, lineItems: prev.lineItems.map((l, i) => i === idx ? { ...l, unitPrice: e.target.value } : l) }))}
+                          placeholder="0.00" />
+                      </td>
+                      <td style={{ padding: "8px 6px", width: 160 }}>
+                        <select style={{ ...inputStyle, fontSize: 13, background: exempt ? "#F8FAFC" : colours.white }} disabled={exempt}
+                          value={effectiveGst}
+                          onChange={(e) => setInvoiceForm((prev) => ({ ...prev, lineItems: prev.lineItems.map((l, i) => i === idx ? { ...l, gstType: e.target.value } : l) }))}>
+                          {GST_TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                        </select>
+                      </td>
+                      <td style={{ padding: "8px 6px", width: 90, fontSize: 13, color: colours.muted, textAlign: "right" }}>{invoiceMoney(rowGst)}</td>
+                      <td style={{ padding: "8px 6px", width: 110, fontSize: 13, fontWeight: 700, textAlign: "right" }}>{invoiceMoney(rowSub + rowGst)}</td>
+                      <td style={{ padding: "8px 6px", width: 40 }}>
+                        {(invoiceForm.lineItems || []).length > 1 && (
+                          <button onClick={() => setInvoiceForm((prev) => ({ ...prev, lineItems: prev.lineItems.filter((_, i) => i !== idx) }))}
+                            style={{ background: "none", border: "none", cursor: "pointer", color: colours.muted, fontSize: 18, lineHeight: 1 }} title="Remove row">×</button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
+          <button onClick={() => setInvoiceForm((prev) => ({ ...prev, lineItems: [...(prev.lineItems || []), blankLineItem()] }))}
+            style={{ ...buttonSecondary, fontSize: 13, padding: "7px 14px", marginBottom: 20 }}>+ Add line</button>
 
-          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 20 }}>
+          <div style={{ display: "flex", justifyContent: "flex-end" }}>
             <div style={{ minWidth: 360, fontSize: 14 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0" }}>
-                <span style={{ color: colours.muted }}>Subtotal (ex GST):</span>
-                <strong>{invoiceMoney(previewSubtotal)}</strong>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0" }}>
-                <span style={{ color: colours.muted }}>Total GST:</span>
-                <strong>{invoiceMoney(previewGst)}</strong>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0" }}>
-                <span style={{ color: colours.muted }}>GST status:</span>
-                <strong>{invoiceGstStatus}</strong>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0" }}>
-                <span style={{ color: colours.muted }}>Less fees:</span>
-                <strong>{invoiceMoney(invoiceAdjustments.feeAmount)}</strong>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0" }}>
-                <span style={{ color: colours.muted }}>Less tax withheld:</span>
-                <strong>{invoiceMoney(invoiceAdjustments.taxWithheld)}</strong>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", fontSize: 18 }}>
-                <span style={{ color: colours.teal, fontWeight: 800 }}>Amount due:</span>
-                <strong style={{ color: colours.teal }}>{invoiceMoney(previewTotal)}</strong>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", fontSize: 18 }}>
-                <span style={{ color: colours.purple, fontWeight: 800 }}>Net expected:</span>
-                <strong style={{ color: colours.purple }}>{invoiceMoney(invoiceAdjustments.netExpected)}</strong>
-              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0" }}><span style={{ color: colours.muted }}>Subtotal (ex GST):</span><strong>{invoiceMoney(previewSubtotal)}</strong></div>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0" }}><span style={{ color: colours.muted }}>Total GST:</span><strong>{invoiceMoney(previewGst)}</strong></div>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0" }}><span style={{ color: colours.muted }}>GST status:</span><strong>{invoiceGstStatus}</strong></div>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0" }}><span style={{ color: colours.muted }}>Less fees:</span><strong>{invoiceMoney(invoiceAdjustments.feeAmount)}</strong></div>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0" }}><span style={{ color: colours.muted }}>Less tax withheld:</span><strong>{invoiceMoney(invoiceAdjustments.taxWithheld)}</strong></div>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", fontSize: 18 }}><span style={{ color: colours.teal, fontWeight: 800 }}>Amount due:</span><strong style={{ color: colours.teal }}>{invoiceMoney(previewTotal)}</strong></div>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", fontSize: 18 }}><span style={{ color: colours.purple, fontWeight: 800 }}>Net expected:</span><strong style={{ color: colours.purple }}>{invoiceMoney(invoiceAdjustments.netExpected)}</strong></div>
             </div>
           </div>
         </SectionCard>
@@ -5825,41 +5779,45 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     );
     };
     const renderQuotes = () => {
-    const qSubtotal = safeNumber(quoteForm.subtotal) * Math.max(1, safeNumber(quoteForm.quantity || 1));
-    const qGst = calculateFormGst({
-      unitPrice: quoteForm.subtotal,
-      quantity: quoteForm.quantity,
-      gstType: quoteForm.gstType,
-      clientId: quoteForm.clientId,
-      manualGst: quoteForm.manualGst,
-      gstOverride: quoteForm.gstOverride,
-    });
+    const quoteLines = computeLineItemTotals(quoteForm.lineItems || [], quoteForm.clientId);
+    const qSubtotal = quoteLines.reduce((s, l) => s + l.rowSubtotal, 0);
+    const qGst = quoteLines.reduce((s, l) => s + l.rowGst, 0);
     const qTotal = qSubtotal + qGst;
     const quoteClient = getClientById(quoteForm.clientId);
     const quoteCurrencyCode = getClientCurrencyCode(quoteClient);
     const quoteMoney = (value) => formatCurrencyByCode(value, quoteCurrencyCode);
-    const quoteAdjustments = calculateAdjustmentValues({
-      subtotal: qSubtotal,
-      total: qTotal,
-      client: quoteClient,
-      profile,
-    });
-    const quoteGstStatus = clientIsGstExempt(quoteForm.clientId)
-      ? "GST not applicable"
-      : qGst > 0
-        ? "GST applies"
-        : "GST free";
+    const quoteAdjustments = calculateAdjustmentValues({ subtotal: qSubtotal, total: qTotal, client: quoteClient, profile });
+    const quoteGstStatus = clientIsGstExempt(quoteForm.clientId) ? "GST not applicable" : qGst > 0 ? "GST applies" : "GST free";
+
+    const totalQuoted = quotes.reduce((s, q) => s + safeNumber(q.total), 0);
+    const acceptedQuotes = quotes.filter((q) => q.status === "Accepted");
+    const pendingQuotes = quotes.filter((q) => q.status === "Draft" || q.status === "Sent");
+    const expiredQuotes = quotes.filter((q) => q.status === "Expired" || (q.expiryDate && new Date(q.expiryDate) < new Date() && q.status !== "Accepted"));
+    const conversionRate = quotes.length > 0 ? (acceptedQuotes.length / quotes.length) * 100 : 0;
+    const statusData = [
+      { label: "Accepted", value: acceptedQuotes.length },
+      { label: "Pending", value: pendingQuotes.length },
+      { label: "Expired", value: expiredQuotes.length },
+    ];
     return (
       <div style={{ display: "grid", gap: 20 }}>
+        <DashboardHero title="Quotes" subtitle="Create and manage quotes for clients. Track acceptance rates and convert to invoices." highlight={`${conversionRate.toFixed(0)}% accepted`}>
+          <InsightChip label="Total quoted" value={currency(totalQuoted)} />
+          <InsightChip label="Accepted" value={String(acceptedQuotes.length)} />
+          <InsightChip label="Pending" value={String(pendingQuotes.length)} />
+        </DashboardHero>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16 }}>
+          <MetricCard title="Total quoted" value={currency(totalQuoted)} subtitle="Value of all quotes in the portal." accent={colours.navy} />
+          <MetricCard title="Accepted value" value={currency(acceptedQuotes.reduce((s, q) => s + safeNumber(q.total), 0))} subtitle="Value of accepted quotes." accent={colours.teal} />
+          <MetricCard title="Conversion rate" value={`${conversionRate.toFixed(1)}%`} subtitle="Quotes accepted vs total sent." accent={colours.purple} />
+          <MetricCard title="Expired" value={String(expiredQuotes.length)} subtitle="Quotes past expiry date." accent={colours.navy} />
+          <div style={{ ...cardStyle, padding: 18, gridColumn: "span 2" }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: colours.muted, textTransform: "uppercase", marginBottom: 10 }}>Quote status breakdown</div>
+            <MiniBarChart data={statusData} height={90} accent={colours.purple} />
+          </div>
+        </div>
         <SectionCard title="Create Quote">
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-              gap: 12,
-              marginBottom: 16,
-            }}
-          >
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12, marginBottom: 16 }}>
             <div style={{ ...cardStyle, padding: 14, background: colours.lightPurple }}>
               <div style={{ fontSize: 12, color: colours.muted, fontWeight: 700 }}>Auto-filled from Profile</div>
               <div style={{ fontSize: 14, fontWeight: 700, color: colours.text, marginTop: 6 }}>{profile.businessName}</div>
@@ -5868,228 +5826,114 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
             <div style={{ ...cardStyle, padding: 14, background: colours.lightTeal }}>
               <div style={{ fontSize: 12, color: colours.muted, fontWeight: 700 }}>Contact on Quote</div>
               <div style={{ fontSize: 14, fontWeight: 700, color: colours.text, marginTop: 6 }}>{profile.email || "-"}</div>
-              <div style={{ fontSize: 13, color: colours.muted, marginTop: 4 }}>{profile.hidePhoneOnDocs ? "Phone hidden from docs" : profile.phone || "-"}</div>
+              <div style={{ fontSize: 13, color: colours.muted, marginTop: 4 }}>{profile.hidePhoneOnDocs ? "Phone hidden" : profile.phone || "-"}</div>
             </div>
           </div>
 
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-              gap: 16,
-            }}
-          >
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16, marginBottom: 20 }}>
             <div>
-              <label style={labelStyle}>Which Client is this Quote for?</label>
-              <select
-                style={inputStyle}
-                value={quoteForm.clientId}
-                onChange={(e) => {
-                  const selectedClient = getClientById(e.target.value);
-                  setQuoteForm((prev) => ({ ...prev,
-                    clientId: e.target.value,
-                    currencyCode: getClientCurrencyCode(selectedClient),
-                    manualGst: false,
-                    gstOverride: "",
-                  }));
-                }}
-              >
-                {clients.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
+              <label style={labelStyle}>Client</label>
+              <select style={inputStyle} value={quoteForm.clientId} onChange={(e) => {
+                const sel = getClientById(e.target.value);
+                setQuoteForm((prev) => ({ ...prev, clientId: e.target.value, currencyCode: getClientCurrencyCode(sel) }));
+              }}>
+                <option value="">Select client...</option>
+                {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
-
             <div>
               <label style={labelStyle}>Quote Date</label>
-              <input
-                type="date"
-                style={inputStyle}
-                value={quoteForm.quoteDate}
-                onChange={(e) => setQuoteForm({ ...quoteForm, quoteDate: e.target.value })}
-              />
+              <input type="date" style={inputStyle} value={quoteForm.quoteDate} onChange={(e) => setQuoteForm({ ...quoteForm, quoteDate: e.target.value })} />
             </div>
-
             <div>
               <label style={labelStyle}>Expiry Date</label>
-              <input
-                type="date"
-                style={inputStyle}
-                value={quoteForm.expiryDate}
-                onChange={(e) => setQuoteForm({ ...quoteForm, expiryDate: e.target.value })}
-              />
-            </div>
-
-            <div>
-              <label style={labelStyle}>Item / Service name</label>
-              <select
-                style={inputStyle}
-                value={quoteForm.description}
-                onChange={(e) => {
-                  const selectedService = services.find((s) => s.name === e.target.value);
-                  if (selectedService) {
-                    setQuoteForm((prev) => ({ ...prev,
-                      serviceId: selectedService.id,
-                      description: selectedService.name,
-                      subtotal: String(selectedService.price ?? ""),
-                      gstType: selectedService.gstType || "",
-                      manualGst: false,
-                      gstOverride: "",
-                      quantity: 1,
-                    }));
-                  } else {
-                    setQuoteForm((prev) => ({ ...prev,
-                      serviceId: "",
-                      gstType: prev.gstType || "GST on Income (10%)",
-                      description: e.target.value,
-                      manualGst: false,
-                      gstOverride: "",
-                    }));
-                  }
-                }}
-              >
-                <option value="">Select a service...</option>
-                {services.map((service) => (
-                  <option key={service.id} value={service.name}>
-                    {service.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label style={labelStyle}>Quantity</label>
-              <input
-                type="number"
-                style={inputStyle}
-                value={quoteForm.quantity}
-                onChange={(e) =>
-                  setQuoteForm((prev) => ({ ...prev,
-                    quantity: e.target.value,
-                    ...(prev.manualGst ? {} : { gstOverride: "" }),
-                  }))
-                }
-              />
-            </div>
-
-            <div>
-              <label style={labelStyle}>Price (ex GST)</label>
-              <input
-                type="number"
-                style={inputStyle}
-                value={quoteForm.subtotal}
-                onChange={(e) =>
-                  setQuoteForm((prev) => ({ ...prev,
-                    subtotal: e.target.value,
-                    ...(prev.manualGst ? {} : { gstOverride: "" }),
-                  }))
-                }
-              />
-            </div>
-
-            <div>
-              <label style={labelStyle}>GST Type</label>
-              <select
-                style={{ ...inputStyle,
-                  background: clientIsGstExempt(quoteForm.clientId) ? "#F8FAFC" : colours.white,
-                }}
-                value={clientIsGstExempt(quoteForm.clientId) ? "GST Free" : quoteForm.gstType || "GST on Income (10%)"}
-                disabled={clientIsGstExempt(quoteForm.clientId)}
-                onChange={(e) =>
-                  setQuoteForm((prev) => ({ ...prev,
-                    gstType: e.target.value,
-                    manualGst: false,
-                    gstOverride: "",
-                  }))
-                }
-              >
-                {GST_TYPE_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label style={labelStyle}>GST Amount</label>
-              <input
-                type="number"
-                style={{ ...inputStyle,
-                  background: "#F8FAFC",
-                }}
-                readOnly
-                value={
-                  clientIsGstExempt(quoteForm.clientId)
-                    ? "0.00"
-                    : qGst.toFixed(2)
-                }
-              />
+              <input type="date" style={inputStyle} value={quoteForm.expiryDate} onChange={(e) => setQuoteForm({ ...quoteForm, expiryDate: e.target.value })} />
             </div>
           </div>
 
-          <div style={{ marginTop: 12, fontSize: 13, color: colours.muted }}>
-            {clientIsGstExempt(quoteForm.clientId)
-              ? "GST is currently turned off for this client because the client is marked as outside Australia or GST exempt."
-              : quoteForm.gstType === "GST on Income (10%)"
-                ? "GST is automatically calculated from the GST type, price and quantity."
-                : quoteForm.description
-                  ? "This line item is currently GST free."
-                  : "Select a service, choose a GST type, and GST will auto-fill."}
+          {/* ── Line items table ── */}
+          <div style={{ overflowX: "auto", marginBottom: 8 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 680 }}>
+              <thead>
+                <tr style={{ background: colours.bg }}>
+                  {["Description", "Qty", "Unit Price (ex GST)", "GST Type", "GST", "Total"].map((h) => (
+                    <th key={h} style={{ padding: "10px 8px", textAlign: "left", fontSize: 12, fontWeight: 700, color: colours.muted, borderBottom: `1px solid ${colours.border}` }}>{h}</th>
+                  ))}
+                  <th style={{ padding: "10px 8px", borderBottom: `1px solid ${colours.border}` }} />
+                </tr>
+              </thead>
+              <tbody>
+                {(quoteForm.lineItems || []).map((item, idx) => {
+                  const qty = Math.max(1, safeNumber(item.quantity || 1));
+                  const unit = safeNumber(item.unitPrice);
+                  const rowSub = unit * qty;
+                  const exempt = clientIsGstExempt(quoteForm.clientId);
+                  const effectiveGst = exempt ? "GST Free" : (item.gstType || "GST on Income (10%)");
+                  const rowGst = effectiveGst === "GST on Income (10%)" ? rowSub * 0.1 : 0;
+                  return (
+                    <tr key={item.id} style={{ borderBottom: `1px solid ${colours.border}` }}>
+                      <td style={{ padding: "8px 6px", minWidth: 200 }}>
+                        <input style={{ ...inputStyle, fontSize: 13 }} value={item.description}
+                          onChange={(e) => setQuoteForm((prev) => ({ ...prev, lineItems: prev.lineItems.map((l, i) => i === idx ? { ...l, description: e.target.value } : l) }))}
+                          placeholder="Description" />
+                      </td>
+                      <td style={{ padding: "8px 6px", width: 70 }}>
+                        <input type="number" min="1" style={{ ...inputStyle, fontSize: 13 }} value={item.quantity}
+                          onChange={(e) => setQuoteForm((prev) => ({ ...prev, lineItems: prev.lineItems.map((l, i) => i === idx ? { ...l, quantity: e.target.value } : l) }))} />
+                      </td>
+                      <td style={{ padding: "8px 6px", width: 130 }}>
+                        <input type="number" min="0" step="0.01" style={{ ...inputStyle, fontSize: 13 }} value={item.unitPrice}
+                          onChange={(e) => setQuoteForm((prev) => ({ ...prev, lineItems: prev.lineItems.map((l, i) => i === idx ? { ...l, unitPrice: e.target.value } : l) }))}
+                          placeholder="0.00" />
+                      </td>
+                      <td style={{ padding: "8px 6px", width: 160 }}>
+                        <select style={{ ...inputStyle, fontSize: 13, background: exempt ? "#F8FAFC" : colours.white }} disabled={exempt}
+                          value={effectiveGst}
+                          onChange={(e) => setQuoteForm((prev) => ({ ...prev, lineItems: prev.lineItems.map((l, i) => i === idx ? { ...l, gstType: e.target.value } : l) }))}>
+                          {GST_TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                        </select>
+                      </td>
+                      <td style={{ padding: "8px 6px", width: 90, fontSize: 13, color: colours.muted, textAlign: "right" }}>{quoteMoney(rowGst)}</td>
+                      <td style={{ padding: "8px 6px", width: 110, fontSize: 13, fontWeight: 700, textAlign: "right" }}>{quoteMoney(rowSub + rowGst)}</td>
+                      <td style={{ padding: "8px 6px", width: 40 }}>
+                        {(quoteForm.lineItems || []).length > 1 && (
+                          <button onClick={() => setQuoteForm((prev) => ({ ...prev, lineItems: prev.lineItems.filter((_, i) => i !== idx) }))}
+                            style={{ background: "none", border: "none", cursor: "pointer", color: colours.muted, fontSize: 18, lineHeight: 1 }} title="Remove row">×</button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
+          <button onClick={() => setQuoteForm((prev) => ({ ...prev, lineItems: [...(prev.lineItems || []), { id: Date.now() + Math.random(), description: "", quantity: 1, unitPrice: "", gstType: "GST on Income (10%)" }] }))}
+            style={{ ...buttonSecondary, fontSize: 13, padding: "7px 14px", marginBottom: 20 }}>+ Add line</button>
 
-          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 20 }}>
+          <div style={{ display: "flex", justifyContent: "flex-end" }}>
             <div style={{ minWidth: 360, fontSize: 14 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0" }}>
-                <span style={{ color: colours.muted }}>Subtotal (excl GST):</span>
-                <strong>{quoteMoney(qSubtotal)}</strong>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0" }}>
-                <span style={{ color: colours.muted }}>Total GST:</span>
-                <strong>{quoteMoney(qGst)}</strong>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0" }}>
-                <span style={{ color: colours.muted }}>GST status:</span>
-                <strong>{quoteGstStatus}</strong>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0" }}>
-                <span style={{ color: colours.muted }}>Less fees:</span>
-                <strong>{quoteMoney(quoteAdjustments.feeAmount)}</strong>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0" }}>
-                <span style={{ color: colours.muted }}>Less tax withheld:</span>
-                <strong>{quoteMoney(quoteAdjustments.taxWithheld)}</strong>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", fontSize: 18 }}>
-                <span style={{ color: colours.teal, fontWeight: 800 }}>Total estimate:</span>
-                <strong style={{ color: colours.teal }}>{quoteMoney(qTotal)}</strong>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", fontSize: 18 }}>
-                <span style={{ color: colours.purple, fontWeight: 800 }}>Net expected:</span>
-                <strong style={{ color: colours.purple }}>{quoteMoney(quoteAdjustments.netExpected)}</strong>
-              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0" }}><span style={{ color: colours.muted }}>Subtotal (ex GST):</span><strong>{quoteMoney(qSubtotal)}</strong></div>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0" }}><span style={{ color: colours.muted }}>Total GST:</span><strong>{quoteMoney(qGst)}</strong></div>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0" }}><span style={{ color: colours.muted }}>GST status:</span><strong>{quoteGstStatus}</strong></div>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0" }}><span style={{ color: colours.muted }}>Less fees:</span><strong>{quoteMoney(quoteAdjustments.feeAmount)}</strong></div>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0" }}><span style={{ color: colours.muted }}>Less tax withheld:</span><strong>{quoteMoney(quoteAdjustments.taxWithheld)}</strong></div>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", fontSize: 18 }}><span style={{ color: colours.teal, fontWeight: 800 }}>Total estimate:</span><strong style={{ color: colours.teal }}>{quoteMoney(qTotal)}</strong></div>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", fontSize: 18 }}><span style={{ color: colours.purple, fontWeight: 800 }}>Net expected:</span><strong style={{ color: colours.purple }}>{quoteMoney(quoteAdjustments.netExpected)}</strong></div>
             </div>
-          </div>        </SectionCard>
+          </div>
+        </SectionCard>
 
         <SectionCard
           title="Quote Actions"
           right={
             <div style={{ display: "flex", gap: 10 }}>
-              <button style={buttonSecondary} onClick={openQuotePreview}>
-                Preview
-              </button>
+              <button style={buttonSecondary} onClick={openQuotePreview}>Preview</button>
               <button style={buttonSecondary}>Save Draft</button>
-              <button style={buttonPrimary} onClick={saveQuote}>
-                Save Quote
-              </button>
+              <button style={buttonPrimary} onClick={saveQuote}>Save Quote</button>
             </div>
           }
         >
-          <div style={{ color: colours.muted, fontSize: 14 }}>
-            Use Preview to open a print-style quote in a new tab, then click Print / Download PDF.
-          </div>
+          <div style={{ color: colours.muted, fontSize: 14 }}>Use Preview to open a print-style quote in a new tab, then click Print / Download PDF.</div>
         </SectionCard>
 
         <SectionCard title="Quote List">
@@ -6415,8 +6259,28 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     const filteredServices = services.filter((service) =>
       service.name.toLowerCase().includes(serviceSearch.toLowerCase())
     );
+    const totalServiceValue = services.reduce((s, svc) => s + safeNumber(svc.total || svc.price), 0);
+    const gstServices = services.filter((s) => s.gstType === "GST on Income (10%)");
+    const gstFreeServices = services.filter((s) => s.gstType !== "GST on Income (10%)");
+    const avgPrice = services.length > 0 ? services.reduce((s, svc) => s + safeNumber(svc.price), 0) / services.length : 0;
+    const topServices = [...services].sort((a, b) => safeNumber(b.price) - safeNumber(a.price)).slice(0, 6).map((s) => ({ label: s.name?.slice(0, 8) || "—", value: safeNumber(s.price) }));
     return (
       <div style={{ display: "grid", gap: 20 }}>
+        <DashboardHero title="Services" subtitle="Manage your service catalogue. Services auto-populate into invoices and quotes." highlight={String(services.length)}>
+          <InsightChip label="GST applicable" value={String(gstServices.length)} />
+          <InsightChip label="GST free" value={String(gstFreeServices.length)} />
+          <InsightChip label="Avg price" value={currency(avgPrice)} />
+        </DashboardHero>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16 }}>
+          <MetricCard title="Total services" value={String(services.length)} subtitle="Services in your catalogue." accent={colours.navy} />
+          <MetricCard title="GST applicable" value={String(gstServices.length)} subtitle="Services with 10% GST." accent={colours.teal} />
+          <MetricCard title="GST free" value={String(gstFreeServices.length)} subtitle="Exempt or input-taxed services." accent={colours.purple} />
+          <MetricCard title="Average price" value={currency(avgPrice)} subtitle="Mean price across all services." accent={colours.navy} />
+          <div style={{ ...cardStyle, padding: 18, gridColumn: "span 2" }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: colours.muted, textTransform: "uppercase", marginBottom: 10 }}>Top services by price</div>
+            <MiniBarChart data={topServices} height={90} accent={colours.teal} />
+          </div>
+        </div>
         <SectionCard
           title="Services"
           right={
@@ -6635,119 +6499,126 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
 
         <SectionCard
           title="Enter supplier bill"
-          right={<div style={{ fontSize: 12, color: colours.muted }}>Creates a payable using your existing expense structure</div>}
+          right={<div style={{ fontSize: 12, color: colours.muted }}>Add multiple line items per bill</div>}
         >
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-              gap: 14,
-            }}
-          >
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14, marginBottom: 20 }}>
             <div>
               <label style={labelStyle}>Bill date</label>
-              <input
-                type="date"
-                style={inputStyle}
-                value={expenseForm.date}
-                onChange={(e) => setExpenseForm((prev) => ({ ...prev, date: e.target.value }))}
-              />
+              <input type="date" style={inputStyle} value={expenseForm.date}
+                onChange={(e) => setExpenseForm((prev) => ({ ...prev, date: e.target.value }))} />
             </div>
-
             <div>
               <label style={labelStyle}>Due date</label>
-              <input
-                type="date"
-                style={inputStyle}
-                value={expenseForm.dueDate || expenseForm.date}
-                onChange={(e) => setExpenseForm((prev) => ({ ...prev, dueDate: e.target.value }))}
-              />
+              <input type="date" style={inputStyle} value={expenseForm.dueDate || expenseForm.date}
+                onChange={(e) => setExpenseForm((prev) => ({ ...prev, dueDate: e.target.value }))} />
             </div>
-
             <div>
               <label style={labelStyle}>Supplier</label>
-              <input
-                style={inputStyle}
-                value={expenseForm.supplier}
+              <input style={inputStyle} value={expenseForm.supplier}
                 onChange={(e) => setExpenseForm((prev) => ({ ...prev, supplier: e.target.value }))}
-                placeholder="Supplier name"
-              />
-            </div>
-
-            <div>
-              <label style={labelStyle}>Category</label>
-              <select
-                style={inputStyle}
-                value={expenseForm.category}
-                onChange={(e) => setExpenseForm((prev) => ({ ...prev, category: e.target.value }))}
-              >
-                <option value="">Select...</option>
-                {expenseCategories.map((item) => (
-                  <option key={item} value={item}>
-                    {item}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label style={labelStyle}>Amount</label>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                style={inputStyle}
-                value={expenseForm.amount}
-                onChange={(e) => setExpenseForm((prev) => ({ ...prev, amount: e.target.value }))}
-                placeholder="0.00"
-              />
-            </div>
-
-            <div>
-              <label style={labelStyle}>GST included</label>
-              <select
-                style={inputStyle}
-                value={expenseForm.gstIncl || "yes"}
-                onChange={(e) => setExpenseForm((prev) => ({ ...prev, gstIncl: e.target.value }))}
-              >
-                <option value="yes">Yes</option>
-                <option value="no">No</option>
-              </select>
-            </div>
-
-            <div style={{ gridColumn: "1 / -1" }}>
-              <label style={labelStyle}>Description</label>
-              <textarea
-                style={inputStyle}
-                value={expenseForm.description}
-                onChange={(e) => setExpenseForm((prev) => ({ ...prev, description: e.target.value }))}
-                placeholder="Bill description or notes"
-              />
+                placeholder="Supplier name" />
             </div>
           </div>
 
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 16 }}>
-            <button style={buttonPrimary} onClick={saveExpense}>Save bill</button>
-            <button
-              style={buttonSecondary}
-              onClick={() =>
-                setExpenseForm({
-                  date: new Date().toISOString().slice(0, 10),
-                  dueDate: new Date().toISOString().slice(0, 10),
-                  supplier: "",
-                  category: "",
-                  description: "",
-                  amount: "",
-                  expenseType: "",
-                  workType: profile.workType,
-                  receiptFileName: "",
-                  receiptUrl: "",
-                  gstIncl: "yes",
-                })
-              }
-            >
-              Clear
-            </button>
+          {/* ── Bill line items ── */}
+          <div style={{ overflowX: "auto", marginBottom: 8 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 620 }}>
+              <thead>
+                <tr style={{ background: colours.bg }}>
+                  {["Description", "Category", "Amount (incl GST)", "GST Incl?", "GST Credit"].map((h) => (
+                    <th key={h} style={{ padding: "10px 8px", textAlign: "left", fontSize: 12, fontWeight: 700, color: colours.muted, borderBottom: `1px solid ${colours.border}` }}>{h}</th>
+                  ))}
+                  <th style={{ padding: "10px 8px", borderBottom: `1px solid ${colours.border}` }} />
+                </tr>
+              </thead>
+              <tbody>
+                {billLineItems.map((item, idx) => {
+                  const amt = safeNumber(item.amount);
+                  const gstCredit = item.gstIncl === "yes" ? amt / 11 : 0;
+                  return (
+                    <tr key={item.id} style={{ borderBottom: `1px solid ${colours.border}` }}>
+                      <td style={{ padding: "8px 6px", minWidth: 180 }}>
+                        <input style={{ ...inputStyle, fontSize: 13 }} value={item.description}
+                          onChange={(e) => setBillLineItems((prev) => prev.map((l, i) => i === idx ? { ...l, description: e.target.value } : l))}
+                          placeholder="Description" />
+                      </td>
+                      <td style={{ padding: "8px 6px", width: 160 }}>
+                        <select style={{ ...inputStyle, fontSize: 13 }} value={item.category}
+                          onChange={(e) => setBillLineItems((prev) => prev.map((l, i) => i === idx ? { ...l, category: e.target.value } : l))}>
+                          <option value="">Select...</option>
+                          {expenseCategories.map((cat) => <option key={cat} value={cat}>{cat}</option>)}
+                        </select>
+                      </td>
+                      <td style={{ padding: "8px 6px", width: 130 }}>
+                        <input type="number" min="0" step="0.01" style={{ ...inputStyle, fontSize: 13 }} value={item.amount}
+                          onChange={(e) => setBillLineItems((prev) => prev.map((l, i) => i === idx ? { ...l, amount: e.target.value } : l))}
+                          placeholder="0.00" />
+                      </td>
+                      <td style={{ padding: "8px 6px", width: 90 }}>
+                        <select style={{ ...inputStyle, fontSize: 13 }} value={item.gstIncl}
+                          onChange={(e) => setBillLineItems((prev) => prev.map((l, i) => i === idx ? { ...l, gstIncl: e.target.value } : l))}>
+                          <option value="yes">Yes</option>
+                          <option value="no">No</option>
+                        </select>
+                      </td>
+                      <td style={{ padding: "8px 6px", width: 100, fontSize: 13, color: colours.muted, textAlign: "right" }}>{currency(gstCredit)}</td>
+                      <td style={{ padding: "8px 6px", width: 40 }}>
+                        {billLineItems.length > 1 && (
+                          <button onClick={() => setBillLineItems((prev) => prev.filter((_, i) => i !== idx))}
+                            style={{ background: "none", border: "none", cursor: "pointer", color: colours.muted, fontSize: 18, lineHeight: 1 }} title="Remove row">×</button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <button onClick={() => setBillLineItems((prev) => [...prev, blankBillLine()])}
+            style={{ ...buttonSecondary, fontSize: 13, padding: "7px 14px", marginBottom: 16 }}>+ Add line</button>
+
+          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
+            <div style={{ minWidth: 280, fontSize: 14 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0" }}>
+                <span style={{ color: colours.muted }}>Total bill amount:</span>
+                <strong>{currency(billLineItems.reduce((s, l) => s + safeNumber(l.amount), 0))}</strong>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0" }}>
+                <span style={{ color: colours.muted }}>GST credit (claimable):</span>
+                <strong style={{ color: colours.teal }}>{currency(billLineItems.reduce((s, l) => s + (l.gstIncl === "yes" ? safeNumber(l.amount) / 11 : 0), 0))}</strong>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <button style={buttonPrimary} onClick={async () => {
+              const totalAmt = billLineItems.reduce((s, l) => s + safeNumber(l.amount), 0);
+              if (!expenseForm.supplier) { alert("Supplier name is required."); return; }
+              if (totalAmt <= 0) { alert("Add at least one line with an amount."); return; }
+              const primaryCategory = billLineItems.find((l) => l.category)?.category || "Other";
+              const combinedDesc = billLineItems.map((l) => l.description).filter(Boolean).join("; ");
+              const payload = {
+                ...expenseForm,
+                category: primaryCategory,
+                description: combinedDesc,
+                amount: totalAmt,
+                gst: billLineItems.reduce((s, l) => s + (l.gstIncl === "yes" ? safeNumber(l.amount) / 11 : 0), 0),
+                billLineItems,
+                expenseType: "Bill / Payable",
+                id: Date.now(),
+              };
+              try {
+                const saved = await upsertRecordInDatabase(SUPABASE_TABLES.expenses, payload);
+                setExpenses((prev) => [...prev, saved]);
+                setSupabaseSyncStatus("Bill saved");
+                setExpenseForm({ date: new Date().toISOString().slice(0, 10), dueDate: new Date().toISOString().slice(0, 10), supplier: "", category: "", description: "", amount: "", expenseType: "", workType: profile.workType, receiptFileName: "", receiptUrl: "" });
+                setBillLineItems([blankBillLine()]);
+              } catch (err) { alert(err.message || "Save failed"); }
+            }}>Save bill</button>
+            <button style={buttonSecondary} onClick={() => {
+              setExpenseForm({ date: new Date().toISOString().slice(0, 10), dueDate: new Date().toISOString().slice(0, 10), supplier: "", category: "", description: "", amount: "", expenseType: "", workType: profile.workType, receiptFileName: "", receiptUrl: "" });
+              setBillLineItems([blankBillLine()]);
+            }}>Clear</button>
           </div>
         </SectionCard>
 
@@ -6782,8 +6653,30 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     );
     };
 
-    const renderExpenses = () => (
+    const renderExpenses = () => {
+    const totalExpenseAmt = expenses.reduce((s, e) => s + safeNumber(e.amount), 0);
+    const totalGstCredit = expenses.reduce((s, e) => s + safeNumber(e.gst), 0);
+    const thisMonth = new Date().toISOString().slice(0, 7);
+    const thisMonthExpenses = expenses.filter((e) => String(e.date || "").slice(0, 7) === thisMonth).reduce((s, e) => s + safeNumber(e.amount), 0);
+    const categoryTotals = expenses.reduce((acc, e) => { const cat = e.category || "Other"; acc[cat] = (acc[cat] || 0) + safeNumber(e.amount); return acc; }, {});
+    const topCategories = Object.entries(categoryTotals).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([label, value]) => ({ label: label.slice(0, 8), value }));
+    return (
     <div style={{ display: "grid", gap: 20 }}>
+      <DashboardHero title="Expenses" subtitle="Record and categorise all business expenses. GST credits are calculated automatically." highlight={currency(totalExpenseAmt)}>
+        <InsightChip label="This month" value={currency(thisMonthExpenses)} />
+        <InsightChip label="GST credits" value={currency(totalGstCredit)} />
+        <InsightChip label="Categories" value={String(Object.keys(categoryTotals).length)} />
+      </DashboardHero>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16 }}>
+        <MetricCard title="Total expenses" value={currency(totalExpenseAmt)} subtitle="All recorded expenses." accent={colours.navy} />
+        <MetricCard title="This month" value={currency(thisMonthExpenses)} subtitle="Expenses recorded this calendar month." accent={colours.teal} />
+        <MetricCard title="GST credits" value={currency(totalGstCredit)} subtitle="Claimable input tax credits." accent={colours.purple} />
+        <MetricCard title="Categories used" value={String(Object.keys(categoryTotals).length)} subtitle="Distinct expense categories." accent={colours.navy} />
+        <div style={{ ...cardStyle, padding: 18, gridColumn: "span 2" }}>
+          <div style={{ fontSize: 12, fontWeight: 800, color: colours.muted, textTransform: "uppercase", marginBottom: 10 }}>Top expense categories</div>
+          <MiniBarChart data={topCategories} height={90} accent={colours.purple} />
+        </div>
+      </div>
       <SectionCard
         title="Expense Details"
         right={
@@ -6963,16 +6856,35 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       </SectionCard>
     </div>
     );
-    const renderIncomeSources = () => (
+    };
+    const renderIncomeSources = () => {
+    const totalBeforeTax = incomeSources.reduce((s, src) => s + safeNumber(src.beforeTax), 0);
+    const annualised = incomeSources.reduce((s, src) => {
+      const freq = src.frequency || "";
+      const amt = safeNumber(src.beforeTax);
+      const mult = freq === "Weekly" ? 52 : freq === "Fortnightly" ? 26 : freq === "Monthly" ? 12 : freq === "Quarterly" ? 4 : 1;
+      return s + amt * mult;
+    }, 0);
+    const typeBreakdown = incomeSources.reduce((acc, src) => { const t = src.incomeType || "Other"; acc[t] = (acc[t] || 0) + safeNumber(src.beforeTax); return acc; }, {});
+    const typeData = Object.entries(typeBreakdown).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([label, value]) => ({ label: label.slice(0, 10), value }));
+    return (
     <div style={{ display: "grid", gap: 20 }}>
-      <SectionCard
-        title="Income Sources"
-        right={
-          <button style={buttonPrimary} onClick={() => setShowIncomeSourceModal(true)}>
-            New Income Source
-          </button>
-        }
-      >
+      <DashboardHero title="Income Sources" subtitle="Track all personal and business income streams for tax reporting. Feeds directly into your ATO export." highlight={currency(annualised)}>
+        <InsightChip label="Sources recorded" value={String(incomeSources.length)} />
+        <InsightChip label="Total before tax" value={currency(totalBeforeTax)} />
+        <InsightChip label="Annualised est." value={currency(annualised)} />
+      </DashboardHero>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16 }}>
+        <MetricCard title="Sources recorded" value={String(incomeSources.length)} subtitle="All income sources in the portal." accent={colours.navy} />
+        <MetricCard title="Total before tax" value={currency(totalBeforeTax)} subtitle="Sum of all recorded before-tax amounts." accent={colours.teal} />
+        <MetricCard title="Annualised estimate" value={currency(annualised)} subtitle="Projected annual income based on frequency." accent={colours.purple} />
+        <MetricCard title="Income types" value={String(Object.keys(typeBreakdown).length)} subtitle="Distinct income type categories." accent={colours.navy} />
+        <div style={{ ...cardStyle, padding: 18, gridColumn: "span 2" }}>
+          <div style={{ fontSize: 12, fontWeight: 800, color: colours.muted, textTransform: "uppercase", marginBottom: 10 }}>Income by type</div>
+          <MiniBarChart data={typeData} height={90} accent={colours.teal} />
+        </div>
+      </div>
+      <SectionCard title="Income Sources" right={<button style={buttonPrimary} onClick={() => setShowIncomeSourceModal(true)}>New Income Source</button>}>
         <DataTable
           columns={[
             { key: "name", label: "Name" },
@@ -7000,81 +6912,79 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       </SectionCard>
     </div>
     );
-    const renderDocuments = () => (
-    <SectionCard
-      title="Documents"
-      right={
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-          <input
-            type="file"
-            style={{ ...inputStyle, padding: "8px 10px", maxWidth: 260 }}
-            onChange={(e) => setDocumentFile(e.target.files?.[0] || null)}
-          />
-          <button style={buttonPrimary} onClick={uploadDocument}>
-            Upload
-          </button>
+    };
+    const renderDocuments = () => {
+    const recentDocs = [...documents].sort((a, b) => new Date(b.uploadedAt || 0) - new Date(a.uploadedAt || 0)).slice(0, 1);
+    const lastUploaded = recentDocs[0] ? formatDateAU(recentDocs[0].uploadedAt) : "None yet";
+    const docTypes = documents.reduce((acc, d) => {
+      const ext = String(d.name || "").split(".").pop().toLowerCase() || "other";
+      acc[ext] = (acc[ext] || 0) + 1; return acc;
+    }, {});
+    const typeData = Object.entries(docTypes).slice(0, 6).map(([label, value]) => ({ label, value }));
+    return (
+    <div style={{ display: "grid", gap: 20 }}>
+      <DashboardHero title="Documents" subtitle="Store, organise and access all your portal documents, receipts and generated PDFs in one place." highlight={String(documents.length)}>
+        <InsightChip label="Total files" value={String(documents.length)} />
+        <InsightChip label="Last uploaded" value={lastUploaded} />
+        <InsightChip label="File types" value={String(Object.keys(docTypes).length)} />
+      </DashboardHero>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16 }}>
+        <MetricCard title="Total documents" value={String(documents.length)} subtitle="All files stored in the portal." accent={colours.navy} />
+        <MetricCard title="Last uploaded" value={lastUploaded} subtitle="Most recently added document." accent={colours.teal} />
+        <MetricCard title="File types" value={String(Object.keys(docTypes).length)} subtitle="Distinct file extensions stored." accent={colours.purple} />
+        <div style={{ ...cardStyle, padding: 18 }}>
+          <div style={{ fontSize: 12, fontWeight: 800, color: colours.muted, textTransform: "uppercase", marginBottom: 10 }}>Files by type</div>
+          <MiniBarChart data={typeData.length ? typeData : [{ label: "None", value: 0 }]} height={70} accent={colours.navy} />
         </div>
-      }
-    >
-      <div style={{ color: colours.muted, fontSize: 14, marginBottom: 16 }}>
-        Store generated PDFs, supporting documents, and uploaded files here.
       </div>
-
-      {documents.length ? (
-        <DataTable
-          columns={[
-            { key: "name", label: "Document" },
-            {
-              key: "uploadedAt",
-              label: "Uploaded",
-              render: (v) => formatDateAU(v),
-            },
-            {
-              key: "url",
-              label: "Open",
-              render: (v) => (
-                <a href={v} target="_blank" rel="noreferrer">
-                  Open
-                </a>
-              ),
-            },
-            {
-              key: "actions",
-              label: "",
-              render: (_, row) => (
+      <SectionCard
+        title="Documents"
+        right={
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+            <input type="file" style={{ ...inputStyle, padding: "8px 10px", maxWidth: 260 }} onChange={(e) => setDocumentFile(e.target.files?.[0] || null)} />
+            <button style={buttonPrimary} onClick={uploadDocument}>Upload</button>
+          </div>
+        }
+      >
+        <div style={{ color: colours.muted, fontSize: 14, marginBottom: 16 }}>Store generated PDFs, supporting documents, and uploaded files here.</div>
+        {documents.length ? (
+          <DataTable
+            columns={[
+              { key: "name", label: "Document" },
+              { key: "uploadedAt", label: "Uploaded", render: (v) => formatDateAU(v) },
+              { key: "url", label: "Open", render: (v) => <a href={v} target="_blank" rel="noreferrer">Open</a> },
+              { key: "actions", label: "", render: (_, row) => (
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   <button style={buttonSecondary} onClick={() => openDocumentEditor(row)}>View / Edit</button>
                   <button style={buttonSecondary} onClick={() => deleteDocument(row.id)}>Delete</button>
                 </div>
-              ),
-            },
-          ]}
-          rows={documents}
-        />
-      ) : (
-        <div style={{ color: colours.muted, fontSize: 14 }}>
-          No documents uploaded yet.
-        </div>
-      )}
-
-      {documentEditorOpen && documentEditorForm ? (
-        <div style={{ marginTop: 20, ...cardStyle, padding: 20 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", marginBottom: 16 }}>
-            <h3 style={{ margin: 0, fontSize: 18 }}>View / Edit Document</h3>
-            <button style={buttonSecondary} onClick={closeDocumentEditor}>Close</button>
+              )},
+            ]}
+            rows={documents}
+          />
+        ) : (
+          <div style={{ color: colours.muted, fontSize: 14 }}>No documents uploaded yet.</div>
+        )}
+        {documentEditorOpen && documentEditorForm ? (
+          <div style={{ marginTop: 20, ...cardStyle, padding: 20 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", marginBottom: 16 }}>
+              <h3 style={{ margin: 0, fontSize: 18 }}>View / Edit Document</h3>
+              <button style={buttonSecondary} onClick={closeDocumentEditor}>Close</button>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14 }}>
+              <div><label style={labelStyle}>Document name</label><input style={inputStyle} value={documentEditorForm.name || ""} onChange={(e) => setDocumentEditorForm((prev) => ({ ...prev, name: e.target.value }))} /></div>
+              <div><label style={labelStyle}>URL</label><input style={inputStyle} value={documentEditorForm.url || ""} onChange={(e) => setDocumentEditorForm((prev) => ({ ...prev, url: e.target.value }))} /></div>
+            </div>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, marginTop: 16 }}>
+              <button style={buttonSecondary} onClick={closeDocumentEditor}>Cancel</button>
+              <button style={buttonPrimary} onClick={saveDocumentEdits}>Save Changes</button>
+            </div>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14 }}>
-            <div><label style={labelStyle}>Document name</label><input style={inputStyle} value={documentEditorForm.name || ""} onChange={(e) => setDocumentEditorForm((prev) => ({ ...prev, name: e.target.value }))} /></div>
-            <div><label style={labelStyle}>URL</label><input style={inputStyle} value={documentEditorForm.url || ""} onChange={(e) => setDocumentEditorForm((prev) => ({ ...prev, url: e.target.value }))} /></div>
-          </div>
-          <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, marginTop: 16 }}>
-            <button style={buttonSecondary} onClick={closeDocumentEditor}>Cancel</button>
-            <button style={buttonPrimary} onClick={saveDocumentEdits}>Save Changes</button>
-          </div>
-        </div>
-      ) : null}
-    </SectionCard>
+        ) : null}
+      </SectionCard>
+    </div>
     );
+    };
     const renderSetupWizard = () => (
     <div style={{ minHeight: "100vh", background: colours.bg, display: "grid", placeItems: "center", padding: 24 }}>
       <div style={{ ...cardStyle, width: "100%", maxWidth: 760, padding: 28 }}>
@@ -7137,6 +7047,17 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     );
     const renderSettings = () => (
     <div style={{ display: "grid", gap: 20 }}>
+      <DashboardHero title="Settings" subtitle="Configure your business profile, financial settings, branding and security. Changes save to your Supabase database automatically." highlight={activeSettingsTab}>
+        <InsightChip label="Business" value={profile.businessName || "Not set"} />
+        <InsightChip label="ABN" value={profile.abn || "Not set"} />
+        <InsightChip label="GST" value={profile.gstRegistered ? "Registered" : "Not registered"} />
+      </DashboardHero>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16 }}>
+        <MetricCard title="Tax rate" value={`${profile.taxRate || 30}%`} subtitle="Income tax rate used for reserve estimates." accent={colours.navy} />
+        <MetricCard title="Payment terms" value={`${profile.paymentTermsDays || 21} days`} subtitle="Default days until invoice is due." accent={colours.teal} />
+        <MetricCard title="Subscription fee" value={currency(safeNumber(profile.monthlySubscription ?? DEFAULT_MONTHLY_SUBSCRIPTION))} subtitle="Monthly portal fee deducted from Safe to Spend." accent={colours.purple} />
+        <MetricCard title="Invoice prefix" value={profile.invoicePrefix || "INV"} subtitle="Auto-applied to all new invoice numbers." accent={colours.navy} />
+      </div>
       <SectionCard
         title="Settings"
         right={
@@ -7257,15 +7178,17 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
             </div>
 
             <div>
-              <label style={labelStyle}>Fee Rate %</label>
+              <label style={labelStyle}>Portal Subscription Fee ($/mo)</label>
               <input
                 type="number"
-                style={{ ...inputStyle, background: "#F8FAFC", color: colours.muted }}
-                value={LOCKED_FEE_RATE_PERCENT}
-                readOnly
-                disabled
-                title="Locked at 1%"
+                style={inputStyle}
+                value={profile.monthlySubscription ?? DEFAULT_MONTHLY_SUBSCRIPTION}
+                onChange={(e) => setProfile({ ...profile, monthlySubscription: safeNumber(e.target.value) })}
+                placeholder="45"
+                min="0"
+                step="1"
               />
+              <div style={{ fontSize: 12, color: colours.muted, marginTop: 4 }}>Fixed monthly subscription cost ($45 default). Deducted from Safe to Spend on the dashboard.</div>
             </div>
 
             <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14 }}>
