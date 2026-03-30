@@ -24,14 +24,11 @@ const rawCorsOrigins = [
     .filter(Boolean)),
   "http://localhost:5173",
   "http://127.0.0.1:5173",
-  "http://localhost:10000",
-  "http://127.0.0.1:10000",
   "http://localhost:3001",
   "http://127.0.0.1:3001",
-  "https://sharons-portal.onrender.com",
-  "https://portal.sharonogier.com",
   "https://sharonogier.com",
   "https://www.sharonogier.com",
+  "https://sharons-portal.onrender.com",
 ];
 
 const CLIENT_URLS = [...new Set(rawCorsOrigins.filter(Boolean))];
@@ -43,11 +40,13 @@ const corsOptions = {
     }
     return callback(new Error(`CORS blocked for origin: ${origin}`));
   },
-  methods: ["GET", "POST", "OPTIONS"],
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization", "stripe-signature", "x-api-key"],
+  credentials: true,
 };
 
 app.use("/api", cors(corsOptions));
+app.options("/api/*", cors(corsOptions));
 app.use("/api", (req, _res, next) => {
   const now = new Date().toISOString();
   console.log(`[${now}] ${req.method} ${req.originalUrl}`);
@@ -326,8 +325,34 @@ function buildFallbackDocumentHtml(payload = {}) {
 </html>`;
 }
 
+
+function ensureRenderableHtmlDocument(html) {
+  const raw = String(html || "").trim();
+  if (!raw) return "";
+
+  const hasHtmlTag = /<html[\s>]/i.test(raw);
+  if (hasHtmlTag) return raw;
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    @page { size: A4; margin: 20px; }
+    html, body { margin: 0; padding: 0; background: #ffffff; color: #111827; }
+    body { font-family: Arial, Helvetica, sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    img { max-width: 100%; }
+    table { border-collapse: collapse; width: 100%; }
+  </style>
+</head>
+<body>${raw}</body>
+</html>`;
+}
+
 async function generatePdfFromHtml(html) {
-  const trimmedHtml = String(html || "").trim();
+  const renderableHtml = ensureRenderableHtmlDocument(html);
+  const trimmedHtml = String(renderableHtml || "").trim();
 
   if (!trimmedHtml) {
     throw new Error("No HTML provided for PDF generation.");
@@ -349,13 +374,46 @@ async function generatePdfFromHtml(html) {
 
   let browser;
   let page;
+
   try {
     console.log("PDF HTML length:", trimmedHtml.length);
+
     browser = await puppeteer.launch(launchOptions);
     page = await browser.newPage();
     await page.setViewport({ width: 1400, height: 2000, deviceScaleFactor: 1 });
-    await page.setContent(trimmedHtml, { waitUntil: "domcontentloaded", timeout: 45000 });
+    await page.setJavaScriptEnabled(true);
+    await page.setContent(trimmedHtml, { waitUntil: ["domcontentloaded", "networkidle0"], timeout: 45000 });
+
+    try {
+      await page.evaluate(async () => {
+        const waitForImages = Array.from(document.images || []).map((img) => {
+          if (img.complete) return Promise.resolve();
+          return new Promise((resolve) => {
+            img.onload = () => resolve();
+            img.onerror = () => resolve();
+          });
+        });
+        if (document.fonts && document.fonts.ready) {
+          await document.fonts.ready.catch(() => {});
+        }
+        await Promise.all(waitForImages);
+      });
+    } catch (_error) {}
+
     await page.emulateMediaType("screen");
+
+    const pageText = await page.evaluate(() => (document.body?.innerText || "").trim());
+    const bodyHtmlLength = await page.evaluate(() => document.body?.innerHTML?.trim()?.length || 0);
+
+    console.log("PDF render check:", {
+      pageTextLength: pageText.length,
+      bodyHtmlLength,
+      startsWith: pageText.slice(0, 120),
+    });
+
+    if (!bodyHtmlLength) {
+      throw new Error("Rendered HTML body was empty.");
+    }
 
     const pdfBuffer = await page.pdf({
       format: "A4",
@@ -374,7 +432,6 @@ async function generatePdfFromHtml(html) {
     } catch (_error) {}
   }
 }
-
 
 function normaliseBase64Attachment(value) {
   const raw = String(value || "").trim();
@@ -838,26 +895,30 @@ app.post("/api/send-invoice-attachment-email", async (req, res) => {
   try {
     const payload = req.body || {};
     const recipients = normaliseRecipients(payload.to || payload.recipients);
-    const clientName = payload.clientName || "Client";
+    const clientName = payload.clientName || payload.customerName || "Client";
     const invoiceNumber = payload.number || payload.invoiceNumber || "Invoice";
 
     console.log("send-invoice-attachment-email payload summary:", {
       recipients,
       invoiceNumber,
-      hasInvoiceHtml: Boolean(String(payload.invoiceHtml || payload.documentHtml || "").trim()),
+      hasInvoiceHtml: Boolean(String(payload.invoiceHtml || payload.documentHtml || payload.html || "").trim()),
     });
 
-    const invoiceHtml = String(payload.invoiceHtml || payload.documentHtml || "").trim();
+    const invoiceHtml = String(payload.invoiceHtml || payload.documentHtml || payload.html || "").trim();
     if (!invoiceHtml) {
       return res.status(400).json({ ok: false, error: "Preview HTML is required for PDF generation." });
     }
 
     const emailResult = await sendEmailWithPdf({
       to: recipients,
-      subject: `Invoice ${invoiceNumber}`,
+      subject: payload.subject || `Invoice ${invoiceNumber}`,
       htmlForPdf: invoiceHtml,
-      emailHtml: `<p>Hello ${escapeHtml(clientName)},</p><p>Please find your invoice attached.</p>`,
-      filename: `invoice-${invoiceNumber}.pdf`,
+      emailHtml:
+        String(payload.emailHtml || payload.html || "").trim() ||
+        `<p>Hello ${escapeHtml(clientName)},</p><p>Please find your invoice attached.</p><p>Kind regards,<br />Sharon's Accounting Service</p>`,
+      emailText: payload.text || undefined,
+      filename: String(payload.filename || `invoice-${invoiceNumber}.pdf`).replace(/\s+/g, "-").toLowerCase(),
+      replyTo: payload.replyTo,
       attachmentBase64: payload.attachmentBase64,
       fallbackPdfPayload: {
         documentType: "invoice",
@@ -873,18 +934,19 @@ app.post("/api/send-invoice-attachment-email", async (req, res) => {
         clientPhone: payload.clientPhone,
         clientAddress: payload.clientAddress,
         clientContactPerson: payload.clientContactPerson,
-        invoiceNumber,
         number: invoiceNumber,
-        invoiceDate: payload.invoiceDate,
-        dueDate: payload.dueDate,
-        description: payload.description,
-        comments: payload.comments,
-        quantity: payload.quantity,
-        subtotal: payload.subtotal,
-        gst: payload.gst,
-        total: payload.total,
-        currencyCode: payload.currencyCode,
+        invoiceNumber,
+        invoiceDate: payload.invoiceDate || "",
+        dueDate: payload.dueDate || "",
+        description: payload.description || "",
+        comments: payload.comments || "",
+        quantity: payload.quantity ?? 1,
+        subtotal: payload.subtotal ?? 0,
+        gst: payload.gst ?? 0,
+        total: payload.total ?? 0,
+        currencyCode: payload.currencyCode || "AUD",
         hidePhoneNumber: Boolean(payload.hidePhoneNumber),
+        message: payload.message || "Please find your invoice attached.",
         stripeCheckoutUrl: payload.stripeCheckoutUrl,
       },
     });
@@ -897,11 +959,13 @@ app.post("/api/send-invoice-attachment-email", async (req, res) => {
       pdfError: emailResult?.pdfError || null,
     });
 
-    const deliveryMessage = emailResult?.attachmentIncluded
-      ? `Invoice emailed to ${recipients.join(", ")}`
-      : `Invoice emailed to ${recipients.join(", ")} without PDF attachment`;
-
-    return res.json({ ok: true, message: deliveryMessage, result: emailResult });
+    return res.json({
+      ok: true,
+      message: emailResult?.attachmentIncluded
+        ? `Invoice emailed to ${recipients.join(", ")}`
+        : `Invoice email sent to ${recipients.join(", ")} without PDF attachment`,
+      result: emailResult,
+    });
   } catch (error) {
     console.error("Email failed:", error);
     return res.status(500).json({ ok: false, error: error.message });
