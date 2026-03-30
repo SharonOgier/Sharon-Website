@@ -1034,10 +1034,10 @@ th { text-align:left; color:#667085; }
 .totals div { display:flex; justify-content:space-between; padding:6px 0; }
 .total { font-weight:800; font-size:18px; color:#006D6D; }
 .footer { margin-top:30px; display:flex; justify-content:space-between; font-size:12px; color:#666; }
-.print-toolbar { margin-bottom: 24px; display:flex; justify-content:space-between; align-items:center; gap:16px; }
+.print-toolbar { margin-bottom: 24px; display:flex !important; justify-content:space-between; align-items:center; gap:16px; }
 .toolbar-actions { display:flex; gap:10px; flex-wrap:wrap; }
 .preview-status { font-size:13px; color:#64748B; }
-.print-button { background:#6A1B9A; color:#fff; border:none; border-radius:10px; padding:10px 16px; font-weight:700; cursor:pointer; }
+.print-button { background:#6A1B9A; color:#fff; border:none; border-radius:10px; padding:10px 16px; font-weight:700; cursor:pointer; text-decoration:none; display:inline-block; }
 .email-button { background:#006D6D; color:#fff; border:none; border-radius:10px; padding:10px 16px; font-weight:700; cursor:pointer; }
 @media print {
   .print-toolbar { display:none !important; }
@@ -1051,7 +1051,7 @@ th { text-align:left; color:#667085; }
 <div id="preview-email-status" class="preview-status"></div>
 <div class="toolbar-actions">
   ${allowEmail ? `<button id="preview-email-button" class="email-button" onclick="window.opener && window.opener.sendQuoteFromPreview && window.opener.sendQuoteFromPreview(${JSON.stringify(quote.id)}, window)">Email Quote</button>` : ""}
-  <button class="print-button" onclick="setTimeout(function(){ window.print(); }, 100)">Print / Download PDF</button>
+  <a href="javascript:void(0)" class="print-button" onclick="var w=window.open('','_blank');w.document.write(document.documentElement.outerHTML);w.document.close();w.print();">Print / Download PDF</a>
 </div>
 </div>
 
@@ -1143,8 +1143,20 @@ return `<!doctype html>
 <head>
 <meta charset="utf-8" />
 <title>Quote ${quote.quoteNumber || ""}</title>
+<style>
+.print-toolbar { margin-bottom: 24px; display:flex !important; justify-content:space-between; align-items:center; gap:16px; }
+.toolbar-actions { display:flex; gap:10px; flex-wrap:wrap; }
+.print-button { background:#6A1B9A; color:#fff; border:none; border-radius:10px; padding:10px 16px; font-weight:700; cursor:pointer; text-decoration:none; display:inline-block; }
+@media print { .print-toolbar { display:none !important; } }
+</style>
 </head>
 <body style="margin:0; padding:24px; background:#F8FAFC; font-family:Arial, sans-serif; color:#14202B;">
+<div class="print-toolbar">
+  <div></div>
+  <div class="toolbar-actions">
+    <a href="javascript:void(0)" class="print-button" onclick="var w=window.open('','_blank');w.document.write(document.documentElement.outerHTML);w.document.close();w.print();">Print / Download PDF</a>
+  </div>
+</div>
   <div style="max-width:760px; margin:0 auto; background:#FFFFFF; border:1px solid #E2E8F0; border-radius:18px; padding:28px;">
     ${profile.logoDataUrl
       ? `<div style="margin-bottom:16px;"><img src="${profile.logoDataUrl}" alt="Logo" style="max-height:${LOGO_PREVIEW_MAX_HEIGHT}px; max-width:${LOGO_PREVIEW_MAX_WIDTH}px; object-fit:contain;" /></div>`
@@ -1284,10 +1296,10 @@ th { text-align:left; color:#64748B; }
 .total { font-size:20px; font-weight:800; color:#006D6D; }
 .payment { margin-top:30px; padding-top:20px; border-top:1px solid #ddd; }
 .footer { margin-top:40px; font-size:12px; color:#666; display:flex; justify-content:space-between; }
-.print-toolbar { margin-bottom: 24px; display:flex; justify-content:space-between; align-items:center; gap:16px; }
+.print-toolbar { margin-bottom: 24px; display:flex !important; justify-content:space-between; align-items:center; gap:16px; }
 .toolbar-actions { display:flex; gap:10px; flex-wrap:wrap; }
 .preview-status { font-size:13px; color:#64748B; }
-.print-button { background:#6A1B9A; color:#fff; border:none; border-radius:10px; padding:10px 16px; font-weight:700; cursor:pointer; }
+.print-button { background:#6A1B9A; color:#fff; border:none; border-radius:10px; padding:10px 16px; font-weight:700; cursor:pointer; text-decoration:none; display:inline-block; }
 .email-button { background:#006D6D; color:#fff; border:none; border-radius:10px; padding:10px 16px; font-weight:700; cursor:pointer; }
 @media print {
   .print-toolbar { display:none !important; }
@@ -1301,7 +1313,7 @@ th { text-align:left; color:#64748B; }
 <div id="preview-email-status" class="preview-status"></div>
 <div class="toolbar-actions">
   ${allowEmail ? `<button id="preview-email-button" class="email-button" onclick="window.opener && window.opener.sendInvoiceFromPreview && window.opener.sendInvoiceFromPreview(${JSON.stringify(invoice.id)}, window)">Email Invoice</button>` : ""}
-  <button class="print-button" onclick="setTimeout(function(){ window.print(); }, 100)">Print / Download PDF</button>
+  <a href="javascript:void(0)" class="print-button" onclick="var w=window.open('','_blank');w.document.write(document.documentElement.outerHTML);w.document.close();w.print();">Print / Download PDF</a>
 </div>
 </div>
 
@@ -1397,6 +1409,9 @@ ${stripeCheckoutUrl || profile.paypalPaymentLink
 <div>Private & Confidential</div>
 </div>
 
+<script>
+  document.getElementById('print-btn') && document.getElementById('print-btn').addEventListener('click', function() { window.print(); });
+</script>
 </body>
 </html>`;
 }
