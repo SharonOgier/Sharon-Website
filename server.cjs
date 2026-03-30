@@ -358,18 +358,13 @@ async function generatePdfFromHtml(html) {
     throw new Error("No HTML provided for PDF generation.");
   }
 
-  const executablePath = await resolveChromiumExecutablePath();
+  const executablePath = await chromium.executablePath();
 
   const launchOptions = {
-    args: [
-      ...chromium.args,
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--disable-dev-shm-usage",
-    ],
+    args: chromium.args,
     defaultViewport: chromium.defaultViewport,
     executablePath,
-    headless: chromium.headless ?? true,
+    headless: true,
   };
 
   let browser;
@@ -463,30 +458,12 @@ async function sendEmailWithPdf({
   let attachmentSource = "none";
   let pdfError = null;
 
-  const normalisedAttachmentBase64 = normaliseBase64Attachment(attachmentBase64);
-  if (normalisedAttachmentBase64) {
-    try {
-      const candidateBuffer = Buffer.from(normalisedAttachmentBase64, "base64");
-      if (candidateBuffer.slice(0, 5).toString() === "%PDF-") {
-        pdfBuffer = candidateBuffer;
-        attachmentSource = "client";
-      } else {
-        throw new Error("Client PDF attachment was not a valid PDF.");
-      }
-    } catch (error) {
-      pdfError = error;
-      console.warn("Client PDF attachment could not be used:", error?.message || error);
-    }
-  }
-
-  if (!pdfBuffer) {
-    try {
-      pdfBuffer = await generatePdfFromHtml(resolvedHtml);
-      attachmentSource = "server";
-    } catch (error) {
-      pdfError = error;
-      console.warn("Server PDF generation failed. Sending email without attachment.", error?.message || error);
-    }
+  try {
+    pdfBuffer = await generatePdfFromHtml(resolvedHtml);
+    attachmentSource = "server";
+  } catch (error) {
+    pdfError = error;
+    console.warn("Server PDF generation failed. Sending email without attachment.", error);
   }
 
   const payload = {
