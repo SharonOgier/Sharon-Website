@@ -4,6 +4,68 @@ import { supabase } from "./client";
 
 
 
+// ── Toast notification system ──────────────────────────────
+function ToastContainer({ toasts, onRemove }) {
+  if (!toasts.length) return null;
+  return (
+    <div style={{
+      position: "fixed", bottom: 24, right: 24, zIndex: 99999,
+      display: "grid", gap: 10, maxWidth: 380,
+    }}>
+      {toasts.map((t) => (
+        <div key={t.id} style={{
+          display: "flex", alignItems: "flex-start", gap: 12,
+          padding: "14px 16px",
+          borderRadius: 14,
+          boxShadow: "0 4px 24px rgba(0,0,0,0.13)",
+          background: t.type === "error" ? "#FEE2E2"
+            : t.type === "success" ? "#DCFCE7"
+            : t.type === "warning" ? "#FEF9C3"
+            : "#EFF6FF",
+          borderLeft: `4px solid ${
+            t.type === "error" ? "#EF4444"
+            : t.type === "success" ? "#22C55E"
+            : t.type === "warning" ? "#EAB308"
+            : "#3B82F6"
+          }`,
+          fontSize: 14,
+          color: "#14202B",
+          fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+          minWidth: 280,
+          animation: "toastIn 0.2s ease",
+        }}>
+          <div style={{ flex: 1, lineHeight: 1.5 }}>
+            {t.title && <div style={{ fontWeight: 700, marginBottom: 2 }}>{t.title}</div>}
+            <div style={{ fontWeight: t.title ? 400 : 600 }}>{t.message}</div>
+          </div>
+          <button onClick={() => onRemove(t.id)} style={{
+            background: "none", border: "none", cursor: "pointer",
+            fontSize: 18, lineHeight: 1, color: "#64748B", padding: 0, marginTop: -1,
+          }}>×</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function useToast() {
+  const [toasts, setToasts] = React.useState([]);
+  const remove = (id) => setToasts((prev) => prev.filter((t) => t.id !== id));
+  const add = (message, type = "info", title = "", duration = 4000) => {
+    const id = Date.now() + Math.random();
+    setToasts((prev) => [...prev.slice(-4), { id, message, type, title }]);
+    if (duration > 0) setTimeout(() => remove(id), duration);
+  };
+  const toast = {
+    success: (message, title = "")  => add(message, "success", title),
+    error:   (message, title = "")  => add(message, "error",   title, 6000),
+    warning: (message, title = "")  => add(message, "warning", title),
+    info:    (message, title = "")  => add(message, "info",    title),
+  };
+  return { toasts, toast, removeToast: remove };
+}
+// ────────────────────────────────────────────────────────────
+
 const colours = {
   purple: "#6A1B9A",
   teal: "#006D6D",
@@ -43,9 +105,11 @@ const isValidEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value |
 
 const collectValidationErrors = (...groups) => groups.flat().filter(Boolean);
 
-const summariseValidationErrors = (title, errors) => {
+const summariseValidationErrors = (title, errors, toastFn) => {
   if (!errors.length) return;
-  alert(`${title}\n\n- ${errors.join("\n- ")}`);
+  if (toastFn) {
+    errors.forEach((e) => toastFn.error(e, title));
+  }
 };
 
 const DEFAULT_API_BASE_URL =
@@ -58,8 +122,8 @@ const DEFAULT_API_BASE_URL =
         window.location.hostname === "127.0.0.1"
       )
         ? "http://localhost:3001"
-        : "https://sharons-portal.onrender.com"
-    : "https://sharons-portal.onrender.com");
+        : (typeof window !== "undefined" ? window.location.origin : "")
+    : (typeof window !== "undefined" ? window.location.origin : ""));
 
 const normaliseApiBaseUrl = (value) => String(value || "").trim().replace(/\/$/, "");
 
@@ -1685,6 +1749,18 @@ try {
 
 
 export default function AccountingPortalPrototype() {
+  const { toasts, toast, removeToast } = useToast();
+  const [savingClient, setSavingClient] = useState(false);
+  const [savingClientEdits, setSavingClientEdits] = useState(false);
+  const [savingInvoice, setSavingInvoice] = useState(false);
+  const [savingInvoiceEdits, setSavingInvoiceEdits] = useState(false);
+  const [savingQuote, setSavingQuote] = useState(false);
+  const [savingQuoteEdits, setSavingQuoteEdits] = useState(false);
+  const [savingExpense, setSavingExpense] = useState(false);
+  const [savingBill, setSavingBill] = useState(false);
+  const [savingService, setSavingService] = useState(false);
+  const [savingIncomeSource, setSavingIncomeSource] = useState(false);
+  const [savingDocumentEdits, setSavingDocumentEdits] = useState(false);
   const [activePage, setActivePage] = useState("settings");
   const [activeSettingsTab, setActiveSettingsTab] = useState("Profile");
   const [authUser, setAuthUser] = useState(null);
@@ -1952,7 +2028,7 @@ export default function AccountingPortalPrototype() {
       nextProfile.email && !isValidEmail(nextProfile.email) && "Please enter a valid email address."
     );
     if (wizardErrors.length) {
-      summariseValidationErrors("Setup wizard", wizardErrors);
+      summariseValidationErrors("Setup wizard", wizardErrors, toast);
       return;
     }
 
@@ -2155,7 +2231,8 @@ export default function AccountingPortalPrototype() {
 
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
     const today = new Date().toISOString().slice(0, 10);
-    const folderPath = `sharons-accounting-service/expenses/${today}`;
+    const businessSlug = String(profile?.businessName || "portal").toLowerCase().replace(/[^a-z0-9]/g, "-").replace(/-+/g, "-").slice(0, 40);
+    const folderPath = `${businessSlug}/expenses/${today}`;
     const filePath = `${folderPath}/receipt-${Date.now()}-${safeName}`;
 
     const { error } = await supabase.storage
@@ -2180,7 +2257,8 @@ export default function AccountingPortalPrototype() {
 
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
     const today = new Date().toISOString().slice(0, 10);
-    const folderPath = `sharons-accounting-service/documents/${today}`;
+    const businessSlug = String(profile?.businessName || "portal").toLowerCase().replace(/[^a-z0-9]/g, "-").replace(/-+/g, "-").slice(0, 40);
+    const folderPath = `${businessSlug}/documents/${today}`;
     const filePath = `${folderPath}/document-${Date.now()}-${safeName}`;
 
     const { error } = await supabase.storage
@@ -2309,7 +2387,7 @@ export default function AccountingPortalPrototype() {
 
   const handleAuthSubmit = async () => {
     if (!supabase?.auth) {
-      alert("Supabase Auth is not configured in client.js");
+      toast.error("Supabase Auth is not configured in client.js");
       return;
     }
 
@@ -2323,7 +2401,7 @@ export default function AccountingPortalPrototype() {
       authMode === "signup" && password !== confirmPassword && "Passwords do not match."
     );
     if (errors.length) {
-      summariseValidationErrors("Authentication", errors);
+      summariseValidationErrors("Authentication", errors, toast);
       return;
     }
 
@@ -2332,7 +2410,7 @@ export default function AccountingPortalPrototype() {
       if (authMode === "signup") {
         const { error } = await supabase.auth.signUp({ email, password });
         if (error) throw error;
-        alert("Account created. Check your email if confirmation is enabled, then sign in.");
+        toast.success("Account created! Check your email to confirm, then sign in.");
         setAuthMode("signin");
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -2340,7 +2418,7 @@ export default function AccountingPortalPrototype() {
       }
     } catch (error) {
       console.error("SUPABASE AUTH ERROR:", error);
-      alert(error.message || "Authentication failed");
+      toast.error(error.message || "Authentication failed");
     } finally {
       setAuthLoading(false);
     }
@@ -2348,13 +2426,13 @@ export default function AccountingPortalPrototype() {
 
   const handlePasswordReset = async () => {
     if (!supabase?.auth) {
-      alert("Supabase Auth is not configured in client.js");
+      toast.error("Supabase Auth is not configured in client.js");
       return;
     }
 
     const email = String(authForm.email || "").trim();
     if (!isValidEmail(email)) {
-      alert("Enter your email first, then click Reset password.");
+      toast.warning("Enter your email first, then click Reset password.");
       return;
     }
 
@@ -2363,10 +2441,10 @@ export default function AccountingPortalPrototype() {
         redirectTo: window.location.origin,
       });
       if (error) throw error;
-      alert("Password reset email sent.");
+      toast.success("Password reset email sent!");
     } catch (error) {
       console.error("SUPABASE PASSWORD RESET ERROR:", error);
-      alert(error.message || "Password reset failed");
+      toast.error(error.message || "Password reset failed");
     }
   };
 
@@ -2550,7 +2628,7 @@ export default function AccountingPortalPrototype() {
   const uploadDocument = async () => {
     try {
       if (!documentFile) {
-        alert("Please select a file first");
+        toast.warning("Please select a file first");
         return;
       }
 
@@ -2568,11 +2646,13 @@ export default function AccountingPortalPrototype() {
 
       setSupabaseSyncStatus("Document saved to Supabase database");
       setDocumentFile(null);
-      alert("Document uploaded");
+      toast.success("Document uploaded successfully!");
     } catch (err) {
       console.error("DOCUMENT UPLOAD ERROR:", err);
       setSupabaseSyncStatus(err.message || "Document save failed");
-      alert(err.message);
+      toast.error(err.message || "Something went wrong");
+    } finally {
+      setSavingExpense(false);
     }
   };
 
@@ -2585,7 +2665,7 @@ export default function AccountingPortalPrototype() {
     } catch (error) {
       console.error("DOCUMENT DELETE ERROR:", error);
       setSupabaseSyncStatus(error.message || "Document delete failed");
-      alert(error.message || "Document delete failed");
+      toast.error(error.message || "Document delete failed");
     }
   };
 
@@ -2656,6 +2736,7 @@ export default function AccountingPortalPrototype() {
 
   const saveService = async () => {
     if (!serviceForm.name.trim() || !serviceForm.gstType) return;
+    setSavingService(true);
     const payload = {
       id: editingServiceId || Date.now(),
       name: serviceForm.name.trim(),
@@ -2678,7 +2759,9 @@ export default function AccountingPortalPrototype() {
     } catch (error) {
       console.error("SERVICE SAVE ERROR:", error);
       setSupabaseSyncStatus(error.message || "Service save failed");
-      alert(error.message || "Service save failed");
+      toast.error(error.message || "Service save failed");
+    } finally {
+      setSavingService(false);
     }
   };
 
@@ -2691,7 +2774,7 @@ export default function AccountingPortalPrototype() {
     } catch (error) {
       console.error("SERVICE DELETE ERROR:", error);
       setSupabaseSyncStatus(error.message || "Service delete failed");
-      alert(error.message || "Service delete failed");
+      toast.error(error.message || "Service delete failed");
     }
   };
 
@@ -2707,9 +2790,10 @@ export default function AccountingPortalPrototype() {
   };
 
   const saveIncomeSource = async () => {
+    setSavingIncomeSource(true);
     const incomeErrors = validateIncomeSourcePayload({ ...incomeSourceForm, beforeTax: safeNumber(incomeSourceForm.beforeTax) });
     if (incomeErrors.length) {
-      summariseValidationErrors("Income source", incomeErrors);
+      summariseValidationErrors("Income source", incomeErrors, toast);
       return;
     }
 
@@ -2731,7 +2815,9 @@ export default function AccountingPortalPrototype() {
     } catch (error) {
       console.error("INCOME SOURCE SAVE ERROR:", error);
       setSupabaseSyncStatus(error.message || "Income source save failed");
-      alert(error.message || "Income source save failed");
+      toast.error(error.message || "Income source save failed");
+    } finally {
+      setSavingIncomeSource(false);
     }
   };
 
@@ -2914,7 +3000,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
 <body>
   <div class="card">
     <div class="title">QUOTE</div>
-    <div class="row"><span class="label">Business:</span> ${profile?.businessName || "Sharon's Accounting Service"}</div>
+    <div class="row"><span class="label">Business:</span> ${profile?.businessName || "Your Business"}</div>
     <div class="row"><span class="label">Quote Number:</span> ${emailDocumentRecord?.quoteNumber || ""}</div>
     <div class="row"><span class="label">Quote Date:</span> ${formatDateAU(emailDocumentRecord?.quoteDate)}</div>
     <div class="row"><span class="label">Expiry Date:</span> ${formatDateAU(emailDocumentRecord?.expiryDate)}</div>
@@ -2939,8 +3025,8 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     to: recipientList,
     subject:
       documentType === "invoice"
-        ? `Invoice ${emailDocumentRecord?.invoiceNumber || ""} from ${profile.businessName || "Sharon's Accounting Service"}`
-        : `Quote ${emailDocumentRecord?.quoteNumber || ""} from ${profile.businessName || "Sharon's Accounting Service"}`,
+        ? `Invoice ${emailDocumentRecord?.invoiceNumber || ""} from ${profile.businessName || "Your Business"}`
+        : `Quote ${emailDocumentRecord?.quoteNumber || ""} from ${profile.businessName || "Your Business"}`,
     customerName: getClientName(emailDocumentRecord?.clientId),
     clientName: getClientById(emailDocumentRecord?.clientId)?.name || "",
     clientEmail: getClientById(emailDocumentRecord?.clientId)?.email || "",
@@ -2987,18 +3073,6 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       ? `${serverBaseUrl}/api/send-invoice-attachment-email`
       : `${serverBaseUrl}/api/send-document-email`;
 
-  console.log("SEND DOCUMENT EMAIL REQUEST:", {
-    endpoint,
-    documentType,
-    recipients: recipientList,
-    subject: payload.subject,
-    filename: payload.filename,
-    hasHtml: Boolean(payload.html),
-    hasDocumentHtml: Boolean(payload.documentHtml),
-    hasInvoiceHtml: Boolean(payload.invoiceHtml),
-    hasQuoteHtml: Boolean(payload.quoteHtml),
-    quoteHtmlLength: payload.quoteHtml?.length || 0,
-  });
 
   let response;
 
@@ -3024,12 +3098,6 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     console.error("EMAIL RESPONSE PARSE ERROR:", error);
   }
 
-  console.log("SEND DOCUMENT EMAIL RESPONSE:", {
-    endpoint,
-    status: response.status,
-    ok: response.ok,
-    data,
-  });
 
   if (!response.ok) {
     console.error("EMAIL ERROR:", data);
@@ -3286,13 +3354,14 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     };
     const saveClientEdits = async () => {
     if (!clientEditorForm) return;
+    setSavingClientEdits(true);
     const payload = { ...clientEditorForm,
       name: String(clientEditorForm.name || "").trim(),
       address: clientEditorForm.addressDetails || clientEditorForm.address || "",
     };
     const errors = validateClientPayload(payload);
     if (errors.length) {
-      summariseValidationErrors("Client", errors);
+      summariseValidationErrors("Client", errors, toast);
       return;
     }
     try {
@@ -3303,7 +3372,9 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     } catch (error) {
       console.error("CLIENT EDIT SAVE ERROR:", error);
       setSupabaseSyncStatus(error.message || "Client update failed");
-      alert(error.message || "Client update failed");
+      toast.error(error.message || "Client update failed");
+    } finally {
+      setSavingClientEdits(false);
     }
     };
 
@@ -3319,7 +3390,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     };
     const errors = validateExpensePayload(payload);
     if (errors.length) {
-      summariseValidationErrors("Expense", errors);
+      summariseValidationErrors("Expense", errors, toast);
       return;
     }
     try {
@@ -3330,7 +3401,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     } catch (error) {
       console.error("EXPENSE EDIT SAVE ERROR:", error);
       setSupabaseSyncStatus(error.message || "Expense update failed");
-      alert(error.message || "Expense update failed");
+      toast.error(error.message || "Expense update failed");
     }
     };
 
@@ -3346,7 +3417,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       setSupabaseSyncStatus("Bill marked paid");
     } catch (error) {
       console.error("MARK BILL PAID ERROR:", error);
-      alert(error.message || "Could not mark bill paid");
+      toast.error(error.message || "Could not mark bill paid");
     }
     };
 
@@ -3361,7 +3432,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       setSupabaseSyncStatus("Bill marked unpaid");
     } catch (error) {
       console.error("MARK BILL UNPAID ERROR:", error);
-      alert(error.message || "Could not mark bill unpaid");
+      toast.error(error.message || "Could not mark bill unpaid");
     }
     };
 
@@ -3373,7 +3444,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     };
     const errors = validateIncomeSourcePayload(payload);
     if (errors.length) {
-      summariseValidationErrors("Income source", errors);
+      summariseValidationErrors("Income source", errors, toast);
       return;
     }
     try {
@@ -3384,17 +3455,18 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     } catch (error) {
       console.error("INCOME SOURCE EDIT SAVE ERROR:", error);
       setSupabaseSyncStatus(error.message || "Income source update failed");
-      alert(error.message || "Income source update failed");
+      toast.error(error.message || "Income source update failed");
     }
     };
     const saveDocumentEdits = async () => {
     if (!documentEditorForm) return;
+    setSavingDocumentEdits(true);
     const payload = { ...documentEditorForm,
       name: String(documentEditorForm.name || "").trim(),
       url: String(documentEditorForm.url || "").trim(),
     };
     if (!payload.name) {
-      alert("Document name is required.");
+      toast.warning("Document name is required");
       return;
     }
     try {
@@ -3405,7 +3477,9 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     } catch (error) {
       console.error("DOCUMENT EDIT SAVE ERROR:", error);
       setSupabaseSyncStatus(error.message || "Document update failed");
-      alert(error.message || "Document update failed");
+      toast.error(error.message || "Document update failed");
+    } finally {
+      setSavingDocumentEdits(false);
     }
     };
 
@@ -3418,7 +3492,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     };
     const errors = validateClientPayload(payload);
     if (errors.length) {
-      summariseValidationErrors("Client", errors);
+      summariseValidationErrors("Client", errors, toast);
       return;
     }
 
@@ -3430,15 +3504,17 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     } catch (error) {
       console.error("CLIENT SAVE ERROR:", error);
       setSupabaseSyncStatus(error.message || "Client save failed");
-      alert(error.message || "Client save failed");
+      toast.error(error.message || "Client save failed");
+    } finally {
+      setSavingClient(false);
     }
     };
 
     const saveInvoice = async () => {
     const computedLines = computeLineItemTotals(invoiceForm.lineItems, invoiceForm.clientId);
     const hasLines = computedLines.some((l) => l.rowSubtotal > 0 || l.description);
-    if (!invoiceForm.clientId) { alert("Invoice client is required."); return; }
-    if (!hasLines) { alert("Add at least one line item with a description and amount."); return; }
+    if (!invoiceForm.clientId) { toast.warning("Please select a client for this invoice"); return; }
+    if (!hasLines) { toast.warning("Add at least one line item with a description and amount"); return; }
 
     const subtotal = computedLines.reduce((s, l) => s + l.rowSubtotal, 0);
     const gst = computedLines.reduce((s, l) => s + l.rowGst, 0);
@@ -3498,11 +3574,13 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
         currencyCode: nextInvoice.currencyCode || prev.currencyCode,
       }));
       setSupabaseSyncStatus(saveMessage);
-      alert(saveMessage);
+      toast.success(saveMessage);
     } catch (error) {
       console.error("INVOICE SAVE ERROR:", error);
       setSupabaseSyncStatus(error.message || "Invoice save failed");
-      alert(error.message || "Invoice save failed");
+      toast.error(error.message || "Invoice save failed");
+    } finally {
+      setSavingInvoice(false);
     }
     };
 
@@ -3569,14 +3647,16 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     } catch (error) {
       console.error("INVOICE UPDATE ERROR:", error);
       setSupabaseSyncStatus(error.message || "Invoice update failed");
-      alert(error.message || "Invoice update failed");
+      toast.error(error.message || "Invoice update failed");
+    } finally {
+      setSavingInvoiceEdits(false);
     }
     };
     const saveQuote = async () => {
     const computedLines = computeLineItemTotals(quoteForm.lineItems, quoteForm.clientId);
     const hasLines = computedLines.some((l) => l.rowSubtotal > 0 || l.description);
-    if (!quoteForm.clientId) { alert("Quote client is required."); return; }
-    if (!hasLines) { alert("Add at least one line item with a description and amount."); return; }
+    if (!quoteForm.clientId) { toast.warning("Please select a client for this quote"); return; }
+    if (!hasLines) { toast.warning("Add at least one line item with a description and amount"); return; }
 
     const subtotal = computedLines.reduce((s, l) => s + l.rowSubtotal, 0);
     const gst = computedLines.reduce((s, l) => s + l.rowGst, 0);
@@ -3625,11 +3705,13 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
         currencyCode: nextQuote.currencyCode || prev.currencyCode,
       }));
       setSupabaseSyncStatus(saveMessage);
-      alert(saveMessage);
+      toast.success(saveMessage);
     } catch (error) {
       console.error("QUOTE SAVE ERROR:", error);
       setSupabaseSyncStatus(error.message || "Quote save failed");
-      alert(error.message || "Quote save failed");
+      toast.error(error.message || "Quote save failed");
+    } finally {
+      setSavingQuote(false);
     }
     };
 
@@ -3686,7 +3768,9 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     } catch (error) {
       console.error("QUOTE UPDATE ERROR:", error);
       setSupabaseSyncStatus(error.message || "Quote update failed");
-      alert(error.message || "Quote update failed");
+      toast.error(error.message || "Quote update failed");
+    } finally {
+      setSavingQuoteEdits(false);
     }
     };
     const sendInvoiceFromPreview = async (invoiceId, previewWindow) => {
@@ -3833,13 +3917,11 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     try {
       const expenseErrors = validateExpensePayload({ ...expenseForm, amount: safeNumber(expenseForm.amount) });
       if (expenseErrors.length) {
-        summariseValidationErrors("Expense", expenseErrors);
+        summariseValidationErrors("Expense", expenseErrors, toast);
         return;
       }
-      console.log("SAVE EXPENSE CLICKED");
-      console.log("receiptFile:", receiptFile);
       if (!expenseForm.supplier || !expenseForm.amount || !expenseForm.category) {
-        alert("Please fill supplier, amount and category");
+        toast.warning("Please fill in supplier, amount and category");
         return;
       }
 
@@ -3849,14 +3931,10 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       let receiptFileName = "";
 
       if (receiptFile) {
-        console.log("Uploading receipt now...");
-        console.log("UPLOAD FUNCTION CALLED");
         const uploaded = await uploadReceiptToSupabase(receiptFile);
-        console.log("Upload result:", uploaded);
         receiptUrl = uploaded.receiptUrl;
         receiptFileName = uploaded.fileName;
       } else {
-        console.log("No receipt file selected");
       }
 
       const payload = {
@@ -3887,11 +3965,11 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       });
       setSupabaseSyncStatus("Expense saved to Supabase database");
       setReceiptFile(null);
-      alert("Expense saved");
+      toast.success("Expense saved!");
     } catch (err) {
       console.error("SAVE ERROR:", err);
       setSupabaseSyncStatus(err.message || "Expense save failed");
-      alert(err.message);
+      toast.error(err.message || "Something went wrong");
     }
     };
 
@@ -3909,13 +3987,13 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     } catch (error) {
       console.error("MARK INVOICE PAID ERROR:", error);
       setSupabaseSyncStatus(error.message || "Invoice payment update failed");
-      alert(error.message || "Invoice payment update failed");
+      toast.error(error.message || "Invoice payment update failed");
     }
     };
     async function simulateInvoicePayment(invoiceId) {
     const invoice = invoices.find((x) => String(x.id) === String(invoiceId));
     if (!invoice) {
-      alert("Invoice not found");
+      toast.error("Invoice not found");
       return;
     }
 
@@ -3932,16 +4010,12 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       );
       const client = getClientById(invoice.clientId);
 
-      console.log("📧 SIMULATED PAYMENT RECEIPT");
-      console.log("To:", client?.email || "no email");
-      console.log("Invoice:", invoice.invoiceNumber);
-      console.log("Amount:", invoice.total);
-      setSupabaseSyncStatus("Simulated payment saved to Supabase database");
-      alert(`Simulated payment completed for ${invoice.invoiceNumber}`);
+            setSupabaseSyncStatus("Simulated payment saved to Supabase database");
+      toast.success(`Simulated payment completed for ${invoice.invoiceNumber}`);
     } catch (error) {
       console.error("SIMULATED PAYMENT ERROR:", error);
       setSupabaseSyncStatus(error.message || "Simulated payment failed");
-      alert(error.message || "Simulated payment failed");
+      toast.error(error.message || "Simulated payment failed");
     }
     }
 
@@ -3954,7 +4028,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     } catch (error) {
       console.error("INVOICE DELETE ERROR:", error);
       setSupabaseSyncStatus(error.message || "Invoice delete failed");
-      alert(error.message || "Invoice delete failed");
+      toast.error(error.message || "Invoice delete failed");
     }
     };
     const deleteQuote = async (id) => {
@@ -3966,7 +4040,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     } catch (error) {
       console.error("QUOTE DELETE ERROR:", error);
       setSupabaseSyncStatus(error.message || "Quote delete failed");
-      alert(error.message || "Quote delete failed");
+      toast.error(error.message || "Quote delete failed");
     }
     };
     const deleteExpense = async (id) => {
@@ -3978,7 +4052,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     } catch (error) {
       console.error("EXPENSE DELETE ERROR:", error);
       setSupabaseSyncStatus(error.message || "Expense delete failed");
-      alert(error.message || "Expense delete failed");
+      toast.error(error.message || "Expense delete failed");
     }
     };
     const deleteClient = async (id) => {
@@ -3990,7 +4064,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     } catch (error) {
       console.error("CLIENT DELETE ERROR:", error);
       setSupabaseSyncStatus(error.message || "Client delete failed");
-      alert(error.message || "Client delete failed");
+      toast.error(error.message || "Client delete failed");
     }
     };
     const deleteIncomeSource = async (id) => {
@@ -4002,7 +4076,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     } catch (error) {
       console.error("INCOME SOURCE DELETE ERROR:", error);
       setSupabaseSyncStatus(error.message || "Income source delete failed");
-      alert(error.message || "Income source delete failed");
+      toast.error(error.message || "Income source delete failed");
     }
     };
 
@@ -4034,17 +4108,8 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     const serverBaseUrl = getApiBaseUrl(profile?.stripeServerUrl);
     const selectedClient = getClientById(invoice?.clientId) || {};
 
-    console.log("FULL INVOICE OBJECT:", invoice);
 
     const rawTotal = resolveInvoiceStripeAmount(invoice);
-
-    console.log("INVOICE TOTAL DEBUG:", {
-      total: invoice?.total,
-      subtotal: invoice?.subtotal,
-      gst: invoice?.gst,
-      quantity: invoice?.quantity,
-      rawTotal,
-    });
 
     if (!Number.isFinite(rawTotal) || rawTotal <= 0) {
       console.error("Stripe invoice total could not be resolved", { invoice, rawTotal });
@@ -4071,8 +4136,6 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       )}&invoiceId=${encodeURIComponent(String(invoice?.id || ""))}`,
     };
 
-    console.log("Stripe invoice payload", payload);
-    console.log("Stripe amount being sent:", payload.amount, "type:", typeof payload.amount);
     
     let response;
 
@@ -4110,7 +4173,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       window.location.href = checkoutUrl;
     } catch (error) {
       console.error("STRIPE CHECKOUT ERROR:", error);
-      alert(error.message || "Stripe checkout failed");
+      toast.error(error.message || "Stripe checkout failed");
     }
     };
 
@@ -4169,7 +4232,6 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
 
     try {
       if (!stripeCheckoutUrl && resolveInvoiceStripeAmount(invoice) > 0) {
-        console.log("PREVIEW REQUESTING STRIPE SESSION FOR:", invoice.invoiceNumber);
         stripeCheckoutUrl = await createStripeCheckoutForInvoice(invoice);
 
         if (stripeCheckoutUrl) {
@@ -4354,7 +4416,10 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
 
       const atoState = { income: incomeRecords, expenses: expenseRecords };
       const encoded = encodeURIComponent(JSON.stringify(atoState));
-      window.open(`https://www.sharonogier.com/australian-ato-tax-form.html#import=${encoded}`, "_blank");
+      const atoBaseUrl = profile?.atoExportUrl
+        || (typeof import.meta !== "undefined" && import.meta.env?.VITE_ATO_EXPORT_URL)
+        || "https://www.sharonogier.com/australian-ato-tax-form.html";
+      window.open(`${atoBaseUrl}#import=${encoded}`, "_blank");
     };
 
     const monthlyFinance = useMemo(() => {
@@ -4550,7 +4615,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     const renderDashboard = () => (
     <div style={{ display: "grid", gap: 20 }}>
       <DashboardHero
-        title={profile.businessName || "Sharon’s Accounting Service"}
+        title={profile.businessName || "My Portal"}
         subtitle="Your dashboard now reads live from the SaaS records already stored in the portal. Paid invoices, expenses, GST, tax reserves, and client performance are summarised here automatically so reporting stays in one place."
         highlight={currency(totals.safeToSpend)}
       >
@@ -5103,8 +5168,8 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
           <button style={buttonSecondary} onClick={() => setClientForm(blankClient)}>
             Cancel
           </button>
-          <button style={buttonPrimary} onClick={saveClient}>
-            Save
+          <button style={{ ...buttonPrimary, opacity: savingClient ? 0.7 : 1 }} onClick={saveClient} disabled={savingClient}>
+            {savingClient ? "Saving..." : "Save Client"}
           </button>
         </div>
       </SectionCard>
@@ -5154,7 +5219,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
             </div>
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, marginTop: 16 }}>
               <button style={buttonSecondary} onClick={closeClientEditor}>Cancel</button>
-              <button style={buttonPrimary} onClick={saveClientEdits}>Save Changes</button>
+              <button style={{ ...buttonPrimary, opacity: savingClientEdits ? 0.7 : 1 }} onClick={saveClientEdits} disabled={savingClientEdits}>{savingClientEdits ? "Saving..." : "Save Changes"}</button>
             </div>
           </div>
         ) : null}
@@ -5378,8 +5443,8 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
                 Preview
               </button>
               <button style={buttonSecondary}>Save Draft</button>
-              <button style={buttonPrimary} onClick={saveInvoice}>
-                Save Invoice
+              <button style={{ ...buttonPrimary, opacity: savingInvoice ? 0.7 : 1 }} onClick={saveInvoice} disabled={savingInvoice}>
+                {savingInvoice ? "Saving..." : "Save Invoice"}
               </button>
             </div>
           }
@@ -5769,7 +5834,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
 
                 <div style={{ display: "flex", justifyContent: "flex-end", gap: 12 }}>
                   <button style={buttonSecondary} onClick={closeInvoiceEditor}>Cancel</button>
-                  <button style={buttonPrimary} onClick={saveInvoiceEdits}>Save Changes</button>
+                  <button style={{ ...buttonPrimary, opacity: savingInvoiceEdits ? 0.7 : 1 }} onClick={saveInvoiceEdits} disabled={savingInvoiceEdits}>{savingInvoiceEdits ? "Saving..." : "Save Changes"}</button>
                 </div>
               </div>
             </div>
@@ -5929,7 +5994,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
             <div style={{ display: "flex", gap: 10 }}>
               <button style={buttonSecondary} onClick={openQuotePreview}>Preview</button>
               <button style={buttonSecondary}>Save Draft</button>
-              <button style={buttonPrimary} onClick={saveQuote}>Save Quote</button>
+              <button style={{ ...buttonPrimary, opacity: savingQuote ? 0.7 : 1 }} onClick={saveQuote} disabled={savingQuote}>{savingQuote ? "Saving..." : "Save Quote"}</button>
             </div>
           }
         >
@@ -6245,7 +6310,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
 
                 <div style={{ display: "flex", justifyContent: "flex-end", gap: 12 }}>
                   <button style={buttonSecondary} onClick={closeQuoteEditor}>Cancel</button>
-                  <button style={buttonPrimary} onClick={saveQuoteEdits}>Save Changes</button>
+                  <button style={{ ...buttonPrimary, opacity: savingQuoteEdits ? 0.7 : 1 }} onClick={saveQuoteEdits} disabled={savingQuoteEdits}>{savingQuoteEdits ? "Saving..." : "Save Changes"}</button>
                 </div>
               </div>
             </div>
@@ -6593,8 +6658,8 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             <button style={buttonPrimary} onClick={async () => {
               const totalAmt = billLineItems.reduce((s, l) => s + safeNumber(l.amount), 0);
-              if (!expenseForm.supplier) { alert("Supplier name is required."); return; }
-              if (totalAmt <= 0) { alert("Add at least one line with an amount."); return; }
+              if (!expenseForm.supplier) { toast.warning("Supplier name is required"); return; }
+              if (totalAmt <= 0) { toast.warning("Add at least one line with an amount"); return; }
               const primaryCategory = billLineItems.find((l) => l.category)?.category || "Other";
               const combinedDesc = billLineItems.map((l) => l.description).filter(Boolean).join("; ");
               const payload = {
@@ -6613,7 +6678,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
                 setSupabaseSyncStatus("Bill saved");
                 setExpenseForm({ date: new Date().toISOString().slice(0, 10), dueDate: new Date().toISOString().slice(0, 10), supplier: "", category: "", description: "", amount: "", expenseType: "", workType: profile.workType, receiptFileName: "", receiptUrl: "" });
                 setBillLineItems([blankBillLine()]);
-              } catch (err) { alert(err.message || "Save failed"); }
+              } catch (err) { toast.error(err.message || "Save failed"); }
             }}>Save bill</button>
             <button style={buttonSecondary} onClick={() => {
               setExpenseForm({ date: new Date().toISOString().slice(0, 10), dueDate: new Date().toISOString().slice(0, 10), supplier: "", category: "", description: "", amount: "", expenseType: "", workType: profile.workType, receiptFileName: "", receiptUrl: "" });
@@ -6977,7 +7042,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
             </div>
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, marginTop: 16 }}>
               <button style={buttonSecondary} onClick={closeDocumentEditor}>Cancel</button>
-              <button style={buttonPrimary} onClick={saveDocumentEdits}>Save Changes</button>
+              <button style={{ ...buttonPrimary, opacity: savingDocumentEdits ? 0.7 : 1 }} onClick={saveDocumentEdits} disabled={savingDocumentEdits}>{savingDocumentEdits ? "Saving..." : "Save Changes"}</button>
             </div>
           </div>
         ) : null}
@@ -7015,7 +7080,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     const renderAuthScreen = () => (
     <div style={{ minHeight: "100vh", background: colours.bg, display: "grid", placeItems: "center", padding: 24 }}>
       <div style={{ ...cardStyle, width: "100%", maxWidth: 520, padding: 28 }}>
-        <div style={{ fontSize: 28, fontWeight: 900, color: colours.text, marginBottom: 8 }}>Sharon Portal Sign In</div>
+        <div style={{ fontSize: 28, fontWeight: 900, color: colours.text, marginBottom: 8 }}>Portal Sign In</div>
         <div style={{ fontSize: 14, color: colours.muted, marginBottom: 20 }}>
           Sign in with Supabase Auth to view and edit invoices, quotes, expenses, and client data.
         </div>
@@ -7414,7 +7479,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
           }}
         >
           <div style={{ fontSize: 20, fontWeight: 900, color: colours.purple, marginBottom: 20 }}>
-            {profile.businessName || "Sharons Accounting Service"}
+            {profile.businessName || "My Portal"}
           </div>
 
           <div style={{ fontSize: 13, color: colours.muted, marginBottom: 16 }}>
@@ -7496,6 +7561,8 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
         setIncomeSourceForm={setIncomeSourceForm}
         onSave={saveIncomeSource}
       />
+      <ToastContainer toasts={toasts} onRemove={removeToast} />
+      <style>{`@keyframes toastIn { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }`}</style>
     </div> 
     );
 }
