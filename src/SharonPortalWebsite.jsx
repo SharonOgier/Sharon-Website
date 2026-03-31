@@ -1930,6 +1930,10 @@ export default function AccountingPortalPrototype() {
   const [suppliers, setSuppliers] = useState([]);
   const [showSupplierModal, setShowSupplierModal] = useState(false);
   const [showClientModal, setShowClientModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importType, setImportType] = useState("clients");
+  const [importRows, setImportRows] = useState([]);
+  const [importError, setImportError] = useState("");
   const [editingClientId, setEditingClientId] = useState(null);
   const [clientModalForm, setClientModalForm] = useState({ name: "", businessName: "", email: "", phone: "", address: "", abn: "", defaultCurrency: "AUD $", workType: "" });
   const [invClientSearch, setInvClientSearch] = useState("");
@@ -2817,6 +2821,60 @@ export default function AccountingPortalPrototype() {
       setClientModalForm({ name: "", businessName: "", email: "", phone: "", address: "", abn: "", defaultCurrency: "AUD $", workType: "" });
       setEditingClientId(null);
     } catch (err) { toast.error(err.message || "Failed to save client"); }
+  };
+
+  const downloadTemplate = (type) => {
+    const clientHeaders = "Name,Business Name,Email,Phone,Address,ABN,Currency,Work Type";
+    const clientExample = "John Smith,Smith Farms Pty Ltd,john@smithfarms.com.au,0412 345 678,123 Farm Rd Dubbo NSW 2830,12 345 678 901,AUD $,Primary production";
+    const supplierHeaders = "Name,Contact Person,Email,Phone,Address,ABN,Notes";
+    const supplierExample = "AGL Energy,Jane Brown,accounts@agl.com.au,1800 123 456,72 Yeo St Neutral Bay NSW 2089,74 115 061 375,Monthly billing";
+    const csv = type === "clients"
+      ? `${clientHeaders}\n${clientExample}\n`
+      : `${supplierHeaders}\n${supplierExample}\n`;
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = type === "clients" ? "clients_template.csv" : "suppliers_template.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const parseImportCSV = (text, type) => {
+    const lines = text.trim().split(/\r?\n/).filter(Boolean);
+    if (lines.length < 2) return { rows: [], error: "File must have a header row and at least one data row." };
+    const headers = lines[0].split(",").map((h) => h.trim().toLowerCase().replace(/\s+/g, ""));
+    const rows = [];
+    for (let i = 1; i < lines.length; i++) {
+      const vals = lines[i].split(",").map((v) => v.trim().replace(/^"|"$/g, ""));
+      const row = {};
+      headers.forEach((h, idx) => { row[h] = vals[idx] || ""; });
+      if (type === "clients") {
+        rows.push({ name: row["name"] || row["clientname"] || "", businessName: row["businessname"] || "", email: row["email"] || "", phone: row["phone"] || "", address: row["address"] || "", abn: row["abn"] || "", defaultCurrency: row["currency"] || "AUD $", workType: row["worktype"] || "" });
+      } else {
+        rows.push({ name: row["name"] || row["suppliername"] || "", contactPerson: row["contactperson"] || "", email: row["email"] || "", phone: row["phone"] || "", address: row["address"] || "", abn: row["abn"] || "", notes: row["notes"] || "" });
+      }
+    }
+    const valid = rows.filter((r) => r.name.trim());
+    if (!valid.length) return { rows: [], error: "No valid rows found. Make sure the Name column is filled in." };
+    return { rows: valid, error: "" };
+  };
+
+  const confirmImport = async () => {
+    if (!importRows.length) return;
+    try {
+      const table = importType === "clients" ? SUPABASE_TABLES.clients : SUPABASE_TABLES.suppliers;
+      const existing = importType === "clients" ? clients : suppliers;
+      const existingNames = new Set(existing.map((r) => r.name.toLowerCase().trim()));
+      const newRows = importRows.filter((r) => !existingNames.has(r.name.toLowerCase().trim()));
+      const saved = await Promise.all(newRows.map((r) => upsertRecordInDatabase(table, { ...r, id: Date.now() + Math.random() })));
+      if (importType === "clients") setClients((prev) => [...prev, ...saved]);
+      else setSuppliers((prev) => [...prev, ...saved]);
+      toast.success(`Imported ${saved.length} ${importType}${newRows.length < importRows.length ? ` (${importRows.length - newRows.length} duplicates skipped)` : ""}!`);
+      setShowImportModal(false);
+      setImportRows([]);
+      setImportError("");
+    } catch (err) { toast.error(err.message || "Import failed"); }
   };
 
   const getStableProfileRowId = () => {
@@ -5726,9 +5784,14 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
                 ) : null;
               })()}
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
-                <button style={{ ...buttonSecondary, fontSize: 13 }} onClick={() => { setClientModalForm({ name: "", businessName: "", email: "", phone: "", address: "", abn: "", defaultCurrency: "AUD $", workType: "" }); setEditingClientId(null); setShowClientModal(true); }}>
-                  + New Client
-                </button>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button style={{ ...buttonSecondary, fontSize: 13 }} onClick={() => { setClientModalForm({ name: "", businessName: "", email: "", phone: "", address: "", abn: "", defaultCurrency: "AUD $", workType: "" }); setEditingClientId(null); setShowClientModal(true); }}>
+                    + New Client
+                  </button>
+                  <button style={{ ...buttonSecondary, fontSize: 13 }} onClick={() => { setImportType("clients"); setImportRows([]); setImportError(""); setShowImportModal(true); }}>
+                    ⬆ Import
+                  </button>
+                </div>
                 <button style={{ ...buttonPrimary, opacity: invoiceForm.clientId ? 1 : 0.4 }}
                   disabled={!invoiceForm.clientId}
                   onClick={() => setInvoiceWizardStep(2)}>Next: Details →</button>
@@ -6435,9 +6498,14 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
                 ) : null;
               })()}
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
-                <button style={{ ...buttonSecondary, fontSize: 13 }} onClick={() => { setClientModalForm({ name: "", businessName: "", email: "", phone: "", address: "", abn: "", defaultCurrency: "AUD $", workType: "" }); setEditingClientId(null); setShowClientModal(true); }}>
-                  + New Client
-                </button>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button style={{ ...buttonSecondary, fontSize: 13 }} onClick={() => { setClientModalForm({ name: "", businessName: "", email: "", phone: "", address: "", abn: "", defaultCurrency: "AUD $", workType: "" }); setEditingClientId(null); setShowClientModal(true); }}>
+                    + New Client
+                  </button>
+                  <button style={{ ...buttonSecondary, fontSize: 13 }} onClick={() => { setImportType("clients"); setImportRows([]); setImportError(""); setShowImportModal(true); }}>
+                    ⬆ Import
+                  </button>
+                </div>
                 <button style={{ ...buttonPrimary, opacity: quoteForm.clientId ? 1 : 0.4 }}
                   disabled={!quoteForm.clientId}
                   onClick={() => setQuoteWizardStep(2)}>Next: Details →</button>
@@ -7443,7 +7511,10 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
 
 
         <SectionCard title="Supplier Directory" right={
-          <button style={buttonPrimary} onClick={() => { setSupplierForm({ name: "", email: "", phone: "", address: "", abn: "", contactPerson: "", notes: "" }); setEditingSupplierId(null); setShowSupplierModal(true); }}>+ Add Supplier</button>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button style={buttonSecondary} onClick={() => { setImportType("suppliers"); setImportRows([]); setImportError(""); setShowImportModal(true); }}>⬆ Import</button>
+            <button style={buttonPrimary} onClick={() => { setSupplierForm({ name: "", email: "", phone: "", address: "", abn: "", contactPerson: "", notes: "" }); setEditingSupplierId(null); setShowSupplierModal(true); }}>+ Add Supplier</button>
+          </div>
         }>
           <DataTable
             emptyState={{ icon: "🏢", title: "No suppliers yet", message: "Save supplier details here so they auto-fill when you enter bills. Name, email, phone, address and ABN all stored." }}
@@ -8432,6 +8503,115 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       />
       <ToastContainer toasts={toasts} onRemove={removeToast} />
       {confirmModal}
+
+      {/* ── Import Modal ── */}
+      {showImportModal && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 99993, background: "rgba(15,23,42,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div style={{ background: "#fff", borderRadius: 18, padding: 28, width: "100%", maxWidth: 580, boxShadow: "0 20px 60px rgba(0,0,0,0.2)", fontFamily: "sans-serif", maxHeight: "90vh", overflowY: "auto" }}>
+            <div style={{ fontSize: 18, fontWeight: 800, color: colours.text, marginBottom: 6 }}>
+              Import {importType === "clients" ? "Clients" : "Suppliers"}
+            </div>
+
+            {/* Tab switcher */}
+            <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+              {["clients", "suppliers"].map((t) => (
+                <button key={t} onClick={() => { setImportType(t); setImportRows([]); setImportError(""); }}
+                  style={{ background: importType === t ? colours.purple : "#F1F5F9", color: importType === t ? "#fff" : colours.text, border: "none", borderRadius: 8, padding: "7px 16px", fontWeight: 700, cursor: "pointer", fontSize: 13, textTransform: "capitalize" }}>
+                  {t}
+                </button>
+              ))}
+            </div>
+
+            {/* How to section */}
+            <div style={{ background: colours.lightPurple, borderRadius: 12, padding: 16, marginBottom: 20 }}>
+              <div style={{ fontSize: 13, fontWeight: 800, color: colours.purple, marginBottom: 10 }}>📋 How to import</div>
+              <ol style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: colours.text, lineHeight: 2 }}>
+                <li>Click <strong>Download Template</strong> below to get the Excel/CSV file</li>
+                <li>Open it in Excel or Google Sheets</li>
+                <li>Fill in your {importType} — <strong>Name is required</strong>, all other columns are optional</li>
+                <li>Save as <strong>CSV</strong> (File → Save As → CSV)</li>
+                <li>Click <strong>Choose File</strong> below and select your saved CSV</li>
+                <li>Review the preview, then click <strong>Confirm Import</strong></li>
+              </ol>
+              <div style={{ marginTop: 12, fontSize: 12, color: colours.muted }}>
+                ℹ️ Duplicates are skipped automatically — existing {importType} with the same name won't be overwritten.
+              </div>
+            </div>
+
+            {/* Column headings reference */}
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 12, fontWeight: 800, color: colours.muted, textTransform: "uppercase", marginBottom: 8 }}>Required columns in your CSV</div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {(importType === "clients"
+                  ? ["Name *", "Business Name", "Email", "Phone", "Address", "ABN", "Currency", "Work Type"]
+                  : ["Name *", "Contact Person", "Email", "Phone", "Address", "ABN", "Notes"]
+                ).map((col) => (
+                  <span key={col} style={{ background: col.includes("*") ? colours.purple : "#F1F5F9", color: col.includes("*") ? "#fff" : colours.text, borderRadius: 6, padding: "4px 10px", fontSize: 12, fontWeight: 600 }}>
+                    {col}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            {/* Download template button */}
+            <button onClick={() => downloadTemplate(importType)}
+              style={{ ...buttonSecondary, marginBottom: 20, display: "flex", alignItems: "center", gap: 8 }}>
+              ⬇ Download {importType === "clients" ? "Clients" : "Suppliers"} Template
+            </button>
+
+            {/* File upload */}
+            <div style={{ marginBottom: 16 }}>
+              <label style={labelStyle}>Upload your filled CSV</label>
+              <input type="file" accept=".csv,.txt" style={{ ...inputStyle, padding: 8 }}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const reader = new FileReader();
+                  reader.onload = (ev) => {
+                    const { rows, error } = parseImportCSV(ev.target.result, importType);
+                    setImportRows(rows);
+                    setImportError(error);
+                  };
+                  reader.readAsText(file);
+                }} />
+            </div>
+
+            {/* Error */}
+            {importError && (
+              <div style={{ background: "#FEF2F2", color: "#991B1B", borderRadius: 10, padding: "10px 14px", fontSize: 13, marginBottom: 16 }}>{importError}</div>
+            )}
+
+            {/* Preview */}
+            {importRows.length > 0 && (
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ fontSize: 13, fontWeight: 800, color: colours.text, marginBottom: 8 }}>Preview — {importRows.length} row{importRows.length !== 1 ? "s" : ""} ready to import</div>
+                <div style={{ maxHeight: 200, overflowY: "auto", border: `1px solid ${colours.border}`, borderRadius: 10 }}>
+                  {importRows.slice(0, 10).map((row, i) => (
+                    <div key={i} style={{ padding: "10px 14px", borderBottom: `1px solid ${colours.border}`, fontSize: 13 }}>
+                      <strong>{row.name}</strong>
+                      {row.businessName && <span style={{ color: colours.muted }}> — {row.businessName}</span>}
+                      {row.email && <span style={{ color: colours.muted }}> · {row.email}</span>}
+                      {row.phone && <span style={{ color: colours.muted }}> · {row.phone}</span>}
+                    </div>
+                  ))}
+                  {importRows.length > 10 && <div style={{ padding: "8px 14px", fontSize: 12, color: colours.muted }}>...and {importRows.length - 10} more</div>}
+                </div>
+              </div>
+            )}
+
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button onClick={() => { setShowImportModal(false); setImportRows([]); setImportError(""); }}
+                style={{ background: "#F1F5F9", color: "#475569", border: "none", borderRadius: 10, padding: "10px 18px", fontWeight: 700, cursor: "pointer", fontSize: 14 }}>Cancel</button>
+              {importRows.length > 0 && (
+                <button onClick={confirmImport}
+                  style={{ background: colours.purple, color: "#fff", border: "none", borderRadius: 10, padding: "10px 18px", fontWeight: 700, cursor: "pointer", fontSize: 14 }}>
+                  Confirm Import ({importRows.length})
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Client Modal ── */}
       {showClientModal && (
