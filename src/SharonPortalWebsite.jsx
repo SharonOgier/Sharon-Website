@@ -2317,6 +2317,7 @@ export default function AccountingPortalPrototype() {
 
     supabase.auth.getSession().then(({ data, error }) => {
       if (!active) return;
+      if (isSigningOut.current) return;
       if (error) {
         console.error("SUPABASE AUTH SESSION ERROR:", error);
         return;
@@ -2325,7 +2326,12 @@ export default function AccountingPortalPrototype() {
       setAuthReady(true);
     });
 
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_OUT") {
+        setAuthUser(null);
+        setAuthReady(true);
+        return;
+      }
       if (isSigningOut.current) return;
       setAuthUser(session?.user || null);
       setAuthReady(true);
@@ -2696,6 +2702,10 @@ export default function AccountingPortalPrototype() {
     try {
       isSigningOut.current = true;
       await supabase.auth.signOut();
+      // Clear any cached Supabase session from localStorage
+      Object.keys(localStorage).forEach((key) => {
+        if (key.startsWith("sb-")) localStorage.removeItem(key);
+      });
       hasHydratedSupabaseState.current = false;
       setIsSupabaseRestoring(false);
       setAuthUser(null);
