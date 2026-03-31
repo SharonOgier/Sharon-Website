@@ -521,13 +521,34 @@ async function sendEmailWithPdf({
   };
 }
 
+<<<<<<< Updated upstream
 app.get("/", (_req, res) => {
+=======
+app.get("/", (req, res) => {
+  const bypass = req.query.portal || req.query.signin || req.query.app;
+  if (!bypass && fs.existsSync(landingPath)) {
+    return res.sendFile(landingPath);
+  }
+>>>>>>> Stashed changes
   if (fs.existsSync(distIndexPath)) {
     return res.sendFile(distIndexPath);
   }
   return res.json({ ok: true, message: `Server running on port ${PORT}` });
 });
 
+<<<<<<< Updated upstream
+=======
+app.get("/portal", (_req, res) => {
+  if (fs.existsSync(distIndexPath)) return res.sendFile(distIndexPath);
+  return res.redirect("/");
+});
+
+app.get("/app", (_req, res) => {
+  if (fs.existsSync(distIndexPath)) return res.sendFile(distIndexPath);
+  return res.redirect("/");
+});
+
+>>>>>>> Stashed changes
 app.get("/health", async (_req, res) => {
   const browserDiagnostics = await getBrowserDiagnostics();
   res.json({
@@ -537,6 +558,16 @@ app.get("/health", async (_req, res) => {
     stripeConfigured: !!stripeSecretKey,
     chromeExecutable: browserDiagnostics.launchExecutablePath,
     browser: browserDiagnostics,
+    paths: {
+      __dirname,
+      distPath,
+      distExists: fs.existsSync(distPath),
+      distIndexExists: fs.existsSync(distIndexPath),
+      publicPath,
+      publicExists: fs.existsSync(publicPath),
+      landingPath,
+      landingExists: fs.existsSync(landingPath),
+    },
   });
 });
 
