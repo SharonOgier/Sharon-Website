@@ -1,5 +1,5 @@
-import AppShell from "./app/AppShell";
+import AccountingPortalPrototype from "./SharonPortalWebsite"
 
 export default function App() {
-  return <AppShell />;
+  return <AccountingPortalPrototype />
 }
