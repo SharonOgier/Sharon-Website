@@ -1761,6 +1761,7 @@ export default function AccountingPortalPrototype() {
   const [savingService, setSavingService] = useState(false);
   const [savingIncomeSource, setSavingIncomeSource] = useState(false);
   const [savingDocumentEdits, setSavingDocumentEdits] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activePage, setActivePage] = useState("settings");
   const [activeSettingsTab, setActiveSettingsTab] = useState("Profile");
   const [authUser, setAuthUser] = useState(null);
@@ -2651,8 +2652,6 @@ export default function AccountingPortalPrototype() {
       console.error("DOCUMENT UPLOAD ERROR:", err);
       setSupabaseSyncStatus(err.message || "Document save failed");
       toast.error(err.message || "Something went wrong");
-    } finally {
-      setSavingExpense(false);
     }
   };
 
@@ -2736,7 +2735,6 @@ export default function AccountingPortalPrototype() {
 
   const saveService = async () => {
     if (!serviceForm.name.trim() || !serviceForm.gstType) return;
-    setSavingService(true);
     const payload = {
       id: editingServiceId || Date.now(),
       name: serviceForm.name.trim(),
@@ -2760,8 +2758,6 @@ export default function AccountingPortalPrototype() {
       console.error("SERVICE SAVE ERROR:", error);
       setSupabaseSyncStatus(error.message || "Service save failed");
       toast.error(error.message || "Service save failed");
-    } finally {
-      setSavingService(false);
     }
   };
 
@@ -2790,7 +2786,6 @@ export default function AccountingPortalPrototype() {
   };
 
   const saveIncomeSource = async () => {
-    setSavingIncomeSource(true);
     const incomeErrors = validateIncomeSourcePayload({ ...incomeSourceForm, beforeTax: safeNumber(incomeSourceForm.beforeTax) });
     if (incomeErrors.length) {
       summariseValidationErrors("Income source", incomeErrors, toast);
@@ -2816,8 +2811,6 @@ export default function AccountingPortalPrototype() {
       console.error("INCOME SOURCE SAVE ERROR:", error);
       setSupabaseSyncStatus(error.message || "Income source save failed");
       toast.error(error.message || "Income source save failed");
-    } finally {
-      setSavingIncomeSource(false);
     }
   };
 
@@ -3073,6 +3066,18 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       ? `${serverBaseUrl}/api/send-invoice-attachment-email`
       : `${serverBaseUrl}/api/send-document-email`;
 
+  console.log("SEND DOCUMENT EMAIL REQUEST:", {
+    endpoint,
+    documentType,
+    recipients: recipientList,
+    subject: payload.subject,
+    filename: payload.filename,
+    hasHtml: Boolean(payload.html),
+    hasDocumentHtml: Boolean(payload.documentHtml),
+    hasInvoiceHtml: Boolean(payload.invoiceHtml),
+    hasQuoteHtml: Boolean(payload.quoteHtml),
+    quoteHtmlLength: payload.quoteHtml?.length || 0,
+  });
 
   let response;
 
@@ -3098,6 +3103,12 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     console.error("EMAIL RESPONSE PARSE ERROR:", error);
   }
 
+  console.log("SEND DOCUMENT EMAIL RESPONSE:", {
+    endpoint,
+    status: response.status,
+    ok: response.ok,
+    data,
+  });
 
   if (!response.ok) {
     console.error("EMAIL ERROR:", data);
@@ -3354,7 +3365,6 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     };
     const saveClientEdits = async () => {
     if (!clientEditorForm) return;
-    setSavingClientEdits(true);
     const payload = { ...clientEditorForm,
       name: String(clientEditorForm.name || "").trim(),
       address: clientEditorForm.addressDetails || clientEditorForm.address || "",
@@ -3373,8 +3383,6 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       console.error("CLIENT EDIT SAVE ERROR:", error);
       setSupabaseSyncStatus(error.message || "Client update failed");
       toast.error(error.message || "Client update failed");
-    } finally {
-      setSavingClientEdits(false);
     }
     };
 
@@ -3460,7 +3468,6 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     };
     const saveDocumentEdits = async () => {
     if (!documentEditorForm) return;
-    setSavingDocumentEdits(true);
     const payload = { ...documentEditorForm,
       name: String(documentEditorForm.name || "").trim(),
       url: String(documentEditorForm.url || "").trim(),
@@ -3478,8 +3485,6 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       console.error("DOCUMENT EDIT SAVE ERROR:", error);
       setSupabaseSyncStatus(error.message || "Document update failed");
       toast.error(error.message || "Document update failed");
-    } finally {
-      setSavingDocumentEdits(false);
     }
     };
 
@@ -3505,8 +3510,6 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       console.error("CLIENT SAVE ERROR:", error);
       setSupabaseSyncStatus(error.message || "Client save failed");
       toast.error(error.message || "Client save failed");
-    } finally {
-      setSavingClient(false);
     }
     };
 
@@ -3579,8 +3582,6 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       console.error("INVOICE SAVE ERROR:", error);
       setSupabaseSyncStatus(error.message || "Invoice save failed");
       toast.error(error.message || "Invoice save failed");
-    } finally {
-      setSavingInvoice(false);
     }
     };
 
@@ -3648,8 +3649,6 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       console.error("INVOICE UPDATE ERROR:", error);
       setSupabaseSyncStatus(error.message || "Invoice update failed");
       toast.error(error.message || "Invoice update failed");
-    } finally {
-      setSavingInvoiceEdits(false);
     }
     };
     const saveQuote = async () => {
@@ -3710,8 +3709,6 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       console.error("QUOTE SAVE ERROR:", error);
       setSupabaseSyncStatus(error.message || "Quote save failed");
       toast.error(error.message || "Quote save failed");
-    } finally {
-      setSavingQuote(false);
     }
     };
 
@@ -3769,8 +3766,6 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       console.error("QUOTE UPDATE ERROR:", error);
       setSupabaseSyncStatus(error.message || "Quote update failed");
       toast.error(error.message || "Quote update failed");
-    } finally {
-      setSavingQuoteEdits(false);
     }
     };
     const sendInvoiceFromPreview = async (invoiceId, previewWindow) => {
@@ -3920,6 +3915,8 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
         summariseValidationErrors("Expense", expenseErrors, toast);
         return;
       }
+      console.log("SAVE EXPENSE CLICKED");
+      console.log("receiptFile:", receiptFile);
       if (!expenseForm.supplier || !expenseForm.amount || !expenseForm.category) {
         toast.warning("Please fill in supplier, amount and category");
         return;
@@ -3931,10 +3928,14 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       let receiptFileName = "";
 
       if (receiptFile) {
+        console.log("Uploading receipt now...");
+        console.log("UPLOAD FUNCTION CALLED");
         const uploaded = await uploadReceiptToSupabase(receiptFile);
+        console.log("Upload result:", uploaded);
         receiptUrl = uploaded.receiptUrl;
         receiptFileName = uploaded.fileName;
       } else {
+        console.log("No receipt file selected");
       }
 
       const payload = {
@@ -4010,7 +4011,11 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       );
       const client = getClientById(invoice.clientId);
 
-            setSupabaseSyncStatus("Simulated payment saved to Supabase database");
+      console.log("📧 SIMULATED PAYMENT RECEIPT");
+      console.log("To:", client?.email || "no email");
+      console.log("Invoice:", invoice.invoiceNumber);
+      console.log("Amount:", invoice.total);
+      setSupabaseSyncStatus("Simulated payment saved to Supabase database");
       toast.success(`Simulated payment completed for ${invoice.invoiceNumber}`);
     } catch (error) {
       console.error("SIMULATED PAYMENT ERROR:", error);
@@ -4108,8 +4113,17 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     const serverBaseUrl = getApiBaseUrl(profile?.stripeServerUrl);
     const selectedClient = getClientById(invoice?.clientId) || {};
 
+    console.log("FULL INVOICE OBJECT:", invoice);
 
     const rawTotal = resolveInvoiceStripeAmount(invoice);
+
+    console.log("INVOICE TOTAL DEBUG:", {
+      total: invoice?.total,
+      subtotal: invoice?.subtotal,
+      gst: invoice?.gst,
+      quantity: invoice?.quantity,
+      rawTotal,
+    });
 
     if (!Number.isFinite(rawTotal) || rawTotal <= 0) {
       console.error("Stripe invoice total could not be resolved", { invoice, rawTotal });
@@ -4136,6 +4150,8 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       )}&invoiceId=${encodeURIComponent(String(invoice?.id || ""))}`,
     };
 
+    console.log("Stripe invoice payload", payload);
+    console.log("Stripe amount being sent:", payload.amount, "type:", typeof payload.amount);
     
     let response;
 
@@ -4232,6 +4248,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
 
     try {
       if (!stripeCheckoutUrl && resolveInvoiceStripeAmount(invoice) > 0) {
+        console.log("PREVIEW REQUESTING STRIPE SESSION FOR:", invoice.invoiceNumber);
         stripeCheckoutUrl = await createStripeCheckoutForInvoice(invoice);
 
         if (stripeCheckoutUrl) {
@@ -5168,8 +5185,8 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
           <button style={buttonSecondary} onClick={() => setClientForm(blankClient)}>
             Cancel
           </button>
-          <button style={{ ...buttonPrimary, opacity: savingClient ? 0.7 : 1 }} onClick={saveClient} disabled={savingClient}>
-            {savingClient ? "Saving..." : "Save Client"}
+          <button style={buttonPrimary} onClick={saveClient}>
+            Save
           </button>
         </div>
       </SectionCard>
@@ -5219,7 +5236,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
             </div>
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, marginTop: 16 }}>
               <button style={buttonSecondary} onClick={closeClientEditor}>Cancel</button>
-              <button style={{ ...buttonPrimary, opacity: savingClientEdits ? 0.7 : 1 }} onClick={saveClientEdits} disabled={savingClientEdits}>{savingClientEdits ? "Saving..." : "Save Changes"}</button>
+              <button style={buttonPrimary} onClick={saveClientEdits}>Save Changes</button>
             </div>
           </div>
         ) : null}
@@ -5443,8 +5460,8 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
                 Preview
               </button>
               <button style={buttonSecondary}>Save Draft</button>
-              <button style={{ ...buttonPrimary, opacity: savingInvoice ? 0.7 : 1 }} onClick={saveInvoice} disabled={savingInvoice}>
-                {savingInvoice ? "Saving..." : "Save Invoice"}
+              <button style={buttonPrimary} onClick={saveInvoice}>
+                Save Invoice
               </button>
             </div>
           }
@@ -5834,7 +5851,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
 
                 <div style={{ display: "flex", justifyContent: "flex-end", gap: 12 }}>
                   <button style={buttonSecondary} onClick={closeInvoiceEditor}>Cancel</button>
-                  <button style={{ ...buttonPrimary, opacity: savingInvoiceEdits ? 0.7 : 1 }} onClick={saveInvoiceEdits} disabled={savingInvoiceEdits}>{savingInvoiceEdits ? "Saving..." : "Save Changes"}</button>
+                  <button style={buttonPrimary} onClick={saveInvoiceEdits}>Save Changes</button>
                 </div>
               </div>
             </div>
@@ -5994,7 +6011,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
             <div style={{ display: "flex", gap: 10 }}>
               <button style={buttonSecondary} onClick={openQuotePreview}>Preview</button>
               <button style={buttonSecondary}>Save Draft</button>
-              <button style={{ ...buttonPrimary, opacity: savingQuote ? 0.7 : 1 }} onClick={saveQuote} disabled={savingQuote}>{savingQuote ? "Saving..." : "Save Quote"}</button>
+              <button style={buttonPrimary} onClick={saveQuote}>Save Quote</button>
             </div>
           }
         >
@@ -6310,7 +6327,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
 
                 <div style={{ display: "flex", justifyContent: "flex-end", gap: 12 }}>
                   <button style={buttonSecondary} onClick={closeQuoteEditor}>Cancel</button>
-                  <button style={{ ...buttonPrimary, opacity: savingQuoteEdits ? 0.7 : 1 }} onClick={saveQuoteEdits} disabled={savingQuoteEdits}>{savingQuoteEdits ? "Saving..." : "Save Changes"}</button>
+                  <button style={buttonPrimary} onClick={saveQuoteEdits}>Save Changes</button>
                 </div>
               </div>
             </div>
@@ -7042,7 +7059,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
             </div>
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, marginTop: 16 }}>
               <button style={buttonSecondary} onClick={closeDocumentEditor}>Cancel</button>
-              <button style={{ ...buttonPrimary, opacity: savingDocumentEdits ? 0.7 : 1 }} onClick={saveDocumentEdits} disabled={savingDocumentEdits}>{savingDocumentEdits ? "Saving..." : "Save Changes"}</button>
+              <button style={buttonPrimary} onClick={saveDocumentEdits}>Save Changes</button>
             </div>
           </div>
         ) : null}
@@ -7470,14 +7487,54 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
           '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
       }}
     >
-      <div style={{ display: "grid", gridTemplateColumns: "240px 1fr", minHeight: "100vh" }}>
-        <aside
-          style={{
-            background: colours.white,
-            borderRight: `1px solid ${colours.border}`,
-            padding: 20,
-          }}
-        >
+      <style>{`
+        .sas-layout { display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; }
+        .sas-sidebar { background: #fff; border-right: 1px solid #E2E8F0; padding: 20px; position: relative; z-index: 100; }
+        .sas-overlay { display: none; }
+        .sas-hamburger { display: none; }
+        .sas-main { padding: 24px; overflow-x: hidden; }
+        @media (max-width: 768px) {
+          .sas-layout { grid-template-columns: 1fr; }
+          .sas-sidebar {
+            position: fixed; top: 0; left: -260px; width: 240px; height: 100vh;
+            overflow-y: auto; transition: left 0.25s ease; z-index: 200;
+            box-shadow: 4px 0 20px rgba(0,0,0,0.12);
+          }
+          .sas-sidebar.open { left: 0; }
+          .sas-overlay { display: block; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 199; }
+          .sas-hamburger {
+            display: flex; align-items: center; gap: 12px;
+            background: #fff; border-bottom: 1px solid #E2E8F0;
+            padding: 14px 16px; position: sticky; top: 0; z-index: 100;
+          }
+          .sas-hamburger-btn {
+            background: none; border: none; cursor: pointer; padding: 4px;
+            display: flex; flex-direction: column; gap: 5px;
+          }
+          .sas-hamburger-btn span {
+            display: block; width: 22px; height: 2px; background: #6A1B9A; border-radius: 2px;
+          }
+          .sas-main { padding: 16px; }
+        }
+      `}</style>
+
+      {/* Mobile top bar */}
+      <div className="sas-hamburger">
+        <button className="sas-hamburger-btn" onClick={() => setSidebarOpen(true)} aria-label="Open menu">
+          <span /><span /><span />
+        </button>
+        <span style={{ fontSize: 16, fontWeight: 900, color: colours.purple }}>
+          {profile.businessName || "My Portal"}
+        </span>
+      </div>
+
+      {/* Overlay for mobile */}
+      {sidebarOpen && (
+        <div className="sas-overlay" onClick={() => setSidebarOpen(false)} />
+      )}
+
+      <div className="sas-layout">
+        <aside className={`sas-sidebar${sidebarOpen ? " open" : ""}`}>
           <div style={{ fontSize: 20, fontWeight: 900, color: colours.purple, marginBottom: 20 }}>
             {profile.businessName || "My Portal"}
           </div>
@@ -7490,7 +7547,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
             {navItems.map((item) => (
               <button
                 key={item}
-                onClick={() => setActivePage(item)}
+                onClick={() => { setActivePage(item); setSidebarOpen(false); }}
                 style={{
                   textAlign: "left",
                   border: "none",
@@ -7515,7 +7572,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
           </button>
         </aside>
 
-        <main style={{ padding: 24 }}>
+        <main className="sas-main">
           <div style={{ maxWidth: 1400, margin: "0 auto" }}>
             {activePage === "dashboard" && renderDashboard()}
             {activePage === "financial insights" && renderFinancialInsights()}
