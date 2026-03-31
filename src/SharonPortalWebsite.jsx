@@ -8157,6 +8157,24 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     );
     const renderAuthScreen = () => (
     <div style={{ minHeight: "100vh", background: colours.bg, display: "grid", placeItems: "center", padding: 24 }}>
+      {/* ── Password Reset Sent Modal ── */}
+      {showResetSentModal && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 99999, background: "rgba(15,23,42,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div style={{ background: "#fff", borderRadius: 18, padding: 36, width: "100%", maxWidth: 420, boxShadow: "0 20px 60px rgba(0,0,0,0.2)", textAlign: "center", fontFamily: "sans-serif" }}>
+            <div style={{ fontSize: 48, marginBottom: 16 }}>📧</div>
+            <div style={{ fontSize: 20, fontWeight: 800, color: "#14202B", marginBottom: 12 }}>Check your email</div>
+            <div style={{ fontSize: 14, color: "#64748B", lineHeight: 1.7, marginBottom: 8 }}>A password reset link has been sent to</div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: "#6A1B9A", marginBottom: 20 }}>{authForm.email}</div>
+            <div style={{ fontSize: 13, color: "#94A3B8", lineHeight: 1.7, marginBottom: 28 }}>
+              Click the link in the email to set a new password. Check your spam folder if it doesn't arrive within a few minutes.
+            </div>
+            <button onClick={() => setShowResetSentModal(false)}
+              style={{ background: "#6A1B9A", color: "#fff", border: "none", borderRadius: 12, padding: "12px 32px", fontSize: 15, fontWeight: 700, cursor: "pointer", width: "100%" }}>
+              Got it
+            </button>
+          </div>
+        </div>
+      )}
       <div style={{ ...cardStyle, width: "100%", maxWidth: 520, padding: 28 }}>
         <div style={{ fontSize: 28, fontWeight: 900, color: colours.text, marginBottom: 8 }}>Portal Sign In</div>
         <div style={{ fontSize: 14, color: colours.muted, marginBottom: 20 }}>
