@@ -20,6 +20,8 @@ const PORT = Number(process.env.PORT || 10000);
 
 const distPath = path.join(__dirname, "dist");
 const distIndexPath = path.join(distPath, "index.html");
+const publicPath = path.join(__dirname, "public");
+const landingPath = path.join(publicPath, "landing.html");
 
 const rawCorsOrigins = [
   process.env.CLIENT_URL,
@@ -72,6 +74,16 @@ app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 if (fs.existsSync(distPath)) {
   app.use(
     express.static(distPath, {
+      index: false,
+      extensions: false,
+      fallthrough: true,
+    })
+  );
+}
+
+if (fs.existsSync(publicPath)) {
+  app.use(
+    express.static(publicPath, {
       index: false,
       extensions: false,
       fallthrough: true,
@@ -521,23 +533,17 @@ async function sendEmailWithPdf({
   };
 }
 
-<<<<<<< Updated upstream
-app.get("/", (_req, res) => {
-=======
 app.get("/", (req, res) => {
   const bypass = req.query.portal || req.query.signin || req.query.app;
   if (!bypass && fs.existsSync(landingPath)) {
     return res.sendFile(landingPath);
   }
->>>>>>> Stashed changes
   if (fs.existsSync(distIndexPath)) {
     return res.sendFile(distIndexPath);
   }
   return res.json({ ok: true, message: `Server running on port ${PORT}` });
 });
 
-<<<<<<< Updated upstream
-=======
 app.get("/portal", (_req, res) => {
   if (fs.existsSync(distIndexPath)) return res.sendFile(distIndexPath);
   return res.redirect("/");
@@ -548,7 +554,6 @@ app.get("/app", (_req, res) => {
   return res.redirect("/");
 });
 
->>>>>>> Stashed changes
 app.get("/health", async (_req, res) => {
   const browserDiagnostics = await getBrowserDiagnostics();
   res.json({
@@ -983,6 +988,44 @@ app.post("/api/send-invoice-attachment-email", async (req, res) => {
   }
 });
 
+app.post("/api/create-subscription-checkout", async (req, res) => {
+  try {
+    if (!stripe) {
+      return res.status(500).json({ ok: false, error: "Stripe is not configured." });
+    }
+
+    const { email, userId, businessName, successUrl, cancelUrl } = req.body || {};
+
+    if (!email) {
+      return res.status(400).json({ ok: false, error: "Email is required." });
+    }
+
+    const priceId = String(process.env.STRIPE_SUBSCRIPTION_PRICE_ID || "").trim();
+    if (!priceId) {
+      return res.status(500).json({ ok: false, error: "STRIPE_SUBSCRIPTION_PRICE_ID is not set in environment variables." });
+    }
+
+    const session = await stripe.checkout.sessions.create({
+      mode: "subscription",
+      payment_method_types: ["card"],
+      customer_email: email || undefined,
+      line_items: [{ price: priceId, quantity: 1 }],
+      subscription_data: {
+        trial_period_days: 0,
+        metadata: { userId: String(userId || ""), businessName: String(businessName || "") },
+      },
+      metadata: { userId: String(userId || ""), type: "portal_subscription" },
+      success_url: successUrl || `${req.headers.origin || ""}?subscribed=1`,
+      cancel_url: cancelUrl || `${req.headers.origin || ""}?subscribed=0`,
+    });
+
+    return res.json({ ok: true, url: session.url });
+  } catch (error) {
+    console.error("Subscription checkout failed:", error);
+    return res.status(500).json({ ok: false, error: "Could not create subscription checkout.", details: error.message });
+  }
+});
+
 app.post("/api/stripe-webhook", async (req, res) => {
   if (!stripe) return res.status(500).send("Stripe not configured.");
 
@@ -1002,8 +1045,41 @@ app.post("/api/stripe-webhook", async (req, res) => {
     if (event.type === "checkout.session.completed") {
       const session = event.data.object;
       const invoiceId = session?.metadata?.invoiceId || "";
-      console.log(`Payment completed — session: ${session?.id}, invoiceId: ${invoiceId}`);
+      const subscriptionType = session?.metadata?.type || "";
 
+      // ── Portal subscription checkout ──────────────────────
+      if (subscriptionType === "portal_subscription" && supabase) {
+        const userId = session?.metadata?.userId || "";
+        const subscriptionId = session?.subscription || "";
+        if (userId && subscriptionId) {
+          try {
+            const { data: rows } = await supabase
+              .from("sas_profile")
+              .select("id, data")
+              .eq("user_id", userId)
+              .limit(1);
+
+            const row = rows?.[0];
+            if (row) {
+              const updatedData = {
+                ...(row.data || {}),
+                subscriptionStatus: "active",
+                subscriptionId,
+                stripeCustomerId: session.customer || "",
+              };
+              await supabase
+                .from("sas_profile")
+                .update({ data: updatedData, updated_at: new Date().toISOString() })
+                .eq("id", row.id);
+              console.log(`Portal subscription activated for userId: ${userId}`);
+            }
+          } catch (dbError) {
+            console.error("Failed to update subscription status:", dbError);
+          }
+        }
+      }
+
+      // ── Invoice payment checkout ───────────────────────────
       if (invoiceId && supabase) {
         try {
           const { data: existing, error: fetchError } = await supabase
@@ -1028,13 +1104,46 @@ app.post("/api/stripe-webhook", async (req, res) => {
 
             if (updateError) {
               console.error("Failed to update invoice status in Supabase:", updateError.message);
-            } else {
-              console.log(`Invoice ${invoiceId} marked as Paid via Stripe.`);
             }
           }
         } catch (dbError) {
           console.error("Supabase update error:", dbError);
         }
+      }
+    }
+
+    // ── Subscription updated / cancelled ──────────────────────
+    if (
+      (event.type === "customer.subscription.updated" ||
+       event.type === "customer.subscription.deleted") &&
+      supabase
+    ) {
+      const subscription = event.data.object;
+      const subscriptionId = subscription.id;
+      const newStatus = subscription.status; // active | past_due | canceled | etc.
+
+      try {
+        // Find the profile row that has this subscriptionId in its data jsonb
+        const { data: rows } = await supabase
+          .from("sas_profile")
+          .select("id, data")
+          .filter("data->>'subscriptionId'", "eq", subscriptionId)
+          .limit(1);
+
+        const row = rows?.[0];
+        if (row) {
+          const updatedData = {
+            ...(row.data || {}),
+            subscriptionStatus: newStatus,
+          };
+          await supabase
+            .from("sas_profile")
+            .update({ data: updatedData, updated_at: new Date().toISOString() })
+            .eq("id", row.id);
+          console.log(`Subscription ${subscriptionId} status → ${newStatus}`);
+        }
+      } catch (dbError) {
+        console.error("Failed to update subscription status from webhook:", dbError);
       }
     }
 
@@ -1047,6 +1156,7 @@ app.post("/api/stripe-webhook", async (req, res) => {
 
 app.get("*", (req, res, next) => {
   if (req.path.startsWith("/api")) return next();
+  if (req.path === "/") return next();
   if (req.path.includes(".")) return next();
 
   if (fs.existsSync(distIndexPath)) {
