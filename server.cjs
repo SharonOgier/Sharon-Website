@@ -1192,6 +1192,136 @@ app.use((error, _req, res, _next) => {
   res.status(500).json({ ok: false, error: "An unexpected server error occurred." });
 });
 
+// ── Overdue Invoice Reminder Cron ─────────────────────────────
+// Runs every 24 hours — emails clients with invoices 1+ days overdue
+const SHARON_EMAIL = process.env.SHARON_EMAIL || "info@sharonogier.com";
+
+async function sendOverdueReminders() {
+  if (!supabase) { console.log("[cron] Supabase not configured, skipping overdue check"); return; }
+  if (!resend) { console.log("[cron] Resend not configured, skipping overdue emails"); return; }
+
+  try {
+    console.log("[cron] Checking for overdue invoices...");
+    const today = new Date();
+    const todayStr = today.toISOString().slice(0, 10);
+
+    // Fetch all unpaid invoices from all users
+    const { data: invoiceRows, error: invErr } = await supabase
+      .from("sas_invoices")
+      .select("*");
+    if (invErr) throw invErr;
+
+    // Fetch all profiles (for business name + email)
+    const { data: profileRows, error: profErr } = await supabase
+      .from("sas_profile")
+      .select("*");
+    if (profErr) throw profErr;
+
+    // Fetch all clients
+    const { data: clientRows, error: clientErr } = await supabase
+      .from("sas_clients")
+      .select("*");
+    if (clientErr) throw clientErr;
+
+    let sent = 0;
+
+    for (const invRow of (invoiceRows || [])) {
+      const inv = invRow.data || invRow;
+      // Only unpaid, non-credit-note invoices with a due date and client email
+      if (inv.status === "Paid" || inv.status === "Cancelled") continue;
+      if (inv.type === "credit_note") continue;
+      if (!inv.dueDate || !inv.clientId) continue;
+
+      // Check if exactly 1+ day overdue (dueDate < today)
+      const dueDate = new Date(inv.dueDate + "T00:00:00");
+      const diffDays = Math.floor((today - dueDate) / (1000 * 60 * 60 * 24));
+      if (diffDays < 1) continue;
+
+      // Only send on day 1 overdue (not every day)
+      if (diffDays !== 1) continue;
+
+      // Skip if already reminded
+      if (inv.reminderSentAt) continue;
+
+      // Find the client
+      const clientRow = (clientRows || []).find((r) => {
+        const c = r.data || r;
+        return String(c.id) === String(inv.clientId);
+      });
+      const client = clientRow ? (clientRow.data || clientRow) : null;
+      if (!client?.email) continue;
+
+      // Find the profile (business) for this invoice
+      const profileRow = (profileRows || []).find((r) => {
+        const p = r.data || r;
+        return String(p.id) === String(invRow.id?.toString().slice(0, 8)) || true;
+      });
+      const profile = profileRow ? (profileRow.data || profileRow) : {};
+      const businessName = profile.businessName || "Sharon's Accounting Service";
+      const abn = profile.abn || "";
+
+      const amount = Number(inv.total || 0).toLocaleString("en-AU", { style: "currency", currency: "AUD" });
+      const dueDateFmt = new Date(inv.dueDate + "T00:00:00").toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" });
+
+      const html = `
+        <div style="font-family:sans-serif;max-width:600px;margin:0 auto;color:#14202B;">
+          <h2 style="color:#6A1B9A;">Payment Reminder</h2>
+          <p>Dear ${client.name || "Valued Client"},</p>
+          <p>This is a friendly reminder that the following invoice is now overdue:</p>
+          <table style="width:100%;border-collapse:collapse;margin:20px 0;">
+            <tr style="background:#F5ECFB;">
+              <td style="padding:12px;font-weight:700;">Invoice Number</td>
+              <td style="padding:12px;">${inv.invoiceNumber || "N/A"}</td>
+            </tr>
+            <tr>
+              <td style="padding:12px;font-weight:700;">Amount Due</td>
+              <td style="padding:12px;font-weight:700;color:#6A1B9A;">${amount}</td>
+            </tr>
+            <tr style="background:#FEF2F2;">
+              <td style="padding:12px;font-weight:700;">Due Date</td>
+              <td style="padding:12px;color:#991B1B;">${dueDateFmt} (overdue by ${diffDays} day${diffDays !== 1 ? "s" : ""})</td>
+            </tr>
+            ${inv.description ? `<tr><td style="padding:12px;font-weight:700;">Description</td><td style="padding:12px;">${inv.description}</td></tr>` : ""}
+          </table>
+          <p>Please arrange payment at your earliest convenience. If you have already made payment, please disregard this reminder.</p>
+          <p>If you have any queries, please don't hesitate to contact us.</p>
+          <br/>
+          <p style="color:#64748B;font-size:13px;">
+            ${businessName}<br/>
+            ${abn ? "ABN: " + abn + "<br/>" : ""}
+            ${SHARON_EMAIL}
+          </p>
+        </div>`;
+
+      // Send to client + CC Sharon
+      await resend.emails.send({
+        from: EMAIL_FROM,
+        to: [client.email],
+        cc: [SHARON_EMAIL],
+        subject: `Payment Reminder — Invoice ${inv.invoiceNumber || ""} overdue ${amount}`,
+        html,
+      });
+
+      // Mark invoice as reminded in Supabase
+      await supabase.from("sas_invoices").update({
+        data: { ...inv, reminderSentAt: new Date().toISOString() },
+        updated_at: new Date().toISOString(),
+      }).eq("id", invRow.id);
+
+      sent++;
+      console.log(`[cron] Reminder sent for invoice ${inv.invoiceNumber} to ${client.email}`);
+    }
+
+    console.log(`[cron] Done — ${sent} reminder${sent !== 1 ? "s" : ""} sent`);
+  } catch (err) {
+    console.error("[cron] Overdue reminder error:", err.message || err);
+  }
+}
+
+// Run once at startup (after 1 min delay) then every 24 hours
+setTimeout(sendOverdueReminders, 60 * 1000);
+setInterval(sendOverdueReminders, 24 * 60 * 60 * 1000);
+
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   console.log("Allowed CORS origins:", CLIENT_URLS);
