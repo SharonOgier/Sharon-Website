@@ -1098,6 +1098,7 @@ function ExpenseTypeModal({
   receiptFile,
   setReceiptFile,
   onNext,
+  toast = { warning: () => {} },
 }) {
   if (!isOpen) return null;
   const filteredCategories = expenseCategories.filter((item) =>
@@ -1804,8 +1805,9 @@ const gstStatus =
     : safeNumber(invoice.gst) > 0
       ? "GST applies"
       : "GST free");
+const purchaseOrderReference = escapeHtml(invoice.purchaseOrderReference || "");
 const purchaseOrderBlock =
-  previewClient?.hasPurchaseOrder && invoice.purchaseOrderReference
+  previewClient?.hasPurchaseOrder && purchaseOrderReference
     ? `<div style="margin-top:10px; font-size:14px; color:#555;"><strong>PO / Reference:</strong> ${purchaseOrderReference}</div>`
     : "";
 const businessName = escapeHtml(getDocumentBusinessName());
@@ -1816,7 +1818,6 @@ const businessEmail = escapeHtml(profile.email || "");
 const businessPhone = escapeHtml(profile.phone || "");
 const businessAbn = escapeHtml(profile.abn || "");
 const paymentReference = escapeHtml(invoice.paymentReference || invoice.invoiceNumber || "");
-const purchaseOrderReference = escapeHtml(invoice.purchaseOrderReference || "");
 
 const clientDetails =
   previewClient?.includeAddressDetails && previewClient?.addressDetails
@@ -9318,6 +9319,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
         receiptFile={receiptFile}
         setReceiptFile={setReceiptFile}
         onNext={nextExpenseModalStep}
+        toast={toast}
       />
 
       <IncomeSourceModal
