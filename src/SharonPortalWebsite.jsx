@@ -7654,6 +7654,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     return renderAuthScreen();
     }
 
+    if (isSupabaseRestoring || !hasLoadedUserProfile) {
     return (
       <div
         style={{
@@ -7829,4 +7830,4 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       <style>{`@keyframes toastIn { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }`}</style>
     </div> 
     );
-
+}
