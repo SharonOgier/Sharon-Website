@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sharon's Accounting Service — Smart Accounting for Australians</title>
+  <meta name="description" content="Invoicing, GST calculations and ATO-ready reports for Australian small businesses and accountants. $45/month. 14-day free trial." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --purple: #6A1B9A;
+      --purple-dark: #4A1270;
+      --purple-light: #F5ECFB;
+      --teal: #006D6D;
+      --teal-light: #E7F6F5;
+      --navy: #2B2F6B;
+      --text: #14202B;
+      --muted: #64748B;
+      --border: #E2E8F0;
+      --bg: #F8FAFC;
+      --white: #FFFFFF;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'DM Sans', sans-serif;
+      color: var(--text);
+      background: var(--white);
+      overflow-x: hidden;
+    }
+
+    /* ── NAV ── */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 18px 40px;
+      background: rgba(255,255,255,0.92);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid rgba(226,232,240,0.8);
+      transition: box-shadow 0.3s;
+    }
+    nav.scrolled { box-shadow: 0 2px 20px rgba(0,0,0,0.08); }
+
+    .nav-logo {
+      font-family: 'Playfair Display', serif;
+      font-size: 20px; font-weight: 900;
+      color: var(--purple);
+      text-decoration: none;
+      letter-spacing: -0.3px;
+    }
+
+    .nav-links { display: flex; align-items: center; gap: 32px; }
+    .nav-links a {
+      font-size: 14px; font-weight: 500; color: var(--muted);
+      text-decoration: none; transition: color 0.2s;
+    }
+    .nav-links a:hover { color: var(--purple); }
+
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      border-radius: 12px; font-weight: 600; cursor: pointer;
+      text-decoration: none; transition: all 0.2s; border: none;
+      font-family: 'DM Sans', sans-serif;
+    }
+    .btn-primary {
+      background: var(--purple); color: #fff;
+      padding: 12px 24px; font-size: 15px;
+    }
+    .btn-primary:hover { background: var(--purple-dark); transform: translateY(-1px); box-shadow: 0 6px 20px rgba(106,27,154,0.3); }
+    .btn-secondary {
+      background: var(--white); color: var(--purple);
+      border: 1.5px solid var(--purple);
+      padding: 11px 22px; font-size: 14px;
+    }
+    .btn-secondary:hover { background: var(--purple-light); }
+    .btn-large { padding: 16px 36px; font-size: 17px; border-radius: 14px; }
+
+    /* ── HERO ── */
+    .hero {
+      padding: 140px 40px 80px;
+      background: linear-gradient(160deg, #fff 0%, var(--purple-light) 60%, #E7F6F5 100%);
+      position: relative; overflow: hidden;
+    }
+    .hero::before {
+      content: '';
+      position: absolute; top: -200px; right: -200px;
+      width: 600px; height: 600px;
+      background: radial-gradient(circle, rgba(106,27,154,0.08) 0%, transparent 70%);
+      border-radius: 50%;
+    }
+    .hero::after {
+      content: '';
+      position: absolute; bottom: -100px; left: -100px;
+      width: 400px; height: 400px;
+      background: radial-gradient(circle, rgba(0,109,109,0.07) 0%, transparent 70%);
+      border-radius: 50%;
+    }
+
+    .hero-inner {
+      max-width: 1100px; margin: 0 auto;
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 60px; align-items: center;
+      position: relative; z-index: 1;
+    }
+
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: var(--purple-light); color: var(--purple);
+      border-radius: 100px; padding: 6px 16px;
+      font-size: 13px; font-weight: 600; margin-bottom: 24px;
+    }
+    .hero-badge span { width: 8px; height: 8px; background: var(--purple); border-radius: 50%; display: inline-block; }
+
+    .hero h1 {
+      font-family: 'Playfair Display', serif;
+      font-size: 54px; line-height: 1.1; font-weight: 900;
+      color: var(--text); margin-bottom: 20px;
+      letter-spacing: -1px;
+    }
+    .hero h1 em { font-style: normal; color: var(--purple); }
+
+    .hero p {
+      font-size: 18px; line-height: 1.7; color: var(--muted);
+      margin-bottom: 36px; font-weight: 300;
+    }
+
+    .hero-actions { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
+    .hero-actions .trial-note {
+      font-size: 13px; color: var(--muted); font-weight: 400;
+    }
+
+    /* Hero card mockup */
+    .hero-visual {
+      position: relative;
+    }
+    .mockup-card {
+      background: var(--white);
+      border-radius: 20px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.12), 0 4px 16px rgba(0,0,0,0.06);
+      overflow: hidden;
+      animation: floatCard 4s ease-in-out infinite;
+    }
+    @keyframes floatCard {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-10px); }
+    }
+    .mockup-header {
+      background: var(--purple); padding: 16px 20px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .mockup-header-title { color: #fff; font-weight: 700; font-size: 14px; }
+    .mockup-header-amount { color: #E9D5FF; font-family: 'Playfair Display', serif; font-size: 22px; font-weight: 900; }
+    .mockup-body { padding: 20px; }
+    .mockup-row {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 13px;
+    }
+    .mockup-row:last-child { border-bottom: none; }
+    .mockup-row .label { color: var(--muted); }
+    .mockup-row .value { font-weight: 600; color: var(--text); }
+    .mockup-row .value.green { color: #166534; }
+    .mockup-row .value.purple { color: var(--purple); }
+    .mockup-badge {
+      display: inline-block; padding: 2px 10px; border-radius: 100px;
+      font-size: 11px; font-weight: 700;
+    }
+    .badge-paid { background: #DCFCE7; color: #166534; }
+    .badge-gst { background: var(--teal-light); color: var(--teal); }
+
+    .floating-chip {
+      position: absolute; background: var(--white);
+      border-radius: 14px; padding: 12px 16px;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+      font-size: 13px; font-weight: 600;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .chip-1 { top: -20px; right: -20px; color: #166534; animation: floatChip 3.5s ease-in-out infinite 0.5s; }
+    .chip-2 { bottom: 20px; left: -30px; color: var(--purple); animation: floatChip 3.5s ease-in-out infinite 1.2s; }
+    @keyframes floatChip {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-8px); }
+    }
+    .chip-icon { font-size: 18px; }
+
+    /* ── LOGOS / TRUST ── */
+    .trust-bar {
+      background: var(--bg);
+      border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+      padding: 24px 40px;
+      text-align: center;
+    }
+    .trust-bar p { font-size: 13px; color: var(--muted); margin-bottom: 16px; font-weight: 500; letter-spacing: 0.5px; text-transform: uppercase; }
+    .trust-logos { display: flex; justify-content: center; align-items: center; gap: 48px; flex-wrap: wrap; }
+    .trust-logos span {
+      font-family: 'Playfair Display', serif;
+      font-size: 16px; color: #CBD5E1; font-weight: 700; letter-spacing: -0.3px;
+    }
+
+    /* ── FEATURES ── */
+    .section { padding: 96px 40px; }
+    .section-inner { max-width: 1100px; margin: 0 auto; }
+
+    .section-label {
+      font-size: 12px; font-weight: 700; letter-spacing: 2px;
+      text-transform: uppercase; color: var(--purple);
+      margin-bottom: 16px;
+    }
+    .section-title {
+      font-family: 'Playfair Display', serif;
+      font-size: 42px; font-weight: 900; line-height: 1.15;
+      color: var(--text); margin-bottom: 16px; letter-spacing: -0.5px;
+    }
+    .section-title em { font-style: normal; color: var(--purple); }
+    .section-subtitle {
+      font-size: 17px; color: var(--muted); line-height: 1.7;
+      font-weight: 300; max-width: 560px;
+    }
+
+    .features-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      gap: 24px; margin-top: 56px;
+    }
+    .feature-card {
+      background: var(--white); border: 1px solid var(--border);
+      border-radius: 20px; padding: 32px;
+      transition: all 0.3s; cursor: default;
+    }
+    .feature-card:hover {
+      border-color: var(--purple); transform: translateY(-4px);
+      box-shadow: 0 12px 40px rgba(106,27,154,0.1);
+    }
+    .feature-icon {
+      width: 52px; height: 52px; border-radius: 14px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 24px; margin-bottom: 20px;
+    }
+    .icon-purple { background: var(--purple-light); }
+    .icon-teal { background: var(--teal-light); }
+    .icon-navy { background: #ECEEF9; }
+    .feature-card h3 { font-size: 18px; font-weight: 700; margin-bottom: 10px; }
+    .feature-card p { font-size: 14px; color: var(--muted); line-height: 1.7; font-weight: 300; }
+
+    /* ── HOW IT WORKS ── */
+    .how-section { background: var(--bg); }
+    .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 32px; margin-top: 56px; }
+    .step { text-align: center; }
+    .step-num {
+      width: 56px; height: 56px; border-radius: 50%;
+      background: var(--purple); color: #fff;
+      font-family: 'Playfair Display', serif;
+      font-size: 22px; font-weight: 900;
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 20px;
+    }
+    .step h3 { font-size: 18px; font-weight: 700; margin-bottom: 10px; }
+    .step p { font-size: 14px; color: var(--muted); line-height: 1.7; font-weight: 300; }
+
+    /* ── PRICING ── */
+    .pricing-card {
+      max-width: 480px; margin: 56px auto 0;
+      background: var(--white); border: 2px solid var(--purple);
+      border-radius: 24px; padding: 48px; text-align: center;
+      box-shadow: 0 20px 60px rgba(106,27,154,0.12);
+      position: relative; overflow: hidden;
+    }
+    .pricing-card::before {
+      content: 'MOST POPULAR';
+      position: absolute; top: 24px; right: -32px;
+      background: var(--purple); color: #fff;
+      font-size: 10px; font-weight: 800; letter-spacing: 1.5px;
+      padding: 6px 40px; transform: rotate(45deg);
+    }
+    .price-amount {
+      font-family: 'Playfair Display', serif;
+      font-size: 72px; font-weight: 900; color: var(--purple);
+      line-height: 1; margin-bottom: 4px;
+    }
+    .price-period { font-size: 16px; color: var(--muted); margin-bottom: 32px; font-weight: 300; }
+    .price-features { list-style: none; margin-bottom: 36px; text-align: left; display: grid; gap: 12px; }
+    .price-features li {
+      display: flex; align-items: center; gap: 12px;
+      font-size: 15px; font-weight: 400;
+    }
+    .price-features li::before {
+      content: '✓'; display: flex; align-items: center; justify-content: center;
+      width: 22px; height: 22px; background: var(--purple-light);
+      color: var(--purple); border-radius: 50%; font-size: 12px; font-weight: 800;
+      flex-shrink: 0;
+    }
+    .trial-badge {
+      background: var(--teal-light); color: var(--teal);
+      border-radius: 10px; padding: 14px 20px;
+      font-size: 14px; font-weight: 600; margin-bottom: 24px;
+    }
+
+    /* ── TESTIMONIAL ── */
+    .testimonial-section { background: var(--navy); }
+    .testimonial-section .section-title { color: #fff; }
+    .testimonial-section .section-label { color: #A5B4FC; }
+    .testimonials-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px; margin-top: 48px; }
+    .testimonial-card {
+      background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 20px; padding: 32px;
+    }
+    .testimonial-quote { font-size: 15px; line-height: 1.8; color: #CBD5E1; margin-bottom: 24px; font-weight: 300; font-style: italic; }
+    .testimonial-author { display: flex; align-items: center; gap: 14px; }
+    .author-avatar {
+      width: 44px; height: 44px; border-radius: 50%;
+      background: var(--purple); display: flex; align-items: center; justify-content: center;
+      font-family: 'Playfair Display', serif; font-size: 18px; font-weight: 900; color: #fff;
+    }
+    .author-name { font-size: 14px; font-weight: 700; color: #fff; }
+    .author-role { font-size: 13px; color: #94A3B8; }
+
+    /* ── CTA ── */
+    .cta-section {
+      background: linear-gradient(135deg, var(--purple) 0%, var(--navy) 100%);
+      padding: 100px 40px; text-align: center;
+    }
+    .cta-section h2 {
+      font-family: 'Playfair Display', serif;
+      font-size: 48px; font-weight: 900; color: #fff;
+      margin-bottom: 16px; letter-spacing: -0.5px;
+    }
+    .cta-section p { font-size: 18px; color: #E9D5FF; margin-bottom: 40px; font-weight: 300; }
+    .btn-white {
+      background: #fff; color: var(--purple);
+      padding: 16px 40px; font-size: 17px; font-weight: 700;
+      border-radius: 14px; text-decoration: none;
+      display: inline-block; transition: all 0.2s;
+    }
+    .btn-white:hover { transform: translateY(-2px); box-shadow: 0 12px 40px rgba(0,0,0,0.2); }
+    .cta-note { font-size: 14px; color: #C4B5FD; margin-top: 16px; }
+
+    /* ── FOOTER ── */
+    footer {
+      background: var(--text); color: #94A3B8;
+      padding: 48px 40px; text-align: center;
+    }
+    .footer-logo {
+      font-family: 'Playfair Display', serif;
+      font-size: 22px; font-weight: 900; color: #fff; margin-bottom: 16px;
+    }
+    footer p { font-size: 13px; line-height: 1.8; }
+    .footer-links { display: flex; justify-content: center; gap: 24px; margin-top: 20px; flex-wrap: wrap; }
+    .footer-links a { color: #64748B; text-decoration: none; font-size: 13px; transition: color 0.2s; }
+    .footer-links a:hover { color: #fff; }
+
+    /* ── ANIMATIONS ── */
+    .fade-in {
+      opacity: 0; transform: translateY(24px);
+      transition: opacity 0.6s ease, transform 0.6s ease;
+    }
+    .fade-in.visible { opacity: 1; transform: translateY(0); }
+
+    /* ── MOBILE ── */
+    @media (max-width: 768px) {
+      nav { padding: 16px 20px; }
+      .nav-links { display: none; }
+      .hero { padding: 100px 20px 60px; }
+      .hero-inner { grid-template-columns: 1fr; gap: 40px; }
+      .hero h1 { font-size: 38px; }
+      .hero-visual { order: -1; }
+      .chip-1, .chip-2 { display: none; }
+      .section { padding: 64px 20px; }
+      .section-title { font-size: 32px; }
+      .features-grid { grid-template-columns: 1fr; }
+      .steps { grid-template-columns: 1fr; }
+      .testimonials-grid { grid-template-columns: 1fr; }
+      .cta-section { padding: 72px 20px; }
+      .cta-section h2 { font-size: 34px; }
+      .trust-logos { gap: 28px; }
+      .trust-bar { padding: 20px; }
+      footer { padding: 40px 20px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- NAV -->
+  <nav id="navbar">
+    <a href="#" class="nav-logo">Sharon's Accounting</a>
+    <div class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#how-it-works">How it works</a>
+      <a href="#pricing">Pricing</a>
+      <a href="/?portal=1" class="btn btn-secondary">Sign in</a>
+      <a href="/?portal=1" class="btn btn-primary">Start free trial</a>
+    </div>
+  </nav>
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="hero-inner">
+      <div class="hero-text fade-in">
+        <div class="hero-badge"><span></span> Built for Australian businesses</div>
+        <h1>Accounting made <em>simple</em> for Australians</h1>
+        <p>Invoicing, GST calculations and ATO-ready reports — all in one place. No spreadsheets, no confusion, no accountant required for the basics.</p>
+        <div class="hero-actions">
+          <a href="/?portal=1" class="btn btn-primary btn-large">Start your 14-day free trial</a>
+          <span class="trial-note">No credit card required</span>
+        </div>
+      </div>
+
+      <div class="hero-visual fade-in" style="transition-delay: 0.2s">
+        <div class="floating-chip chip-1">
+          <span class="chip-icon">✓</span> Invoice paid — $2,750.00
+        </div>
+        <div class="mockup-card">
+          <div class="mockup-header">
+            <span class="mockup-header-title">Invoice #INV-0042</span>
+            <span class="mockup-header-amount">$2,750.00</span>
+          </div>
+          <div class="mockup-body">
+            <div class="mockup-row">
+              <span class="label">Client</span>
+              <span class="value">Apex Solutions Pty Ltd</span>
+            </div>
+            <div class="mockup-row">
+              <span class="label">Status</span>
+              <span class="value"><span class="mockup-badge badge-paid">Paid</span></span>
+            </div>
+            <div class="mockup-row">
+              <span class="label">Subtotal</span>
+              <span class="value">$2,500.00</span>
+            </div>
+            <div class="mockup-row">
+              <span class="label">GST (10%)</span>
+              <span class="value"><span class="mockup-badge badge-gst">$250.00</span></span>
+            </div>
+            <div class="mockup-row">
+              <span class="label">Safe to spend</span>
+              <span class="value green">$1,843.00</span>
+            </div>
+          </div>
+        </div>
+        <div class="floating-chip chip-2">
+          <span class="chip-icon">📊</span> GST auto-calculated
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TRUST BAR -->
+  <div class="trust-bar">
+    <p>Trusted by Australian small businesses &amp; accountants</p>
+    <div class="trust-logos">
+      <span>Sole Traders</span>
+      <span>Bookkeepers</span>
+      <span>Consultants</span>
+      <span>Tradies</span>
+      <span>Freelancers</span>
+    </div>
+  </div>
+
+  <!-- FEATURES -->
+  <section class="section" id="features">
+    <div class="section-inner">
+      <div class="fade-in">
+        <p class="section-label">Features</p>
+        <h2 class="section-title">Everything you need,<br /><em>nothing you don't</em></h2>
+        <p class="section-subtitle">Built specifically for the Australian tax system — GST, ATO reporting, and BAS-ready figures built in from day one.</p>
+      </div>
+      <div class="features-grid">
+        <div class="feature-card fade-in">
+          <div class="feature-icon icon-purple">🧾</div>
+          <h3>Professional invoicing &amp; quotes</h3>
+          <p>Create polished PDF invoices and quotes in seconds. Send via email with a Stripe payment link so clients can pay instantly.</p>
+        </div>
+        <div class="feature-card fade-in" style="transition-delay: 0.1s">
+          <div class="feature-icon icon-teal">📊</div>
+          <h3>Automatic GST calculations</h3>
+          <p>GST is calculated automatically on every invoice, expense and income source. No more manual spreadsheets or calculator errors.</p>
+        </div>
+        <div class="feature-card fade-in" style="transition-delay: 0.2s">
+          <div class="feature-icon icon-navy">🇦🇺</div>
+          <h3>ATO-ready reports</h3>
+          <p>Generate pre-filled income, expense and GST summaries formatted for your tax return. Export directly to share with your accountant.</p>
+        </div>
+        <div class="feature-card fade-in" style="transition-delay: 0.1s">
+          <div class="feature-icon icon-purple">👥</div>
+          <h3>Client management</h3>
+          <p>Store all your client details, ABNs, and contact info in one place. Link every invoice and quote to the right client automatically.</p>
+        </div>
+        <div class="feature-card fade-in" style="transition-delay: 0.2s">
+          <div class="feature-icon icon-teal">💸</div>
+          <h3>Expense tracking</h3>
+          <p>Categorise expenses, claim GST credits and track deductible business costs. Receipt uploads and bill management included.</p>
+        </div>
+        <div class="feature-card fade-in" style="transition-delay: 0.3s">
+          <div class="feature-icon icon-navy">🎯</div>
+          <h3>Safe to Spend dashboard</h3>
+          <p>See exactly how much money you can safely spend after setting aside GST, tax and expenses — updated in real time.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- HOW IT WORKS -->
+  <section class="section how-section" id="how-it-works">
+    <div class="section-inner">
+      <div class="fade-in" style="text-align: center;">
+        <p class="section-label">How it works</p>
+        <h2 class="section-title">Up and running in<br /><em>minutes</em></h2>
+      </div>
+      <div class="steps">
+        <div class="step fade-in">
+          <div class="step-num">1</div>
+          <h3>Create your account</h3>
+          <p>Sign up with your email and set up your business profile — ABN, bank details, logo and payment terms. Takes under 5 minutes.</p>
+        </div>
+        <div class="step fade-in" style="transition-delay: 0.15s">
+          <div class="step-num">2</div>
+          <h3>Add clients &amp; start invoicing</h3>
+          <p>Add your clients, create your first invoice and send it as a professional PDF. Clients can pay by Stripe or bank transfer.</p>
+        </div>
+        <div class="step fade-in" style="transition-delay: 0.3s">
+          <div class="step-num">3</div>
+          <h3>Stay ATO-ready year round</h3>
+          <p>Track income and expenses as you go. At tax time, export your ATO-ready summary — no scrambling through receipts.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PRICING -->
+  <section class="section" id="pricing">
+    <div class="section-inner" style="text-align: center;">
+      <div class="fade-in">
+        <p class="section-label">Pricing</p>
+        <h2 class="section-title">Simple, honest pricing</h2>
+        <p class="section-subtitle" style="margin: 0 auto;">One plan. Everything included. No hidden fees, no feature limits, no surprises.</p>
+      </div>
+      <div class="pricing-card fade-in">
+        <div class="price-amount">$45</div>
+        <div class="price-period">per month · cancel anytime</div>
+        <div class="trial-badge">🎉 Start with a 14-day free trial — no credit card needed</div>
+        <ul class="price-features">
+          <li>Unlimited invoices &amp; quotes</li>
+          <li>Automatic GST calculations</li>
+          <li>ATO-ready income &amp; expense reports</li>
+          <li>Client management</li>
+          <li>Professional PDF generation</li>
+          <li>Stripe payment collection</li>
+          <li>Safe to Spend dashboard</li>
+          <li>Email support</li>
+        </ul>
+        <a href="/?portal=1" class="btn btn-primary btn-large" style="width: 100%; justify-content: center;">
+          Start free trial — 14 days free
+        </a>
+        <p style="font-size: 13px; color: var(--muted); margin-top: 14px;">Then $45/month. Cancel anytime.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- TESTIMONIALS -->
+  <section class="section testimonial-section" id="testimonials">
+    <div class="section-inner">
+      <div class="fade-in">
+        <p class="section-label">Testimonials</p>
+        <h2 class="section-title">Australians love it</h2>
+      </div>
+      <div class="testimonials-grid">
+        <div class="testimonial-card fade-in">
+          <p class="testimonial-quote">"I used to dread tax time. Now I just export my ATO summary and hand it straight to my accountant. Saves me hours every quarter."</p>
+          <div class="testimonial-author">
+            <div class="author-avatar">M</div>
+            <div>
+              <div class="author-name">Michael T.</div>
+              <div class="author-role">Freelance consultant, Melbourne</div>
+            </div>
+          </div>
+        </div>
+        <div class="testimonial-card fade-in" style="transition-delay: 0.15s">
+          <p class="testimonial-quote">"The GST calculations are spot on. I was making mistakes manually before — now everything is automatic and I know my BAS figures are right."</p>
+          <div class="testimonial-author">
+            <div class="author-avatar">S</div>
+            <div>
+              <div class="author-name">Sarah K.</div>
+              <div class="author-role">Sole trader, Brisbane</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="cta-section">
+    <div class="fade-in">
+      <h2>Ready to get your finances sorted?</h2>
+      <p>Join Australian small businesses and accountants already using Sharon's Accounting. Start free for 14 days.</p>
+      <a href="/?portal=1" class="btn-white">Start your free trial</a>
+      <p class="cta-note">No credit card required · Cancel anytime · Australian-made</p>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer>
+    <div class="footer-logo">Sharon's Accounting</div>
+    <p>Smart accounting software for Australian small businesses and accountants.<br />
+    ABN-ready · GST-compliant · ATO-friendly</p>
+    <div class="footer-links">
+      <a href="/?portal=1">Sign in</a>
+      <a href="/?portal=1">Create account</a>
+      <a href="/terms">Terms of Service</a>
+      <a href="/privacy">Privacy Policy</a>
+    </div>
+    <p style="margin-top: 28px; font-size: 12px;">© 2025 Sharon's Accounting Service. All rights reserved.</p>
+  </footer>
+
+  <script>
+    // Sticky nav shadow
+    const navbar = document.getElementById('navbar');
+    window.addEventListener('scroll', () => {
+      navbar.classList.toggle('scrolled', window.scrollY > 10);
+    });
+
+    // Fade in on scroll
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('visible');
+        }
+      });
+    }, { threshold: 0.15 });
+
+    document.querySelectorAll('.fade-in').forEach(el => observer.observe(el));
+  </script>
+</body>
+</html>
