@@ -66,6 +66,102 @@ function useToast() {
 }
 // ────────────────────────────────────────────────────────────
 
+// ── Confirm Modal ────────────────────────────────────────────
+function ConfirmModal({ isOpen, title, message, confirmLabel = "Delete", onConfirm, onCancel }) {
+  if (!isOpen) return null;
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 99998, background: "rgba(15,23,42,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div style={{ background: "#fff", borderRadius: 18, padding: 28, width: "100%", maxWidth: 420, boxShadow: "0 20px 60px rgba(0,0,0,0.2)", fontFamily: 'sans-serif' }}>
+        <div style={{ fontSize: 18, fontWeight: 800, color: "#14202B", marginBottom: 10 }}>{title}</div>
+        <div style={{ fontSize: 14, color: "#64748B", lineHeight: 1.6, marginBottom: 24 }}>{message}</div>
+        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+          <button onClick={onCancel} style={{ background: "#fff", color: "#14202B", border: "1px solid #E2E8F0", borderRadius: 10, padding: "10px 18px", fontWeight: 700, cursor: "pointer", fontSize: 14 }}>Cancel</button>
+          <button onClick={onConfirm} style={{ background: "#EF4444", color: "#fff", border: "none", borderRadius: 10, padding: "10px 18px", fontWeight: 700, cursor: "pointer", fontSize: 14 }}>{confirmLabel}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function useConfirm() {
+  const [confirmState, setConfirmState] = React.useState(null);
+  const confirm = ({ title, message, confirmLabel = "Delete", onConfirm }) => {
+    setConfirmState({ title, message, confirmLabel, onConfirm });
+  };
+  const close = () => setConfirmState(null);
+  const modal = confirmState ? (
+    <ConfirmModal isOpen title={confirmState.title} message={confirmState.message} confirmLabel={confirmState.confirmLabel}
+      onConfirm={() => { close(); confirmState.onConfirm(); }} onCancel={close} />
+  ) : null;
+  return { confirm, modal };
+}
+// ─────────────────────────────────────────────────────────────
+
+// ── Subscription helpers ──────────────────────────────────────
+const TRIAL_DAYS = 14;
+
+function getSubscriptionAccess(profile) {
+  const status = profile?.subscriptionStatus || "";
+  const trialStarted = profile?.trialStartedAt || profile?.setupCompletedAt || "";
+  if (status === "active") return { allowed: true, reason: "active" };
+  if (trialStarted) {
+    const daysLeft = Math.max(0, Math.ceil(TRIAL_DAYS - (Date.now() - new Date(trialStarted).getTime()) / (1000 * 60 * 60 * 24)));
+    if (daysLeft > 0) return { allowed: true, reason: "trial", daysLeft };
+    return { allowed: false, reason: "trial_expired", daysLeft: 0 };
+  }
+  if (!profile?.setupComplete) return { allowed: true, reason: "setup" };
+  if (status === "canceled" || status === "past_due") return { allowed: false, reason: status };
+  return { allowed: true, reason: "legacy" };
+}
+
+function PaywallScreen({ profile, serverBaseUrl }) {
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState("");
+  const access = getSubscriptionAccess(profile);
+  const handleSubscribe = async () => {
+    setLoading(true); setError("");
+    try {
+      const res = await fetch(`${serverBaseUrl}/api/create-subscription-checkout`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: profile.email, userId: profile.user_id || profile.id, businessName: profile.businessName, successUrl: window.location.origin + "?subscribed=1", cancelUrl: window.location.origin + "?subscribed=0" }),
+      });
+      const data = await res.json();
+      if (data.url) window.location.href = data.url;
+      else setError(data.error || "Could not start checkout. Please try again.");
+    } catch { setError("Could not reach the server. Please try again."); }
+    finally { setLoading(false); }
+  };
+  return (
+    <div style={{ minHeight: "100vh", background: "#F8FAFC", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, fontFamily: "sans-serif" }}>
+      <div style={{ width: "100%", maxWidth: 480, textAlign: "center" }}>
+        <div style={{ fontSize: 22, fontWeight: 900, color: "#6A1B9A", marginBottom: 8 }}>{profile.businessName || "Your Portal"}</div>
+        <div style={{ background: "#fff", border: "1px solid #E2E8F0", borderRadius: 18, padding: 32, marginTop: 24, boxShadow: "0 2px 12px rgba(0,0,0,0.06)" }}>
+          <div style={{ fontSize: 40, marginBottom: 12 }}>{access.reason === "trial_expired" ? "⏰" : "🔒"}</div>
+          <div style={{ fontSize: 20, fontWeight: 800, color: "#14202B", marginBottom: 10 }}>
+            {access.reason === "trial_expired" ? "Your free trial has ended" : "Subscription required"}
+          </div>
+          <div style={{ fontSize: 14, color: "#64748B", lineHeight: 1.7, marginBottom: 24 }}>
+            {access.reason === "trial_expired" ? "Subscribe now to keep access to all your invoices, clients, quotes and financial data." : "Reactivate your subscription to regain access."}
+          </div>
+          <div style={{ background: "#F5ECFB", borderRadius: 14, padding: "20px 24px", marginBottom: 24 }}>
+            <div style={{ fontSize: 36, fontWeight: 900, color: "#6A1B9A" }}>$45</div>
+            <div style={{ fontSize: 14, color: "#64748B", marginTop: 4 }}>per month · cancel anytime</div>
+          </div>
+          {error && <div style={{ background: "#FEE2E2", color: "#991B1B", borderRadius: 10, padding: "10px 14px", marginBottom: 16, fontSize: 13 }}>{error}</div>}
+          <button onClick={handleSubscribe} disabled={loading} style={{ width: "100%", background: loading ? "#9CA3AF" : "#6A1B9A", color: "#fff", border: "none", borderRadius: 12, padding: "14px 20px", fontSize: 16, fontWeight: 800, cursor: loading ? "not-allowed" : "pointer" }}>
+            {loading ? "Redirecting to checkout..." : "Subscribe now — $45/month"}
+          </button>
+          <div style={{ fontSize: 12, color: "#94A3B8", marginTop: 14 }}>Secure payment via Stripe · Cancel anytime</div>
+        </div>
+        <div style={{ fontSize: 12, color: "#94A3B8", marginTop: 20 }}>
+          Already subscribed? <button onClick={() => window.location.reload()} style={{ background: "none", border: "none", color: "#6A1B9A", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>Refresh to continue</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+// ─────────────────────────────────────────────────────────────
+
 const colours = {
   purple: "#6A1B9A",
   teal: "#006D6D",
@@ -513,6 +609,10 @@ const initialProfile = {
   setupComplete: false,
   setupCompletedAt: "",
   monthlySubscription: DEFAULT_MONTHLY_SUBSCRIPTION,
+  trialStartedAt: "",
+  subscriptionStatus: "",
+  subscriptionId: "",
+  stripeCustomerId: "",
 };
 
 const initialClients = [];
@@ -1775,6 +1875,19 @@ try {
 
 export default function AccountingPortalPrototype() {
   const { toasts, toast, removeToast } = useToast();
+  const { confirm, modal: confirmModal } = useConfirm();
+  const [savingClient, setSavingClient] = useState(false);
+  const [savingClientEdits, setSavingClientEdits] = useState(false);
+  const [savingInvoice, setSavingInvoice] = useState(false);
+  const [savingInvoiceEdits, setSavingInvoiceEdits] = useState(false);
+  const [savingQuote, setSavingQuote] = useState(false);
+  const [savingQuoteEdits, setSavingQuoteEdits] = useState(false);
+  const [savingExpense, setSavingExpense] = useState(false);
+  const [savingBill, setSavingBill] = useState(false);
+  const [savingService, setSavingService] = useState(false);
+  const [savingIncomeSource, setSavingIncomeSource] = useState(false);
+  const [savingDocumentEdits, setSavingDocumentEdits] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activePage, setActivePage] = useState("settings");
   const [activeSettingsTab, setActiveSettingsTab] = useState("Profile");
   const [authUser, setAuthUser] = useState(null);
@@ -1804,6 +1917,7 @@ export default function AccountingPortalPrototype() {
   });
   const hasHydratedSupabaseState = useRef(false);
   const syncTimeoutRef = useRef(null);
+  const isSigningOut = useRef(false);
   const [isSupabaseRestoring, setIsSupabaseRestoring] = useState(false);
   const [supabaseSyncStatus, setSupabaseSyncStatus] = useState(
     supabase ? "Ready to sync to database" : "Supabase not connected"
@@ -2035,6 +2149,8 @@ export default function AccountingPortalPrototype() {
     const nextProfile = { ...buildWizardProfile(),
       setupComplete: true,
       setupCompletedAt: new Date().toISOString(),
+      trialStartedAt: new Date().toISOString(),
+      subscriptionStatus: "trialing",
     };
     const wizardErrors = collectValidationErrors(
       !nextProfile.businessName && "Please enter your business name.",
@@ -2105,7 +2221,9 @@ export default function AccountingPortalPrototype() {
       setAuthReady(true);
     });
 
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_OUT") { setAuthUser(null); setAuthReady(true); return; }
+      if (isSigningOut.current) return;
       setAuthUser(session?.user || null);
       setAuthReady(true);
     });
@@ -2465,9 +2583,12 @@ export default function AccountingPortalPrototype() {
   const handleSignOut = async () => {
     if (!supabase?.auth) return;
     try {
+      isSigningOut.current = true;
       await supabase.auth.signOut();
+      Object.keys(localStorage).forEach((key) => { if (key.startsWith("sb-")) localStorage.removeItem(key); });
       hasHydratedSupabaseState.current = false;
       setIsSupabaseRestoring(false);
+      setAuthUser(null);
       setProfile(initialProfile);
       setClients([]);
       setInvoices([]);
@@ -2495,6 +2616,8 @@ export default function AccountingPortalPrototype() {
       setActiveSettingsTab("Profile");
     } catch (error) {
       console.error("SUPABASE SIGN OUT ERROR:", error);
+    } finally {
+      isSigningOut.current = false;
     }
   };
 
@@ -2668,8 +2791,8 @@ export default function AccountingPortalPrototype() {
     }
   };
 
-  const deleteDocument = async (id) => {
-    if (!window.confirm("Delete this document from the list?")) return;
+  const deleteDocument = (id) => {
+    confirm({ title: "Delete document", message: "This document will be permanently removed.", confirmLabel: "Delete", onConfirm: async () => {
     try {
       await deleteRecordFromDatabase(SUPABASE_TABLES.documents, id);
       setDocuments((prev) => prev.filter((item) => item.id !== id));
@@ -2679,6 +2802,8 @@ export default function AccountingPortalPrototype() {
       setSupabaseSyncStatus(error.message || "Document delete failed");
       toast.error(error.message || "Document delete failed");
     }
+      },
+    });
   };
 
   const calculateServiceValues = (priceValue, gstTypeValue) => {
@@ -2774,8 +2899,8 @@ export default function AccountingPortalPrototype() {
     }
   };
 
-  const deleteService = async (serviceId) => {
-    if (!window.confirm("Delete this service?")) return;
+  const deleteService = (serviceId) => {
+    confirm({ title: "Delete service", message: "This service will be removed from your catalogue.", confirmLabel: "Delete", onConfirm: async () => {
     try {
       await deleteRecordFromDatabase(SUPABASE_TABLES.services, serviceId);
       setServices((prev) => prev.filter((item) => item.id !== serviceId));
@@ -2785,6 +2910,8 @@ export default function AccountingPortalPrototype() {
       setSupabaseSyncStatus(error.message || "Service delete failed");
       toast.error(error.message || "Service delete failed");
     }
+      },
+    });
   };
 
   const resetIncomeSourceForm = () => {
@@ -3502,6 +3629,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     };
 
     const saveClient = async () => {
+    setSavingClient(true);
     const payload = {
       id: Date.now(),
       ...clientForm,
@@ -4037,8 +4165,8 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     }
     }
 
-    const deleteInvoice = async (id) => {
-    if (!window.confirm("Delete this invoice?")) return;
+    const deleteInvoice = (id) => {
+    confirm({ title: "Delete invoice", message: "This invoice will be permanently deleted.", confirmLabel: "Delete", onConfirm: async () => {
     try {
       await deleteRecordFromDatabase(SUPABASE_TABLES.invoices, id);
       setInvoices((prev) => prev.filter((item) => item.id !== id));
@@ -4048,9 +4176,11 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       setSupabaseSyncStatus(error.message || "Invoice delete failed");
       toast.error(error.message || "Invoice delete failed");
     }
+      },
+    });
     };
-    const deleteQuote = async (id) => {
-    if (!window.confirm("Delete this quote?")) return;
+    const deleteQuote = (id) => {
+    confirm({ title: "Delete quote", message: "This quote will be permanently deleted.", confirmLabel: "Delete", onConfirm: async () => {
     try {
       await deleteRecordFromDatabase(SUPABASE_TABLES.quotes, id);
       setQuotes((prev) => prev.filter((item) => item.id !== id));
@@ -4060,9 +4190,11 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       setSupabaseSyncStatus(error.message || "Quote delete failed");
       toast.error(error.message || "Quote delete failed");
     }
+      },
+    });
     };
-    const deleteExpense = async (id) => {
-    if (!window.confirm("Delete this expense?")) return;
+    const deleteExpense = (id) => {
+    confirm({ title: "Delete expense", message: "This expense record will be permanently deleted.", confirmLabel: "Delete", onConfirm: async () => {
     try {
       await deleteRecordFromDatabase(SUPABASE_TABLES.expenses, id);
       setExpenses((prev) => prev.filter((item) => item.id !== id));
@@ -4072,9 +4204,11 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       setSupabaseSyncStatus(error.message || "Expense delete failed");
       toast.error(error.message || "Expense delete failed");
     }
+      },
+    });
     };
-    const deleteClient = async (id) => {
-    if (!window.confirm("Delete this client?")) return;
+    const deleteClient = (id) => {
+    confirm({ title: "Delete client", message: "This client will be permanently deleted.", confirmLabel: "Delete", onConfirm: async () => {
     try {
       await deleteRecordFromDatabase(SUPABASE_TABLES.clients, id);
       setClients((prev) => prev.filter((item) => item.id !== id));
@@ -4084,9 +4218,11 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       setSupabaseSyncStatus(error.message || "Client delete failed");
       toast.error(error.message || "Client delete failed");
     }
+      },
+    });
     };
-    const deleteIncomeSource = async (id) => {
-    if (!window.confirm("Delete this income source?")) return;
+    const deleteIncomeSource = (id) => {
+    confirm({ title: "Delete income source", message: "This income source will be permanently deleted.", confirmLabel: "Delete", onConfirm: async () => {
     try {
       await deleteRecordFromDatabase(SUPABASE_TABLES.incomeSources, id);
       setIncomeSources((prev) => prev.filter((item) => item.id !== id));
@@ -4096,6 +4232,8 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       setSupabaseSyncStatus(error.message || "Income source delete failed");
       toast.error(error.message || "Income source delete failed");
     }
+      },
+    });
     };
 
   const resolveInvoiceStripeAmount = (invoice) => {
@@ -7497,6 +7635,11 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     return renderSetupWizard();
     }
 
+    const subscriptionAccess = getSubscriptionAccess(profile);
+    if (!subscriptionAccess.allowed) {
+      return <PaywallScreen profile={profile} serverBaseUrl={getApiBaseUrl(profile.stripeServerUrl)} />;
+    }
+
     return (
     <div
       style={{
@@ -7507,14 +7650,35 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
           '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
       }}
     >
-      <div style={{ display: "grid", gridTemplateColumns: "240px 1fr", minHeight: "100vh" }}>
-        <aside
-          style={{
-            background: colours.white,
-            borderRight: `1px solid ${colours.border}`,
-            padding: 20,
-          }}
-        >
+      <style>{`
+        .sas-layout { display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; }
+        .sas-sidebar { background: #fff; border-right: 1px solid #E2E8F0; padding: 20px; position: relative; z-index: 100; }
+        .sas-overlay { display: none; }
+        .sas-hamburger { display: none; }
+        .sas-main { padding: 24px; overflow-x: hidden; }
+        @media (max-width: 768px) {
+          .sas-layout { grid-template-columns: 1fr; }
+          .sas-sidebar { position: fixed; top: 0; left: -260px; width: 240px; height: 100vh; overflow-y: auto; transition: left 0.25s ease; z-index: 200; box-shadow: 4px 0 20px rgba(0,0,0,0.12); }
+          .sas-sidebar.open { left: 0; }
+          .sas-overlay { display: block; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 199; }
+          .sas-hamburger { display: flex; align-items: center; gap: 12px; background: #fff; border-bottom: 1px solid #E2E8F0; padding: 14px 16px; position: sticky; top: 0; z-index: 100; }
+          .sas-hamburger-btn { background: none; border: none; cursor: pointer; padding: 4px; display: flex; flex-direction: column; gap: 5px; }
+          .sas-hamburger-btn span { display: block; width: 22px; height: 2px; background: #6A1B9A; border-radius: 2px; }
+          .sas-main { padding: 16px; }
+        }
+      `}</style>
+
+      <div className="sas-hamburger">
+        <button className="sas-hamburger-btn" onClick={() => setSidebarOpen(true)}>
+          <span /><span /><span />
+        </button>
+        <span style={{ fontSize: 16, fontWeight: 900, color: colours.purple }}>{profile.businessName || "My Portal"}</span>
+      </div>
+
+      {sidebarOpen && <div className="sas-overlay" onClick={() => setSidebarOpen(false)} />}
+
+      <div className="sas-layout">
+        <aside className={`sas-sidebar${sidebarOpen ? " open" : ""}`}>
           <div style={{ fontSize: 20, fontWeight: 900, color: colours.purple, marginBottom: 20 }}>
             {profile.businessName || "My Portal"}
           </div>
@@ -7527,7 +7691,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
             {navItems.map((item) => (
               <button
                 key={item}
-                onClick={() => setActivePage(item)}
+                onClick={() => { setActivePage(item); setSidebarOpen(false); }}
                 style={{
                   textAlign: "left",
                   border: "none",
@@ -7552,7 +7716,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
           </button>
         </aside>
 
-        <main style={{ padding: 24 }}>
+        <main className="sas-main">
           <div style={{ maxWidth: 1400, margin: "0 auto" }}>
             {activePage === "dashboard" && renderDashboard()}
             {activePage === "financial insights" && renderFinancialInsights()}
@@ -7599,6 +7763,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
         onSave={saveIncomeSource}
       />
       <ToastContainer toasts={toasts} onRemove={removeToast} />
+      {confirmModal}
       <style>{`@keyframes toastIn { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }`}</style>
     </div> 
     );
