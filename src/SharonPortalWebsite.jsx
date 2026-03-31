@@ -1994,7 +1994,7 @@ export default function AccountingPortalPrototype() {
     gstRegistered: true,
   });
   const hasHydratedSupabaseState = useRef(false);
-  const syncTimeoutRef = useRef(null);
+  const lastSavedProfileRef = useRef(null);
   const isSigningOut = useRef(false);
   const [isSupabaseRestoring, setIsSupabaseRestoring] = useState(false);
   const [supabaseSyncStatus, setSupabaseSyncStatus] = useState(
@@ -2465,33 +2465,6 @@ export default function AccountingPortalPrototype() {
     }
   }, [authUser, profile?.setupComplete]);
 
-
-  const lastSavedProfileRef = useRef(null);
-
-  useEffect(() => {
-    if (!hasHydratedSupabaseState.current || !supabase) return;
-
-    // Only save if profile has actually changed from last saved version
-    const current = JSON.stringify(profile);
-    if (lastSavedProfileRef.current === current) return;
-
-    if (syncTimeoutRef.current) {
-      window.clearTimeout(syncTimeoutRef.current);
-    }
-
-    syncTimeoutRef.current = window.setTimeout(() => {
-      const nowCurrent = JSON.stringify(profile);
-      if (lastSavedProfileRef.current === nowCurrent) return;
-      lastSavedProfileRef.current = nowCurrent;
-      saveProfileToSupabase(profile);
-    }, 5000);
-
-    return () => {
-      if (syncTimeoutRef.current) {
-        window.clearTimeout(syncTimeoutRef.current);
-      }
-    };
-  }, [profile]);
 
   const uploadReceiptToSupabase = async (file) => {
     if (!supabase) {
