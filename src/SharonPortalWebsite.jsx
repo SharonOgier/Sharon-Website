@@ -2333,18 +2333,6 @@ export default function AccountingPortalPrototype() {
   }, []);
 
   useEffect(() => {
-    window.localStorage.setItem("sas_profile", JSON.stringify(profile));
-  }, [profile]);
-
-  useEffect(() => {
-    window.localStorage.setItem("sas_clients", JSON.stringify(clients));
-  }, [clients]);
-
-  useEffect(() => {
-    window.localStorage.setItem("sas_invoices", JSON.stringify(invoices));
-  }, [invoices]);
-
-  useEffect(() => {
     if (!hasLoadedUserProfile || invoiceAlertsShownRef.current || expenses.length === 0) return;
     const today = parseLocalDate(todayLocal());
     const alerts = [];
@@ -2403,14 +2391,6 @@ export default function AccountingPortalPrototype() {
       recurringShownRef.current = true;
     }
   }, [hasLoadedUserProfile, invoices, clients]);
-
-  useEffect(() => {
-    window.localStorage.setItem("sas_quotes", JSON.stringify(quotes));
-  }, [quotes]);
-
-  useEffect(() => {
-    window.localStorage.setItem("sas_expenses", JSON.stringify(expenses));
-  }, [expenses]);
 
   useEffect(() => {
     const fromBills = expenses.map((e) => e.supplier).filter(Boolean);
@@ -2485,16 +2465,26 @@ export default function AccountingPortalPrototype() {
     }
   }, [authUser, profile?.setupComplete]);
 
+
+  const lastSavedProfileRef = useRef(null);
+
   useEffect(() => {
     if (!hasHydratedSupabaseState.current || !supabase) return;
+
+    // Only save if profile has actually changed from last saved version
+    const current = JSON.stringify(profile);
+    if (lastSavedProfileRef.current === current) return;
 
     if (syncTimeoutRef.current) {
       window.clearTimeout(syncTimeoutRef.current);
     }
 
     syncTimeoutRef.current = window.setTimeout(() => {
+      const nowCurrent = JSON.stringify(profile);
+      if (lastSavedProfileRef.current === nowCurrent) return;
+      lastSavedProfileRef.current = nowCurrent;
       saveProfileToSupabase(profile);
-    }, 800);
+    }, 5000);
 
     return () => {
       if (syncTimeoutRef.current) {
@@ -2997,7 +2987,7 @@ export default function AccountingPortalPrototype() {
         setupCompletedAt: savedProfile?.setupCompletedAt || prev?.setupCompletedAt || "",
       }));
       setSetupComplete(Boolean(savedProfile?.setupComplete));
-
+      lastSavedProfileRef.current = JSON.stringify(profilePayload);
       setSupabaseSyncStatus("Profile saved to Supabase database");
     } catch (error) {
       console.error("SUPABASE PROFILE SAVE ERROR:", error);
@@ -3077,6 +3067,7 @@ export default function AccountingPortalPrototype() {
       const nextSetupComplete = Boolean(nextProfile.setupComplete);
 
       setProfile(nextProfile);
+      lastSavedProfileRef.current = JSON.stringify(nextProfile);
       setClients(Array.isArray(remoteClients) ? remoteClients : []);
       setInvoices(Array.isArray(remoteInvoices) ? remoteInvoices : []);
       setQuotes(Array.isArray(remoteQuotes) ? remoteQuotes : []);
