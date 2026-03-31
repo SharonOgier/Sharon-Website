@@ -135,6 +135,161 @@ function useConfirm() {
 }
 // ────────────────────────────────────────────────────────────
 
+// ── Subscription helpers ────────────────────────────────────
+function getSubscriptionAccess(profile) {
+  const status = profile?.subscriptionStatus || "";
+  const trialStarted = profile?.trialStartedAt || profile?.setupCompletedAt || "";
+
+  // Active paid subscription
+  if (status === "active") return { allowed: true, reason: "active" };
+
+  // Trial period
+  if (trialStarted) {
+    const msElapsed = Date.now() - new Date(trialStarted).getTime();
+    const daysElapsed = msElapsed / (1000 * 60 * 60 * 24);
+    const daysLeft = Math.max(0, Math.ceil(TRIAL_DAYS - daysElapsed));
+    if (daysLeft > 0) return { allowed: true, reason: "trial", daysLeft };
+    return { allowed: false, reason: "trial_expired", daysLeft: 0 };
+  }
+
+  // No trial started yet (brand new user before setup)
+  if (!profile?.setupComplete) return { allowed: true, reason: "setup" };
+
+  // Cancelled or past_due
+  if (status === "canceled" || status === "past_due") {
+    return { allowed: false, reason: status };
+  }
+
+  // Legacy users with no trial date — give them access
+  return { allowed: true, reason: "legacy" };
+}
+
+function PaywallScreen({ profile, serverBaseUrl, onSubscribed }) {
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState("");
+  const access = getSubscriptionAccess(profile);
+
+  const handleSubscribe = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch(`${serverBaseUrl}/api/create-subscription-checkout`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: profile.email,
+          userId: profile.user_id || profile.id,
+          businessName: profile.businessName,
+          successUrl: window.location.origin + "?subscribed=1",
+          cancelUrl: window.location.origin + "?subscribed=0",
+        }),
+      });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        setError(data.error || "Could not start checkout. Please try again.");
+      }
+    } catch (err) {
+      setError("Could not reach the server. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div style={{
+      minHeight: "100vh", background: "#F8FAFC",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      padding: 24,
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+    }}>
+      <div style={{ width: "100%", maxWidth: 480, textAlign: "center" }}>
+        {/* Logo / brand */}
+        {profile.logoDataUrl && (
+          <img src={profile.logoDataUrl} alt="Logo" style={{ maxHeight: 60, marginBottom: 24, objectFit: "contain" }} />
+        )}
+        <div style={{ fontSize: 22, fontWeight: 900, color: "#6A1B9A", marginBottom: 8 }}>
+          {profile.businessName || "Your Portal"}
+        </div>
+
+        {/* Status message */}
+        <div style={{
+          background: "#fff", border: "1px solid #E2E8F0", borderRadius: 18,
+          padding: 32, marginTop: 24, boxShadow: "0 2px 12px rgba(0,0,0,0.06)",
+        }}>
+          {access.reason === "trial_expired" ? (
+            <>
+              <div style={{ fontSize: 40, marginBottom: 12 }}>⏰</div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: "#14202B", marginBottom: 10 }}>
+                Your free trial has ended
+              </div>
+              <div style={{ fontSize: 14, color: "#64748B", lineHeight: 1.7, marginBottom: 24 }}>
+                Your 14-day free trial is complete. Subscribe now to keep access to all your invoices, clients, quotes and financial data.
+              </div>
+            </>
+          ) : (
+            <>
+              <div style={{ fontSize: 40, marginBottom: 12 }}>🔒</div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: "#14202B", marginBottom: 10 }}>
+                Subscription required
+              </div>
+              <div style={{ fontSize: 14, color: "#64748B", lineHeight: 1.7, marginBottom: 24 }}>
+                Your subscription has {access.reason === "past_due" ? "a payment overdue" : "been cancelled"}. Reactivate to regain access.
+              </div>
+            </>
+          )}
+
+          {/* Price */}
+          <div style={{
+            background: "#F5ECFB", borderRadius: 14, padding: "20px 24px",
+            marginBottom: 24,
+          }}>
+            <div style={{ fontSize: 36, fontWeight: 900, color: "#6A1B9A" }}>$45</div>
+            <div style={{ fontSize: 14, color: "#64748B", marginTop: 4 }}>per month · cancel anytime</div>
+            <div style={{ fontSize: 13, color: "#64748B", marginTop: 10, lineHeight: 1.6 }}>
+              ✓ Unlimited invoices &amp; quotes &nbsp;·&nbsp; ✓ Client management<br />
+              ✓ Expense tracking &nbsp;·&nbsp; ✓ GST calculations &nbsp;·&nbsp; ✓ PDF generation
+            </div>
+          </div>
+
+          {error && (
+            <div style={{ background: "#FEE2E2", color: "#991B1B", borderRadius: 10, padding: "10px 14px", marginBottom: 16, fontSize: 13 }}>
+              {error}
+            </div>
+          )}
+
+          <button
+            onClick={handleSubscribe}
+            disabled={loading}
+            style={{
+              width: "100%", background: loading ? "#9CA3AF" : "#6A1B9A",
+              color: "#fff", border: "none", borderRadius: 12,
+              padding: "14px 20px", fontSize: 16, fontWeight: 800,
+              cursor: loading ? "not-allowed" : "pointer",
+            }}
+          >
+            {loading ? "Redirecting to checkout..." : "Subscribe now — $45/month"}
+          </button>
+
+          <div style={{ fontSize: 12, color: "#94A3B8", marginTop: 14 }}>
+            Secure payment via Stripe · Cancel anytime in your account
+          </div>
+        </div>
+
+        <div style={{ fontSize: 12, color: "#94A3B8", marginTop: 20 }}>
+          Already subscribed?{" "}
+          <button onClick={() => window.location.reload()}
+            style={{ background: "none", border: "none", color: "#6A1B9A", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>
+            Refresh to continue
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+// ────────────────────────────────────────────────────────────
+
 const colours = {
   purple: "#6A1B9A",
   teal: "#006D6D",
@@ -237,6 +392,7 @@ const getApiBaseUrl = (preferredValue = "") => {
 
 const LOCKED_FEE_RATE_PERCENT = 1;
 const DEFAULT_MONTHLY_SUBSCRIPTION = 45;
+const TRIAL_DAYS = 14;
 
 const SUPABASE_STORAGE_BUCKET = "receipts";
 
@@ -582,6 +738,10 @@ const initialProfile = {
   setupComplete: false,
   setupCompletedAt: "",
   monthlySubscription: DEFAULT_MONTHLY_SUBSCRIPTION,
+  trialStartedAt: "",
+  subscriptionStatus: "",   // "trialing" | "active" | "past_due" | "canceled" | ""
+  subscriptionId: "",
+  stripeCustomerId: "",
 };
 
 const initialClients = [];
@@ -1861,6 +2021,7 @@ export default function AccountingPortalPrototype() {
   });
   const hasHydratedSupabaseState = useRef(false);
   const syncTimeoutRef = useRef(null);
+  const isSigningOut = useRef(false);
   const [isSupabaseRestoring, setIsSupabaseRestoring] = useState(false);
   const [supabaseSyncStatus, setSupabaseSyncStatus] = useState(
     supabase ? "Ready to sync to database" : "Supabase not connected"
@@ -2092,6 +2253,8 @@ export default function AccountingPortalPrototype() {
     const nextProfile = { ...buildWizardProfile(),
       setupComplete: true,
       setupCompletedAt: new Date().toISOString(),
+      trialStartedAt: new Date().toISOString(),
+      subscriptionStatus: "trialing",
     };
     const wizardErrors = collectValidationErrors(
       !nextProfile.businessName && "Please enter your business name.",
@@ -2163,6 +2326,7 @@ export default function AccountingPortalPrototype() {
     });
 
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (isSigningOut.current) return;
       setAuthUser(session?.user || null);
       setAuthReady(true);
     });
@@ -2240,7 +2404,7 @@ export default function AccountingPortalPrototype() {
   }, [invoices, quotes, profile, clients]);
 
   useEffect(() => {
-    if (authUser) {
+    if (authUser && !isSigningOut.current) {
       restorePortalStateFromSupabase();
     }
   }, [authUser]);
@@ -2267,6 +2431,14 @@ export default function AccountingPortalPrototype() {
         }
       }
       restorePortalStateFromSupabase();
+    }
+
+    // Subscription checkout completed
+    const subscribedStatus = params.get("subscribed");
+    if (subscribedStatus === "1" && authUser) {
+      toast.success("Subscription activated! Welcome aboard.", "");
+      restorePortalStateFromSupabase();
+      window.history.replaceState({}, "", window.location.pathname);
     }
   }, [authUser]);
 
@@ -2522,9 +2694,11 @@ export default function AccountingPortalPrototype() {
   const handleSignOut = async () => {
     if (!supabase?.auth) return;
     try {
+      isSigningOut.current = true;
       await supabase.auth.signOut();
       hasHydratedSupabaseState.current = false;
       setIsSupabaseRestoring(false);
+      setAuthUser(null);
       setProfile(initialProfile);
       setClients([]);
       setInvoices([]);
@@ -2552,6 +2726,8 @@ export default function AccountingPortalPrototype() {
       setActiveSettingsTab("Profile");
     } catch (error) {
       console.error("SUPABASE SIGN OUT ERROR:", error);
+    } finally {
+      isSigningOut.current = false;
     }
   };
 
@@ -3148,18 +3324,6 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       ? `${serverBaseUrl}/api/send-invoice-attachment-email`
       : `${serverBaseUrl}/api/send-document-email`;
 
-  console.log("SEND DOCUMENT EMAIL REQUEST:", {
-    endpoint,
-    documentType,
-    recipients: recipientList,
-    subject: payload.subject,
-    filename: payload.filename,
-    hasHtml: Boolean(payload.html),
-    hasDocumentHtml: Boolean(payload.documentHtml),
-    hasInvoiceHtml: Boolean(payload.invoiceHtml),
-    hasQuoteHtml: Boolean(payload.quoteHtml),
-    quoteHtmlLength: payload.quoteHtml?.length || 0,
-  });
 
   let response;
 
@@ -3185,12 +3349,6 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     console.error("EMAIL RESPONSE PARSE ERROR:", error);
   }
 
-  console.log("SEND DOCUMENT EMAIL RESPONSE:", {
-    endpoint,
-    status: response.status,
-    ok: response.ok,
-    data,
-  });
 
   if (!response.ok) {
     console.error("EMAIL ERROR:", data);
@@ -3997,8 +4155,6 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
         summariseValidationErrors("Expense", expenseErrors, toast);
         return;
       }
-      console.log("SAVE EXPENSE CLICKED");
-      console.log("receiptFile:", receiptFile);
       if (!expenseForm.supplier || !expenseForm.amount || !expenseForm.category) {
         toast.warning("Please fill in supplier, amount and category");
         return;
@@ -4010,14 +4166,10 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       let receiptFileName = "";
 
       if (receiptFile) {
-        console.log("Uploading receipt now...");
-        console.log("UPLOAD FUNCTION CALLED");
         const uploaded = await uploadReceiptToSupabase(receiptFile);
-        console.log("Upload result:", uploaded);
         receiptUrl = uploaded.receiptUrl;
         receiptFileName = uploaded.fileName;
       } else {
-        console.log("No receipt file selected");
       }
 
       const payload = {
@@ -4093,10 +4245,6 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       );
       const client = getClientById(invoice.clientId);
 
-      console.log("📧 SIMULATED PAYMENT RECEIPT");
-      console.log("To:", client?.email || "no email");
-      console.log("Invoice:", invoice.invoiceNumber);
-      console.log("Amount:", invoice.total);
       setSupabaseSyncStatus("Simulated payment saved to Supabase database");
       toast.success(`Simulated payment completed for ${invoice.invoiceNumber}`);
     } catch (error) {
@@ -4221,21 +4369,11 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     return 0;
   };
 
-    const createStripeCheckoutForInvoice = async (invoice) => {
+  const createStripeCheckoutForInvoice = async (invoice) => {
     const serverBaseUrl = getApiBaseUrl(profile?.stripeServerUrl);
     const selectedClient = getClientById(invoice?.clientId) || {};
 
-    console.log("FULL INVOICE OBJECT:", invoice);
-
     const rawTotal = resolveInvoiceStripeAmount(invoice);
-
-    console.log("INVOICE TOTAL DEBUG:", {
-      total: invoice?.total,
-      subtotal: invoice?.subtotal,
-      gst: invoice?.gst,
-      quantity: invoice?.quantity,
-      rawTotal,
-    });
 
     if (!Number.isFinite(rawTotal) || rawTotal <= 0) {
       console.error("Stripe invoice total could not be resolved", { invoice, rawTotal });
@@ -4262,11 +4400,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       )}&invoiceId=${encodeURIComponent(String(invoice?.id || ""))}`,
     };
 
-    console.log("Stripe invoice payload", payload);
-    console.log("Stripe amount being sent:", payload.amount, "type:", typeof payload.amount);
-    
     let response;
-
     try {
       response = await fetch(`${serverBaseUrl}/api/create-checkout-session`, {
         method: "POST",
@@ -4274,10 +4408,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
         body: JSON.stringify(payload),
       });
     } catch (error) {
-      console.error("STRIPE CHECKOUT NETWORK ERROR:", {
-        serverBaseUrl,
-        error,
-      });
+      console.error("STRIPE CHECKOUT NETWORK ERROR:", error);
       throw new Error(`Could not reach the Stripe server at ${serverBaseUrl}. Check the Stripe Server URL setting and your backend deployment.`);
     }
 
@@ -4293,7 +4424,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     }
 
     return data.url;
-    };
+  };
 
     const payInvoiceWithStripe = async (invoice) => {
     try {
@@ -4360,7 +4491,6 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
 
     try {
       if (!stripeCheckoutUrl && resolveInvoiceStripeAmount(invoice) > 0) {
-        console.log("PREVIEW REQUESTING STRIPE SESSION FOR:", invoice.invoiceNumber);
         stripeCheckoutUrl = await createStripeCheckoutForInvoice(invoice);
 
         if (stripeCheckoutUrl) {
@@ -7589,6 +7719,19 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     return renderSetupWizard();
     }
 
+    // ── Subscription / paywall check ─────────────────────────
+    const subscriptionAccess = getSubscriptionAccess(profile);
+    if (!subscriptionAccess.allowed) {
+      return (
+        <PaywallScreen
+          profile={profile}
+          serverBaseUrl={getApiBaseUrl(profile.stripeServerUrl)}
+          onSubscribed={() => window.location.reload()}
+        />
+      );
+    }
+    // ─────────────────────────────────────────────────────────
+
     return (
     <div
       style={{
@@ -7629,6 +7772,44 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
           .sas-main { padding: 16px; }
         }
       `}</style>
+
+      {/* Trial countdown banner */}
+      {subscriptionAccess.reason === "trial" && subscriptionAccess.daysLeft <= 7 && (
+        <div style={{
+          background: subscriptionAccess.daysLeft <= 2 ? "#FEF2F2" : "#FEF9C3",
+          borderBottom: `1px solid ${subscriptionAccess.daysLeft <= 2 ? "#FECACA" : "#FDE68A"}`,
+          padding: "10px 20px", fontSize: 13, textAlign: "center",
+          color: subscriptionAccess.daysLeft <= 2 ? "#991B1B" : "#92400E",
+          fontWeight: 600,
+        }}>
+          {subscriptionAccess.daysLeft <= 2
+            ? `⚠️ Your free trial ends in ${subscriptionAccess.daysLeft} day${subscriptionAccess.daysLeft === 1 ? "" : "s"} — subscribe now to keep your data`
+            : `Your free trial ends in ${subscriptionAccess.daysLeft} days`}
+          {" · "}
+          <button
+            onClick={async () => {
+              try {
+                const res = await fetch(`${getApiBaseUrl(profile.stripeServerUrl)}/api/create-subscription-checkout`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    email: profile.email,
+                    userId: profile.user_id || profile.id,
+                    businessName: profile.businessName,
+                    successUrl: window.location.origin + "?subscribed=1",
+                    cancelUrl: window.location.href,
+                  }),
+                });
+                const data = await res.json();
+                if (data.url) window.location.href = data.url;
+              } catch (e) { toast.error("Could not start checkout"); }
+            }}
+            style={{ background: "none", border: "none", cursor: "pointer", fontWeight: 800, color: "inherit", textDecoration: "underline", fontSize: 13 }}
+          >
+            Subscribe $45/month
+          </button>
+        </div>
+      )}
 
       {/* Mobile top bar */}
       <div className="sas-hamburger">
