@@ -1966,6 +1966,10 @@ export default function AccountingPortalPrototype() {
   const [activeSettingsTab, setActiveSettingsTab] = useState("Profile");
   const [authUser, setAuthUser] = useState(null);
   const [authMode, setAuthMode] = useState("signin");
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [newPasswordConfirm, setNewPasswordConfirm] = useState("");
+  const [showResetSentModal, setShowResetSentModal] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
   const [authReady, setAuthReady] = useState(false);
   const [authForm, setAuthForm] = useState({
@@ -2298,6 +2302,7 @@ export default function AccountingPortalPrototype() {
 
     const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === "SIGNED_OUT") { setAuthUser(null); setAuthReady(true); return; }
+      if (event === "PASSWORD_RECOVERY") { setIsResettingPassword(true); setAuthReady(true); return; }
       if (isSigningOut.current) return;
       setAuthUser(session?.user || null);
       setAuthReady(true);
@@ -2715,7 +2720,7 @@ export default function AccountingPortalPrototype() {
         redirectTo: window.location.origin,
       });
       if (error) throw error;
-      toast.success("Password reset email sent!");
+      setShowResetSentModal(true);
     } catch (error) {
       console.error("SUPABASE PASSWORD RESET ERROR:", error);
       toast.error(error.message || "Password reset failed");
@@ -8171,7 +8176,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
               <label style={labelStyle}>Confirm Password</label>
               <input type="password" style={inputStyle} value={authForm.confirmPassword} onChange={(e) => setAuthForm((prev) => ({ ...prev, confirmPassword: e.target.value }))} />
             </div>
-          ) : <EmptyState icon="📁" title="No documents yet" message="Upload receipts, contracts and generated PDFs here. All documents are stored securely against your account." />}
+          ) : null}
         </div>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 20 }}>
           <button style={buttonPrimary} onClick={handleAuthSubmit} disabled={authLoading}>{authLoading ? "Working..." : authMode === "signup" ? "Create Account" : "Sign In"}</button>
@@ -8992,6 +8997,41 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     return renderAuthScreen();
     }
 
+    if (isResettingPassword) {
+      return (
+        <div style={{ minHeight: "100vh", background: colours.bg, display: "grid", placeItems: "center", padding: 20 }}>
+          <div style={{ ...cardStyle, width: "100%", maxWidth: 440, padding: 32 }}>
+            <div style={{ fontSize: 24, fontWeight: 900, color: colours.text, marginBottom: 8 }}>Set New Password</div>
+            <div style={{ fontSize: 14, color: colours.muted, marginBottom: 24 }}>Enter your new password below.</div>
+            <div style={{ display: "grid", gap: 14 }}>
+              <div>
+                <label style={labelStyle}>New Password</label>
+                <input type="password" style={inputStyle} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="At least 8 characters" />
+              </div>
+              <div>
+                <label style={labelStyle}>Confirm New Password</label>
+                <input type="password" style={inputStyle} value={newPasswordConfirm} onChange={(e) => setNewPasswordConfirm(e.target.value)} placeholder="Repeat new password" />
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
+              <button style={buttonPrimary} onClick={async () => {
+                if (!newPassword || newPassword.length < 8) { toast.warning("Password must be at least 8 characters"); return; }
+                if (newPassword !== newPasswordConfirm) { toast.warning("Passwords do not match"); return; }
+                try {
+                  const { error } = await supabase.auth.updateUser({ password: newPassword });
+                  if (error) throw error;
+                  toast.success("Password updated! Signing you in...");
+                  setIsResettingPassword(false);
+                  setNewPassword("");
+                  setNewPasswordConfirm("");
+                } catch (err) { toast.error(err.message || "Failed to update password"); }
+              }}>Update Password</button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     if (isSupabaseRestoring || !hasLoadedUserProfile) {
     return (
       <div
@@ -9165,6 +9205,29 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       />
       <ToastContainer toasts={toasts} onRemove={removeToast} />
       {confirmModal}
+
+      {/* ── Password Reset Sent Modal ── */}
+      {showResetSentModal && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 99999, background: "rgba(15,23,42,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div style={{ background: "#fff", borderRadius: 18, padding: 36, width: "100%", maxWidth: 420, boxShadow: "0 20px 60px rgba(0,0,0,0.2)", textAlign: "center", fontFamily: "sans-serif" }}>
+            <div style={{ fontSize: 48, marginBottom: 16 }}>📧</div>
+            <div style={{ fontSize: 20, fontWeight: 800, color: "#14202B", marginBottom: 12 }}>Check your email</div>
+            <div style={{ fontSize: 14, color: "#64748B", lineHeight: 1.7, marginBottom: 8 }}>
+              A password reset link has been sent to
+            </div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: "#6A1B9A", marginBottom: 20 }}>
+              {authForm.email}
+            </div>
+            <div style={{ fontSize: 13, color: "#94A3B8", lineHeight: 1.7, marginBottom: 28 }}>
+              Click the link in the email to set a new password. Check your spam folder if it doesn't arrive within a few minutes.
+            </div>
+            <button onClick={() => setShowResetSentModal(false)}
+              style={{ background: "#6A1B9A", color: "#fff", border: "none", borderRadius: 12, padding: "12px 32px", fontSize: 15, fontWeight: 700, cursor: "pointer", width: "100%" }}>
+              Got it
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── Import Modal ── */}
       {showImportModal && (
