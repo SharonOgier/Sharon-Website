@@ -66,6 +66,75 @@ function useToast() {
 }
 // ────────────────────────────────────────────────────────────
 
+// ── Confirm Modal ───────────────────────────────────────────
+function ConfirmModal({ isOpen, title, message, confirmLabel = "Delete", onConfirm, onCancel }) {
+  if (!isOpen) return null;
+  return (
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 99998,
+      background: "rgba(15,23,42,0.5)",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      padding: 20,
+    }}>
+      <div style={{
+        background: "#fff", borderRadius: 18, padding: 28,
+        width: "100%", maxWidth: 420,
+        boxShadow: "0 20px 60px rgba(0,0,0,0.2)",
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+      }}>
+        <div style={{ fontSize: 18, fontWeight: 800, color: "#14202B", marginBottom: 10 }}>
+          {title}
+        </div>
+        <div style={{ fontSize: 14, color: "#64748B", lineHeight: 1.6, marginBottom: 24 }}>
+          {message}
+        </div>
+        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+          <button
+            onClick={onCancel}
+            style={{
+              background: "#fff", color: "#14202B",
+              border: "1px solid #E2E8F0", borderRadius: 10,
+              padding: "10px 18px", fontWeight: 700, cursor: "pointer", fontSize: 14,
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            style={{
+              background: "#EF4444", color: "#fff",
+              border: "none", borderRadius: 10,
+              padding: "10px 18px", fontWeight: 700, cursor: "pointer", fontSize: 14,
+            }}
+          >
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function useConfirm() {
+  const [confirmState, setConfirmState] = React.useState(null);
+  const confirm = ({ title, message, confirmLabel = "Delete", onConfirm }) => {
+    setConfirmState({ title, message, confirmLabel, onConfirm });
+  };
+  const close = () => setConfirmState(null);
+  const modal = confirmState ? (
+    <ConfirmModal
+      isOpen
+      title={confirmState.title}
+      message={confirmState.message}
+      confirmLabel={confirmState.confirmLabel}
+      onConfirm={() => { close(); confirmState.onConfirm(); }}
+      onCancel={close}
+    />
+  ) : null;
+  return { confirm, modal };
+}
+// ────────────────────────────────────────────────────────────
+
 const colours = {
   purple: "#6A1B9A",
   teal: "#006D6D",
@@ -1750,6 +1819,7 @@ try {
 
 export default function AccountingPortalPrototype() {
   const { toasts, toast, removeToast } = useToast();
+  const { confirm, modal: confirmModal } = useConfirm();
   const [savingClient, setSavingClient] = useState(false);
   const [savingClientEdits, setSavingClientEdits] = useState(false);
   const [savingInvoice, setSavingInvoice] = useState(false);
@@ -2655,8 +2725,12 @@ export default function AccountingPortalPrototype() {
     }
   };
 
-  const deleteDocument = async (id) => {
-    if (!window.confirm("Delete this document from the list?")) return;
+  const deleteDocument = (id) => {
+    confirm({
+      title: "Delete document",
+      message: "This document will be permanently removed. This cannot be undone.",
+      confirmLabel: "Delete",
+      onConfirm: async () => {
     try {
       await deleteRecordFromDatabase(SUPABASE_TABLES.documents, id);
       setDocuments((prev) => prev.filter((item) => item.id !== id));
@@ -2666,6 +2740,8 @@ export default function AccountingPortalPrototype() {
       setSupabaseSyncStatus(error.message || "Document delete failed");
       toast.error(error.message || "Document delete failed");
     }
+      },
+    });
   };
 
   const calculateServiceValues = (priceValue, gstTypeValue) => {
@@ -2761,8 +2837,12 @@ export default function AccountingPortalPrototype() {
     }
   };
 
-  const deleteService = async (serviceId) => {
-    if (!window.confirm("Delete this service?")) return;
+  const deleteService = (serviceId) => {
+    confirm({
+      title: "Delete service",
+      message: "This service will be removed from your catalogue. Any invoices or quotes already created will not be affected.",
+      confirmLabel: "Delete",
+      onConfirm: async () => {
     try {
       await deleteRecordFromDatabase(SUPABASE_TABLES.services, serviceId);
       setServices((prev) => prev.filter((item) => item.id !== serviceId));
@@ -2772,6 +2852,8 @@ export default function AccountingPortalPrototype() {
       setSupabaseSyncStatus(error.message || "Service delete failed");
       toast.error(error.message || "Service delete failed");
     }
+      },
+    });
   };
 
   const resetIncomeSourceForm = () => {
@@ -4024,8 +4106,12 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     }
     }
 
-    const deleteInvoice = async (id) => {
-    if (!window.confirm("Delete this invoice?")) return;
+    const deleteInvoice = (id) => {
+    confirm({
+      title: "Delete invoice",
+      message: "This invoice will be permanently deleted and cannot be recovered. Paid invoices cannot be deleted.",
+      confirmLabel: "Delete",
+      onConfirm: async () => {
     try {
       await deleteRecordFromDatabase(SUPABASE_TABLES.invoices, id);
       setInvoices((prev) => prev.filter((item) => item.id !== id));
@@ -4035,9 +4121,15 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       setSupabaseSyncStatus(error.message || "Invoice delete failed");
       toast.error(error.message || "Invoice delete failed");
     }
+      },
+    });
     };
-    const deleteQuote = async (id) => {
-    if (!window.confirm("Delete this quote?")) return;
+    const deleteQuote = (id) => {
+    confirm({
+      title: "Delete quote",
+      message: "This quote will be permanently deleted and cannot be recovered.",
+      confirmLabel: "Delete",
+      onConfirm: async () => {
     try {
       await deleteRecordFromDatabase(SUPABASE_TABLES.quotes, id);
       setQuotes((prev) => prev.filter((item) => item.id !== id));
@@ -4047,9 +4139,15 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       setSupabaseSyncStatus(error.message || "Quote delete failed");
       toast.error(error.message || "Quote delete failed");
     }
+      },
+    });
     };
-    const deleteExpense = async (id) => {
-    if (!window.confirm("Delete this expense?")) return;
+    const deleteExpense = (id) => {
+    confirm({
+      title: "Delete expense",
+      message: "This expense record will be permanently deleted. Your GST calculations will update automatically.",
+      confirmLabel: "Delete",
+      onConfirm: async () => {
     try {
       await deleteRecordFromDatabase(SUPABASE_TABLES.expenses, id);
       setExpenses((prev) => prev.filter((item) => item.id !== id));
@@ -4059,9 +4157,15 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       setSupabaseSyncStatus(error.message || "Expense delete failed");
       toast.error(error.message || "Expense delete failed");
     }
+      },
+    });
     };
-    const deleteClient = async (id) => {
-    if (!window.confirm("Delete this client?")) return;
+    const deleteClient = (id) => {
+    confirm({
+      title: "Delete client",
+      message: "This client will be permanently deleted. Their invoices and quotes will remain but will show no client name.",
+      confirmLabel: "Delete",
+      onConfirm: async () => {
     try {
       await deleteRecordFromDatabase(SUPABASE_TABLES.clients, id);
       setClients((prev) => prev.filter((item) => item.id !== id));
@@ -4071,9 +4175,15 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       setSupabaseSyncStatus(error.message || "Client delete failed");
       toast.error(error.message || "Client delete failed");
     }
+      },
+    });
     };
-    const deleteIncomeSource = async (id) => {
-    if (!window.confirm("Delete this income source?")) return;
+    const deleteIncomeSource = (id) => {
+    confirm({
+      title: "Delete income source",
+      message: "This income source will be permanently deleted and removed from your ATO export.",
+      confirmLabel: "Delete",
+      onConfirm: async () => {
     try {
       await deleteRecordFromDatabase(SUPABASE_TABLES.incomeSources, id);
       setIncomeSources((prev) => prev.filter((item) => item.id !== id));
@@ -4083,6 +4193,8 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       setSupabaseSyncStatus(error.message || "Income source delete failed");
       toast.error(error.message || "Income source delete failed");
     }
+      },
+    });
     };
 
   const resolveInvoiceStripeAmount = (invoice) => {
@@ -7619,6 +7731,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
         onSave={saveIncomeSource}
       />
       <ToastContainer toasts={toasts} onRemove={removeToast} />
+      {confirmModal}
       <style>{`@keyframes toastIn { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }`}</style>
     </div> 
     );
