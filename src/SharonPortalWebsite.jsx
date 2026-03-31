@@ -179,7 +179,6 @@ const colours = {
 const navItems = [
   "dashboard",
   "financial insights",
-  "clients",
   "invoices",
   "quotes",
   "services",
@@ -1930,6 +1929,11 @@ export default function AccountingPortalPrototype() {
   const [knownSuppliers, setKnownSuppliers] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [showSupplierModal, setShowSupplierModal] = useState(false);
+  const [showClientModal, setShowClientModal] = useState(false);
+  const [editingClientId, setEditingClientId] = useState(null);
+  const [clientModalForm, setClientModalForm] = useState({ name: "", businessName: "", email: "", phone: "", address: "", abn: "", defaultCurrency: "AUD $", workType: "" });
+  const [invClientSearch, setInvClientSearch] = useState("");
+  const [quoteClientSearch, setQuoteClientSearch] = useState("");
   const [supplierForm, setSupplierForm] = useState({ name: "", email: "", phone: "", address: "", abn: "", contactPerson: "", notes: "" });
   const [editingSupplierId, setEditingSupplierId] = useState(null);
   const [invoiceAlerts, setInvoiceAlerts] = useState([]);
@@ -2798,6 +2802,21 @@ export default function AccountingPortalPrototype() {
         } catch (err) { toast.error(err.message || "Failed to delete supplier"); }
       },
     });
+  };
+
+  const saveClientFromModal = async () => {
+    if (!clientModalForm.name.trim()) { toast.warning("Client name is required"); return; }
+    try {
+      const payload = { ...clientModalForm, id: editingClientId || Date.now() };
+      const saved = await upsertRecordInDatabase(SUPABASE_TABLES.clients, payload);
+      setClients((prev) => editingClientId
+        ? prev.map((c) => c.id === editingClientId ? saved : c)
+        : [...prev, saved]);
+      toast.success(editingClientId ? "Client updated!" : "Client saved!");
+      setShowClientModal(false);
+      setClientModalForm({ name: "", businessName: "", email: "", phone: "", address: "", abn: "", defaultCurrency: "AUD $", workType: "" });
+      setEditingClientId(null);
+    } catch (err) { toast.error(err.message || "Failed to save client"); }
   };
 
   const getStableProfileRowId = () => {
@@ -5652,14 +5671,34 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
           {invoiceWizardStep === 1 && (
             <div style={{ display: "grid", gap: 20 }}>
               <div>
-                <label style={labelStyle}>Select Client</label>
-                <select style={{ ...inputStyle, fontSize: 15 }} value={invoiceForm.clientId} onChange={(e) => {
-                  const sel = getClientById(e.target.value);
-                  setInvoiceForm((prev) => ({ ...prev, clientId: e.target.value, currencyCode: getClientCurrencyCode(sel) }));
-                }}>
-                  <option value="">Choose a client...</option>
-                  {clients.map((c) => <option key={c.id} value={c.id}>{c.name}{c.businessName ? ` — ${c.businessName}` : ""}</option>)}
-                </select>
+                <label style={labelStyle}>Search or Select Client</label>
+                <input style={{ ...inputStyle, fontSize: 15 }} value={invClientSearch}
+                  onChange={(e) => { setInvClientSearch(e.target.value); if (!e.target.value) setInvoiceForm((p) => ({ ...p, clientId: "" })); }}
+                  placeholder="Type client name..." />
+                {invClientSearch && (
+                  <div style={{ border: `1px solid ${colours.border}`, borderRadius: 10, marginTop: 4, overflow: "hidden", maxHeight: 200, overflowY: "auto" }}>
+                    {clients.filter((c) => c.name.toLowerCase().includes(invClientSearch.toLowerCase()) || (c.businessName || "").toLowerCase().includes(invClientSearch.toLowerCase()))
+                      .map((c) => (
+                        <div key={c.id} onClick={() => { setInvoiceForm((p) => ({ ...p, clientId: String(c.id), currencyCode: getClientCurrencyCode(c) })); setInvClientSearch(c.name); }}
+                          style={{ padding: "10px 14px", cursor: "pointer", fontSize: 14, borderBottom: `1px solid ${colours.border}`, background: String(invoiceForm.clientId) === String(c.id) ? colours.lightPurple : "#fff" }}>
+                          <strong>{c.name}</strong>{c.businessName ? <span style={{ color: colours.muted }}> — {c.businessName}</span> : ""}
+                        </div>
+                      ))}
+                    {clients.filter((c) => c.name.toLowerCase().includes(invClientSearch.toLowerCase())).length === 0 && (
+                      <div style={{ padding: "10px 14px", fontSize: 13, color: colours.muted }}>No match — add a new client below</div>
+                    )}
+                  </div>
+                )}
+                {!invClientSearch && (
+                  <select style={{ ...inputStyle, marginTop: 8 }} value={invoiceForm.clientId} onChange={(e) => {
+                    const sel = getClientById(e.target.value);
+                    setInvoiceForm((p) => ({ ...p, clientId: e.target.value, currencyCode: getClientCurrencyCode(sel) }));
+                    setInvClientSearch(sel?.name || "");
+                  }}>
+                    <option value="">— or pick from list —</option>
+                    {clients.map((c) => <option key={c.id} value={c.id}>{c.name}{c.businessName ? ` — ${c.businessName}` : ""}</option>)}
+                  </select>
+                )}
               </div>
               {invoiceForm.clientId && (() => {
                 const c = getClientById(invoiceForm.clientId);
@@ -5686,7 +5725,10 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
                   </div>
                 ) : null;
               })()}
-              <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
+                <button style={{ ...buttonSecondary, fontSize: 13 }} onClick={() => { setClientModalForm({ name: "", businessName: "", email: "", phone: "", address: "", abn: "", defaultCurrency: "AUD $", workType: "" }); setEditingClientId(null); setShowClientModal(true); }}>
+                  + New Client
+                </button>
                 <button style={{ ...buttonPrimary, opacity: invoiceForm.clientId ? 1 : 0.4 }}
                   disabled={!invoiceForm.clientId}
                   onClick={() => setInvoiceWizardStep(2)}>Next: Details →</button>
@@ -6338,14 +6380,34 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
           {quoteWizardStep === 1 && (
             <div style={{ display: "grid", gap: 20 }}>
               <div>
-                <label style={labelStyle}>Select Client</label>
-                <select style={{ ...inputStyle, fontSize: 15 }} value={quoteForm.clientId} onChange={(e) => {
-                  const sel = getClientById(e.target.value);
-                  setQuoteForm((prev) => ({ ...prev, clientId: e.target.value, currencyCode: getClientCurrencyCode(sel) }));
-                }}>
-                  <option value="">Choose a client...</option>
-                  {clients.map((c) => <option key={c.id} value={c.id}>{c.name}{c.businessName ? ` — ${c.businessName}` : ""}</option>)}
-                </select>
+                <label style={labelStyle}>Search or Select Client</label>
+                <input style={{ ...inputStyle, fontSize: 15 }} value={quoteClientSearch}
+                  onChange={(e) => { setQuoteClientSearch(e.target.value); if (!e.target.value) setQuoteForm((p) => ({ ...p, clientId: "" })); }}
+                  placeholder="Type client name..." />
+                {quoteClientSearch && (
+                  <div style={{ border: `1px solid ${colours.border}`, borderRadius: 10, marginTop: 4, overflow: "hidden", maxHeight: 200, overflowY: "auto" }}>
+                    {clients.filter((c) => c.name.toLowerCase().includes(quoteClientSearch.toLowerCase()) || (c.businessName || "").toLowerCase().includes(quoteClientSearch.toLowerCase()))
+                      .map((c) => (
+                        <div key={c.id} onClick={() => { setQuoteForm((p) => ({ ...p, clientId: String(c.id), currencyCode: getClientCurrencyCode(c) })); setQuoteClientSearch(c.name); }}
+                          style={{ padding: "10px 14px", cursor: "pointer", fontSize: 14, borderBottom: `1px solid ${colours.border}`, background: String(quoteForm.clientId) === String(c.id) ? colours.lightPurple : "#fff" }}>
+                          <strong>{c.name}</strong>{c.businessName ? <span style={{ color: colours.muted }}> — {c.businessName}</span> : ""}
+                        </div>
+                      ))}
+                    {clients.filter((c) => c.name.toLowerCase().includes(quoteClientSearch.toLowerCase())).length === 0 && (
+                      <div style={{ padding: "10px 14px", fontSize: 13, color: colours.muted }}>No match — add a new client below</div>
+                    )}
+                  </div>
+                )}
+                {!quoteClientSearch && (
+                  <select style={{ ...inputStyle, marginTop: 8 }} value={quoteForm.clientId} onChange={(e) => {
+                    const sel = getClientById(e.target.value);
+                    setQuoteForm((p) => ({ ...p, clientId: e.target.value, currencyCode: getClientCurrencyCode(sel) }));
+                    setQuoteClientSearch(sel?.name || "");
+                  }}>
+                    <option value="">— or pick from list —</option>
+                    {clients.map((c) => <option key={c.id} value={c.id}>{c.name}{c.businessName ? ` — ${c.businessName}` : ""}</option>)}
+                  </select>
+                )}
               </div>
               {quoteForm.clientId && (() => {
                 const c = getClientById(quoteForm.clientId);
@@ -6372,7 +6434,10 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
                   </div>
                 ) : null;
               })()}
-              <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
+                <button style={{ ...buttonSecondary, fontSize: 13 }} onClick={() => { setClientModalForm({ name: "", businessName: "", email: "", phone: "", address: "", abn: "", defaultCurrency: "AUD $", workType: "" }); setEditingClientId(null); setShowClientModal(true); }}>
+                  + New Client
+                </button>
                 <button style={{ ...buttonPrimary, opacity: quoteForm.clientId ? 1 : 0.4 }}
                   disabled={!quoteForm.clientId}
                   onClick={() => setQuoteWizardStep(2)}>Next: Details →</button>
@@ -8324,7 +8389,6 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
           <div style={{ maxWidth: 1400, margin: "0 auto" }}>
             {activePage === "dashboard" && renderDashboard()}
             {activePage === "financial insights" && renderFinancialInsights()}
-            {activePage === "clients" && renderClients()}
             {activePage === "invoices" && renderInvoices()}
             {activePage === "quotes" && renderQuotes()}
             {activePage === "services" && renderServices()}
@@ -8368,6 +8432,63 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       />
       <ToastContainer toasts={toasts} onRemove={removeToast} />
       {confirmModal}
+
+      {/* ── Client Modal ── */}
+      {showClientModal && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 99994, background: "rgba(15,23,42,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div style={{ background: "#fff", borderRadius: 18, padding: 28, width: "100%", maxWidth: 500, boxShadow: "0 20px 60px rgba(0,0,0,0.2)", fontFamily: "sans-serif" }}>
+            <div style={{ fontSize: 18, fontWeight: 800, color: colours.text, marginBottom: 20 }}>{editingClientId ? "Edit Client" : "Add New Client"}</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+              <div>
+                <label style={labelStyle}>Client Name *</label>
+                <input style={inputStyle} value={clientModalForm.name} onChange={(e) => setClientModalForm((p) => ({ ...p, name: e.target.value }))} placeholder="e.g. John Smith" />
+              </div>
+              <div>
+                <label style={labelStyle}>Business Name</label>
+                <input style={inputStyle} value={clientModalForm.businessName} onChange={(e) => setClientModalForm((p) => ({ ...p, businessName: e.target.value }))} placeholder="e.g. Smith Farms Pty Ltd" />
+              </div>
+              <div>
+                <label style={labelStyle}>Email</label>
+                <input type="email" style={inputStyle} value={clientModalForm.email} onChange={(e) => setClientModalForm((p) => ({ ...p, email: e.target.value }))} placeholder="john@example.com" />
+              </div>
+              <div>
+                <label style={labelStyle}>Phone</label>
+                <input style={inputStyle} value={clientModalForm.phone} onChange={(e) => setClientModalForm((p) => ({ ...p, phone: e.target.value }))} placeholder="04XX XXX XXX" />
+              </div>
+              <div>
+                <label style={labelStyle}>ABN</label>
+                <input style={inputStyle} value={clientModalForm.abn} onChange={(e) => setClientModalForm((p) => ({ ...p, abn: e.target.value }))} placeholder="12 345 678 901" />
+              </div>
+              <div>
+                <label style={labelStyle}>Currency</label>
+                <select style={inputStyle} value={clientModalForm.defaultCurrency} onChange={(e) => setClientModalForm((p) => ({ ...p, defaultCurrency: e.target.value }))}>
+                  <option value="AUD $">AUD $</option>
+                  <option value="USD $">USD $</option>
+                  <option value="NZD $">NZD $</option>
+                  <option value="GBP £">GBP £</option>
+                  <option value="EUR €">EUR €</option>
+                </select>
+              </div>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <label style={labelStyle}>Address</label>
+                <input style={inputStyle} value={clientModalForm.address} onChange={(e) => setClientModalForm((p) => ({ ...p, address: e.target.value }))} placeholder="123 Farm Rd, Dubbo NSW 2830" />
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 24 }}>
+              <button onClick={() => { setShowClientModal(false); setClientModalForm({ name: "", businessName: "", email: "", phone: "", address: "", abn: "", defaultCurrency: "AUD $", workType: "" }); setEditingClientId(null); }}
+                style={{ background: "#F1F5F9", color: "#475569", border: "none", borderRadius: 10, padding: "10px 18px", fontWeight: 700, cursor: "pointer", fontSize: 14 }}>Cancel</button>
+              <button onClick={async () => {
+                await saveClientFromModal();
+                const saved = clients.find((c) => c.name === clientModalForm.name);
+                if (saved) { setInvClientSearch(saved.name); setInvoiceForm((p) => ({ ...p, clientId: String(saved.id) })); setQuoteClientSearch(saved.name); setQuoteForm((p) => ({ ...p, clientId: String(saved.id) })); }
+              }}
+                style={{ background: colours.purple, color: "#fff", border: "none", borderRadius: 10, padding: "10px 18px", fontWeight: 700, cursor: "pointer", fontSize: 14 }}>
+                {editingClientId ? "Update Client" : "Save Client"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Supplier Modal ── */}
       {showSupplierModal && (
