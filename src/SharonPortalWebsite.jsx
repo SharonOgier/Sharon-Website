@@ -5116,8 +5116,63 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       };
     }, [clientRevenueRows, totals, invoices, monthlyFinance, expenses, expenseCategoryRows]);
 
-    const renderDashboard = () => (
+    const renderDashboard = () => {
+      // ── Onboarding checklist ──────────────────────────────────────
+      const onboardingSteps = [
+        { label: "Add your business name", done: Boolean(profile.businessName), action: () => { setActivePage("settings"); setActiveSettingsTab("Profile"); } },
+        { label: "Add your ABN", done: Boolean(profile.abn), action: () => { setActivePage("settings"); setActiveSettingsTab("Profile"); } },
+        { label: "Set your GST registration status", done: Boolean(profile.gstRegistered !== undefined && profile.gstRegistered !== null), action: () => { setActivePage("settings"); setActiveSettingsTab("Financial"); } },
+        { label: "Upload your logo", done: Boolean(profile.logoDataUrl), action: () => { setActivePage("settings"); setActiveSettingsTab("Branding"); } },
+        { label: "Add your first client", done: clients.length > 0, action: () => setActivePage("invoices") },
+        { label: "Create your first invoice", done: invoices.length > 0, action: () => setActivePage("invoices") },
+      ];
+      const doneCount = onboardingSteps.filter((s) => s.done).length;
+      const allDone = doneCount === onboardingSteps.length;
+      const pct = Math.round((doneCount / onboardingSteps.length) * 100);
+
+      return (
     <div style={{ display: "grid", gap: 20 }}>
+      {!allDone && (
+        <div style={{ ...cardStyle, padding: 24, background: "linear-gradient(135deg, #F5ECFB 0%, #EDE9FE 100%)", border: "1px solid #E9D5FF" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: colours.purple, marginBottom: 4 }}>🚀 Get started — {doneCount} of {onboardingSteps.length} complete</div>
+              <div style={{ fontSize: 13, color: colours.muted }}>Complete these steps to get the most out of your portal</div>
+            </div>
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontSize: 22, fontWeight: 900, color: colours.purple }}>{pct}%</div>
+              <div style={{ fontSize: 11, color: colours.muted }}>set up</div>
+            </div>
+          </div>
+          <div style={{ background: "#E9D5FF", borderRadius: 99, height: 8, marginBottom: 20 }}>
+            <div style={{ background: colours.purple, borderRadius: 99, height: 8, width: pct + "%", transition: "width 0.4s ease" }} />
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 10 }}>
+            {onboardingSteps.map((step, i) => (
+              <div key={i} onClick={step.done ? undefined : step.action}
+                style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", borderRadius: 10,
+                  background: step.done ? "#F0FDF4" : "#fff",
+                  border: "1px solid " + (step.done ? "#BBF7D0" : "#E9D5FF"),
+                  cursor: step.done ? "default" : "pointer",
+                  opacity: step.done ? 0.8 : 1 }}>
+                <div style={{ fontSize: 18, flexShrink: 0 }}>{step.done ? "✅" : "⬜"}</div>
+                <div style={{ fontSize: 13, fontWeight: step.done ? 400 : 600, color: step.done ? "#166534" : colours.text,
+                  textDecoration: step.done ? "line-through" : "none" }}>{step.label}</div>
+                {!step.done && <div style={{ marginLeft: "auto", fontSize: 11, color: colours.purple, fontWeight: 700, flexShrink: 0 }}>Go →</div>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {allDone && (
+        <div style={{ ...cardStyle, padding: 18, background: "#F0FDF4", border: "1px solid #BBF7D0", display: "flex", alignItems: "center", gap: 14 }}>
+          <div style={{ fontSize: 28 }}>🎉</div>
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 800, color: "#166534" }}>You're all set up!</div>
+            <div style={{ fontSize: 13, color: "#166534", marginTop: 2 }}>Your portal is fully configured and ready to use.</div>
+          </div>
+        </div>
+      )}
       <DashboardHero
         title={profile.businessName || "My Portal"}
         subtitle="Your dashboard now reads live from the SaaS records already stored in the portal. Paid invoices, expenses, GST, tax reserves, and client performance are summarised here automatically so reporting stays in one place."
@@ -5267,7 +5322,8 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
         />
       </SectionCard>
     </div>
-    );
+      );
+    };
     const renderFinancialInsights = () => (
     <div style={{ display: "grid", gap: 20 }}>
       <DashboardHero
