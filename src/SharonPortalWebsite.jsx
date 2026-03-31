@@ -100,7 +100,18 @@ function useConfirm() {
 // ── Subscription helpers ──────────────────────────────────────
 const TRIAL_DAYS = 14;
 
+// ── Add client emails here to give free access (no Stripe needed) ──
+const FREE_ACCESS_EMAILS = [
+  // "clientname@example.com",  ← add emails here, one per line
+];
+
 function getSubscriptionAccess(profile) {
+  // Master account — always full access, no paywall
+  const MASTER_EMAILS = ["info@sharonogier.com", "sharon@sharonogier.com"];
+  const email = (profile?.email || "").toLowerCase().trim();
+  if (MASTER_EMAILS.includes(email)) return { allowed: true, reason: "master" };
+  // Whitelisted clients — free access granted by Sharon
+  if (FREE_ACCESS_EMAILS.includes(email)) return { allowed: true, reason: "whitelisted" };
   const status = profile?.subscriptionStatus || "";
   const trialStarted = profile?.trialStartedAt || profile?.setupCompletedAt || "";
   if (status === "active") return { allowed: true, reason: "active" };
@@ -144,12 +155,12 @@ function PaywallScreen({ profile, serverBaseUrl }) {
             {access.reason === "trial_expired" ? "Subscribe now to keep access to all your invoices, clients, quotes and financial data." : "Reactivate your subscription to regain access."}
           </div>
           <div style={{ background: "#F5ECFB", borderRadius: 14, padding: "20px 24px", marginBottom: 24 }}>
-            <div style={{ fontSize: 36, fontWeight: 900, color: "#6A1B9A" }}>$45</div>
+            <div style={{ fontSize: 36, fontWeight: 900, color: "#6A1B9A" }}>${DEFAULT_MONTHLY_SUBSCRIPTION}</div>
             <div style={{ fontSize: 14, color: "#64748B", marginTop: 4 }}>per month · cancel anytime</div>
           </div>
           {error && <div style={{ background: "#FEE2E2", color: "#991B1B", borderRadius: 10, padding: "10px 14px", marginBottom: 16, fontSize: 13 }}>{error}</div>}
           <button onClick={handleSubscribe} disabled={loading} style={{ width: "100%", background: loading ? "#9CA3AF" : "#6A1B9A", color: "#fff", border: "none", borderRadius: 12, padding: "14px 20px", fontSize: 16, fontWeight: 800, cursor: loading ? "not-allowed" : "pointer" }}>
-            {loading ? "Redirecting to checkout..." : "Subscribe now — $45/month"}
+            {loading ? "Redirecting to checkout..." : "Subscribe now — $" + DEFAULT_MONTHLY_SUBSCRIPTION + "/month"}
           </button>
           <div style={{ fontSize: 12, color: "#94A3B8", marginTop: 14 }}>Secure payment via Stripe · Cancel anytime</div>
         </div>
@@ -5984,6 +5995,36 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
           {/* ── Step 3: Line Items ── */}
           {invoiceWizardStep === 3 && (
             <div style={{ display: "grid", gap: 16 }}>
+              {/* Service quick-add */}
+              {services.length > 0 && (
+                <div style={{ ...cardStyle, padding: 14, background: colours.lightPurple, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: colours.purple, flexShrink: 0 }}>📋 Add from Services:</div>
+                  <select defaultValue="" style={{ ...inputStyle, flex: 1, minWidth: 200 }}
+                    onChange={(e) => {
+                      const svc = services.find((s) => String(s.id) === e.target.value);
+                      if (!svc) return;
+                      const exempt = clientIsGstExempt(invoiceForm.clientId);
+                      const newItem = {
+                        id: Date.now() + Math.random(),
+                        description: svc.name + (svc.description ? " — " + svc.description : ""),
+                        quantity: 1,
+                        unitPrice: String(svc.price ?? ""),
+                        gstType: exempt ? "GST Free" : (svc.gstType || "GST on Income (10%)"),
+                      };
+                      setInvoiceForm((prev) => ({
+                        ...prev,
+                        lineItems: [...(prev.lineItems || []).filter((l) => l.description || l.unitPrice), newItem],
+                      }));
+                      e.target.value = "";
+                    }}>
+                    <option value="">— pick a service to add —</option>
+                    {services.map((svc) => (
+                      <option key={svc.id} value={svc.id}>{svc.name}{svc.price ? " — " + currency(svc.price) : ""}</option>
+                    ))}
+                  </select>
+                  <div style={{ fontSize: 11, color: colours.muted, flexBasis: "100%" }}>Pick as many as you need — descriptions and prices are editable without affecting saved services</div>
+                </div>
+              )}
               <div style={{ overflowX: "auto" }}>
                 <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 680 }}>
                   <thead>
@@ -6688,6 +6729,35 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
           {/* ── Step 3: Line Items ── */}
           {quoteWizardStep === 3 && (
             <div style={{ display: "grid", gap: 16 }}>
+              {services.length > 0 && (
+                <div style={{ ...cardStyle, padding: 14, background: colours.lightPurple, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: colours.purple, flexShrink: 0 }}>📋 Add from Services:</div>
+                  <select defaultValue="" style={{ ...inputStyle, flex: 1, minWidth: 200 }}
+                    onChange={(e) => {
+                      const svc = services.find((s) => String(s.id) === e.target.value);
+                      if (!svc) return;
+                      const exempt = clientIsGstExempt(quoteForm.clientId);
+                      const newItem = {
+                        id: Date.now() + Math.random(),
+                        description: svc.name + (svc.description ? " — " + svc.description : ""),
+                        quantity: 1,
+                        unitPrice: String(svc.price ?? ""),
+                        gstType: exempt ? "GST Free" : (svc.gstType || "GST on Income (10%)"),
+                      };
+                      setQuoteForm((prev) => ({
+                        ...prev,
+                        lineItems: [...(prev.lineItems || []).filter((l) => l.description || l.unitPrice), newItem],
+                      }));
+                      e.target.value = "";
+                    }}>
+                    <option value="">— pick a service to add —</option>
+                    {services.map((svc) => (
+                      <option key={svc.id} value={svc.id}>{svc.name}{svc.price ? " — " + currency(svc.price) : ""}</option>
+                    ))}
+                  </select>
+                  <div style={{ fontSize: 11, color: colours.muted, flexBasis: "100%" }}>Pick as many as you need — descriptions and prices are editable without affecting saved services</div>
+                </div>
+              )}
               <div style={{ overflowX: "auto" }}>
                 <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 680 }}>
                   <thead>
@@ -8620,6 +8690,14 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
                 onChange={(e) => setProfile({ ...profile, address: e.target.value })}
               />
             </div>
+            <div style={{ gridColumn: "1 / -1", display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
+              <button style={buttonPrimary} onClick={async () => {
+                try {
+                  await saveProfileToSupabase(profile);
+                  toast.success("Profile saved!");
+                } catch (err) { toast.error(err.message || "Failed to save profile"); }
+              }}>Save Profile</button>
+            </div>
           </div>
         )}
 
@@ -8757,6 +8835,14 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
                 placeholder="Leave blank for automatic live URL, or enter your backend URL"
               />
             </div>
+            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
+              <button style={buttonPrimary} onClick={async () => {
+                try {
+                  await saveProfileToSupabase(profile);
+                  toast.success("Financial settings saved!");
+                } catch (err) { toast.error(err.message || "Failed to save settings"); }
+              }}>Save Financial Settings</button>
+            </div>
           </div>
         )}
 
@@ -8772,10 +8858,12 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
                   const file = e.target.files?.[0];
                   if (!file) return;
                   const dataUrl = await fileToDataUrl(file);
-                  setProfile((prev) => ({ ...prev,
-                    logoFileName: file.name,
-                    logoDataUrl: dataUrl,
-                  }));
+                  const updated = { ...profile, logoFileName: file.name, logoDataUrl: dataUrl };
+                  setProfile(updated);
+                  try {
+                    await saveProfileToSupabase(updated);
+                    toast.success("Logo saved!");
+                  } catch (err) { toast.error("Logo uploaded but failed to save — click Save Branding"); }
                 }}
               />
             </div>
@@ -8825,6 +8913,17 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
               />
               Hide phone on documents
             </label>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
+              <button style={buttonPrimary} onClick={async () => {
+                try {
+                  await saveProfileToSupabase(profile);
+                  toast.success("Branding saved!");
+                } catch (err) { toast.error(err.message || "Failed to save branding"); }
+              }}>
+                Save Branding
+              </button>
+            </div>
           </div>
         )}
 

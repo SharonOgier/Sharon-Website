@@ -93,9 +93,9 @@ if (fs.existsSync(publicPath)) {
 
 const rateLimitStore = new Map();
 
-function rateLimit({ windowMs = 60000, max = 20 } = {}) {
+function rateLimit({ windowMs = 60000, max = 20, keyFn } = {}) {
   return function rateLimitMiddleware(req, res, next) {
-    const key = req.ip || "unknown";
+    const key = (keyFn ? keyFn(req) : null) || req.ip || "unknown";
     const now = Date.now();
     const entry = rateLimitStore.get(key);
 
@@ -105,7 +105,9 @@ function rateLimit({ windowMs = 60000, max = 20 } = {}) {
     }
 
     if (entry.count >= max) {
-      return res.status(429).json({ ok: false, error: "Too many requests. Please slow down." });
+      const retryAfter = Math.ceil((entry.resetAt - now) / 1000);
+      res.set("Retry-After", retryAfter);
+      return res.status(429).json({ ok: false, error: "Too many requests — please slow down and try again shortly." });
     }
 
     entry.count += 1;
@@ -116,13 +118,33 @@ function rateLimit({ windowMs = 60000, max = 20 } = {}) {
 setInterval(() => {
   const now = Date.now();
   for (const [key, entry] of rateLimitStore.entries()) {
-    if (now > entry.resetAt) {
-      rateLimitStore.delete(key);
-    }
+    if (now > entry.resetAt) rateLimitStore.delete(key);
   }
 }, 5 * 60_000);
 
-app.use("/api/", rateLimit({ windowMs: 60_000, max: 20 }));
+// ── Security headers ───────────────────────────────────────────
+app.use("/api/", (req, res, next) => {
+  res.set("X-Content-Type-Options", "nosniff");
+  res.set("X-Frame-Options", "DENY");
+  res.set("X-XSS-Protection", "1; mode=block");
+  next();
+});
+
+// ── General API: 60 requests per minute per IP ────────────────
+app.use("/api/", rateLimit({ windowMs: 60_000, max: 60 }));
+
+// ── Email endpoints: max 5 per 10 minutes per IP ──────────────
+const emailRateLimit = rateLimit({ windowMs: 10 * 60_000, max: 5 });
+app.use("/api/send-document-email", emailRateLimit);
+app.use("/api/send-invoice-attachment-email", emailRateLimit);
+
+// ── Stripe checkout: max 10 per 10 minutes per IP ─────────────
+const stripeRateLimit = rateLimit({ windowMs: 10 * 60_000, max: 10 });
+app.use("/api/create-checkout-session", stripeRateLimit);
+app.use("/api/create-subscription-checkout", stripeRateLimit);
+
+// ── PDF generation: max 20 per minute per IP ─────────────────
+app.use("/api/test-pdf", rateLimit({ windowMs: 60_000, max: 20 }));
 
 function safeNumber(value) {
   const parsed = Number(value);
