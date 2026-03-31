@@ -2687,10 +2687,16 @@ export default function AccountingPortalPrototype() {
     setAuthLoading(true);
     try {
       if (authMode === "signup") {
-        const { error } = await supabase.auth.signUp({ email, password });
+        const { data: signUpData, error } = await supabase.auth.signUp({ email, password });
         if (error) throw error;
-        toast.success("Account created! Check your email to confirm, then sign in.");
-        setAuthMode("signin");
+        // If email confirmation is off, user is signed in immediately
+        if (signUpData?.session) {
+          toast.success("Account created! Welcome to the portal.");
+        } else {
+          // Email confirmation is on — ask them to confirm
+          toast.success("Account created! Check your email to confirm, then sign in.");
+          setAuthMode("signin");
+        }
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
