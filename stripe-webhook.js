@@ -34,7 +34,7 @@ const resolveInvoiceTotal = (invoice) => {
   return 0;
 };
 
-const createStripeCheckoutForInvoice = async (invoice) => {
+const resolveInvoiceStripeAmount  = async (invoice) => {
   const serverBaseUrl = getStripeServerBaseUrl();
   const selectedClient = getClientById(invoice?.clientId) || {};
 
