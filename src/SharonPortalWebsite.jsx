@@ -431,9 +431,26 @@ const safeNumber = (value) => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
+// Parse YYYY-MM-DD as LOCAL date (not UTC) — prevents day-shift in AU timezones
+const parseLocalDate = (dateString) => {
+  if (!dateString) return new Date();
+  const parts = String(dateString).slice(0, 10).split("-");
+  if (parts.length !== 3) return new Date(dateString);
+  return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+};
+
+// Get today in YYYY-MM-DD local time (not UTC)
+const todayLocal = () => {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+};
+
 const formatDateAU = (date) => {
   if (!date) return "";
-  const d = new Date(date);
+  const d = parseLocalDate(date);
   if (Number.isNaN(d.getTime())) return "";
   const day = String(d.getDate()).padStart(2, "0");
   const month = String(d.getMonth() + 1).padStart(2, "0");
@@ -442,9 +459,23 @@ const formatDateAU = (date) => {
 };
 
 const addDays = (dateString, days) => {
-  const base = dateString ? new Date(dateString) : new Date();
+  const base = parseLocalDate(dateString);
   base.setDate(base.getDate() + safeNumber(days));
-  return base.toISOString().slice(0, 10);
+  const y = base.getFullYear();
+  const m = String(base.getMonth() + 1).padStart(2, "0");
+  const d = String(base.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+};
+
+// End of month + 30 days: go to last day of the bill's month, then add 30 days
+const addDaysEOM = (dateString) => {
+  const base = parseLocalDate(dateString);
+  const eom = new Date(base.getFullYear(), base.getMonth() + 1, 0);
+  eom.setDate(eom.getDate() + 30);
+  const y = eom.getFullYear();
+  const m = String(eom.getMonth() + 1).padStart(2, "0");
+  const d = String(eom.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
 };
 
 const nextNumber = (prefix, items, key) => {
@@ -571,7 +602,7 @@ const initialProfile = {
   address: "",
   invoicePrefix: "INV",
   quotePrefix: "QUO",
-  paymentTermsDays: 21,
+  paymentTermsDays: 14,
   taxRate: 30,
   feeRate: LOCKED_FEE_RATE_PERCENT,
   gstRegistered: true,
@@ -679,14 +710,14 @@ function SummaryBox({ title, value, subtitle }) {
 
 const formatMonthKey = (value) => {
   if (!value) return "Unknown";
-  const parsed = new Date(value);
+  const parsed = parseLocalDate(String(value).slice(0, 10));
   if (Number.isNaN(parsed.getTime())) return "Unknown";
   return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, "0")}`;
 };
 
 const formatMonthLabel = (value) => {
   if (!value || value === "Unknown") return "Unknown";
-  const parsed = new Date(`${value}-01T00:00:00`);
+  const parsed = parseLocalDate(`${value}-01`);
   if (Number.isNaN(parsed.getTime())) return value;
   return parsed.toLocaleDateString("en-AU", { month: "short", year: "numeric" });
 };
@@ -1889,6 +1920,9 @@ export default function AccountingPortalPrototype() {
   const [savingIncomeSource, setSavingIncomeSource] = useState(false);
   const [savingDocumentEdits, setSavingDocumentEdits] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [invoiceAlerts, setInvoiceAlerts] = useState([]);
+  const [showInvoiceAlerts, setShowInvoiceAlerts] = useState(false);
+  const invoiceAlertsShownRef = useRef(false);
   const [invoiceWizardStep, setInvoiceWizardStep] = useState(1);
   const [quoteWizardStep, setQuoteWizardStep] = useState(1);
   const [activePage, setActivePage] = useState("settings");
@@ -1960,8 +1994,8 @@ export default function AccountingPortalPrototype() {
 
   const [invoiceForm, setInvoiceForm] = useState({
     clientId: "",
-    invoiceDate: new Date().toISOString().slice(0, 10),
-    dueDate: addDays(new Date().toISOString().slice(0, 10), initialProfile.paymentTermsDays),
+    invoiceDate: todayLocal(),
+    dueDate: addDays(todayLocal(), initialProfile.paymentTermsDays),
     startDate: "",
     endDate: "",
     sendDate: "",
@@ -1992,8 +2026,8 @@ export default function AccountingPortalPrototype() {
       id: invoice?.id || null,
       invoiceNumber: invoice?.invoiceNumber || "",
       clientId: invoice?.clientId || clients[0]?.id || "",
-      invoiceDate: invoice?.invoiceDate || new Date().toISOString().slice(0, 10),
-      dueDate: invoice?.dueDate || addDays(invoice?.invoiceDate || new Date().toISOString().slice(0, 10), safeNumber(profile.paymentTermsDays)),
+      invoiceDate: invoice?.invoiceDate || todayLocal(),
+      dueDate: invoice?.dueDate || addDays(invoice?.invoiceDate || todayLocal(), (safeNumber(profile.paymentTermsDays) || 14)),
       startDate: invoice?.startDate || "",
       endDate: invoice?.endDate || "",
       sendDate: invoice?.sendDate || "",
@@ -2023,8 +2057,8 @@ export default function AccountingPortalPrototype() {
   const [invoiceEditorForm, setInvoiceEditorForm] = useState(null);
   const [quoteForm, setQuoteForm] = useState({
     clientId: "",
-    quoteDate: new Date().toISOString().slice(0, 10),
-    expiryDate: addDays(new Date().toISOString().slice(0, 10), 31),
+    quoteDate: todayLocal(),
+    expiryDate: addDays(todayLocal(), 31),
     lineItems: [{ id: Date.now() + Math.random(), description: "", quantity: 1, unitPrice: "", gstType: "GST on Income (10%)" }],
     gstType: "GST on Income (10%)",
     manualGst: false,
@@ -2048,8 +2082,8 @@ export default function AccountingPortalPrototype() {
       id: quote?.id || null,
       quoteNumber: quote?.quoteNumber || "",
       clientId: quote?.clientId || clients[0]?.id || "",
-      quoteDate: quote?.quoteDate || new Date().toISOString().slice(0, 10),
-      expiryDate: quote?.expiryDate || addDays(quote?.quoteDate || new Date().toISOString().slice(0, 10), 31),
+      quoteDate: quote?.quoteDate || todayLocal(),
+      expiryDate: quote?.expiryDate || addDays(quote?.quoteDate || todayLocal(), 31),
       lineItems: (quote?.lineItems && quote.lineItems.length > 0)
         ? quote.lineItems
         : [{ id: Date.now(), description: quote?.description || "", quantity: quote?.quantity || 1, unitPrice: unitPrice ? unitPrice.toFixed(2) : "", gstType: gstExempt ? "GST Free" : quote?.gstType || "GST on Income (10%)" }],
@@ -2078,8 +2112,8 @@ export default function AccountingPortalPrototype() {
   const [documentEditorOpen, setDocumentEditorOpen] = useState(false);
   const [documentEditorForm, setDocumentEditorForm] = useState(null);
   const [expenseForm, setExpenseForm] = useState({
-    date: new Date().toISOString().slice(0, 10),
-    dueDate: new Date().toISOString().slice(0, 10),
+    date: todayLocal(),
+    dueDate: addDaysEOM(todayLocal()),
     supplier: "",
     category: "",
     description: "",
@@ -2268,6 +2302,34 @@ export default function AccountingPortalPrototype() {
   }, [invoices]);
 
   useEffect(() => {
+    if (!hasLoadedUserProfile || invoiceAlertsShownRef.current || expenses.length === 0) return;
+    const today = parseLocalDate(todayLocal());
+    const alerts = [];
+    expenses.forEach((bill) => {
+      if (bill.isPaid || bill.status === "Paid") return;
+      const dueDate = bill.dueDate || bill.date;
+      if (!dueDate) return;
+      const due = parseLocalDate(dueDate);
+      const diff = Math.round((due - today) / (1000 * 60 * 60 * 24));
+      const supplier = bill.supplier || bill.description || `Bill ${bill.id}`;
+      const amount = bill.amount ? ` ($${parseFloat(bill.amount).toFixed(2)})` : "";
+      if (diff < 0) {
+        alerts.push({ id: bill.id, type: "overdue", days: Math.abs(diff), label: `${supplier}${amount} is overdue by ${Math.abs(diff)} day${Math.abs(diff) !== 1 ? "s" : ""}` });
+      } else if (diff === 0) {
+        alerts.push({ id: bill.id, type: "today", days: 0, label: `${supplier}${amount} is due today` });
+      } else if (diff <= 2) {
+        alerts.push({ id: bill.id, type: "soon", days: diff, label: `${supplier}${amount} is due in ${diff} day${diff !== 1 ? "s" : ""}` });
+      }
+    });
+    if (alerts.length > 0) {
+      alerts.sort((a, b) => a.type === "overdue" ? -1 : b.type === "overdue" ? 1 : a.days - b.days);
+      setInvoiceAlerts(alerts);
+      setShowInvoiceAlerts(true);
+      invoiceAlertsShownRef.current = true;
+    }
+  }, [hasLoadedUserProfile, expenses]);
+
+  useEffect(() => {
     window.localStorage.setItem("sas_quotes", JSON.stringify(quotes));
   }, [quotes]);
 
@@ -2365,7 +2427,7 @@ export default function AccountingPortalPrototype() {
     }
 
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayLocal();
     const businessSlug = String(profile?.businessName || "portal").toLowerCase().replace(/[^a-z0-9]/g, "-").replace(/-+/g, "-").slice(0, 40);
     const folderPath = `${businessSlug}/expenses/${today}`;
     const filePath = `${folderPath}/receipt-${Date.now()}-${safeName}`;
@@ -2391,7 +2453,7 @@ export default function AccountingPortalPrototype() {
     }
 
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayLocal();
     const businessSlug = String(profile?.businessName || "portal").toLowerCase().replace(/[^a-z0-9]/g, "-").replace(/-+/g, "-").slice(0, 40);
     const folderPath = `${businessSlug}/documents/${today}`;
     const filePath = `${folderPath}/document-${Date.now()}-${safeName}`;
@@ -2493,7 +2555,7 @@ export default function AccountingPortalPrototype() {
       !String(payload?.description || "").trim() && "Invoice description is required.",
       safeNumber(payload?.quantity) <= 0 && "Invoice quantity must be greater than zero.",
       safeNumber(payload?.subtotal) < 0 && "Invoice amount cannot be negative.",
-      payload?.invoiceDate && payload?.dueDate && new Date(payload.dueDate) < new Date(payload.invoiceDate) && "Invoice due date cannot be before invoice date."
+      payload?.invoiceDate && payload?.dueDate && parseLocalDate(payload.dueDate) < parseLocalDate(payload.invoiceDate) && "Invoice due date cannot be before invoice date."
     );
 
   const validateQuotePayload = (payload) =>
@@ -2502,7 +2564,7 @@ export default function AccountingPortalPrototype() {
       !String(payload?.description || "").trim() && "Quote description is required.",
       safeNumber(payload?.quantity) <= 0 && "Quote quantity must be greater than zero.",
       safeNumber(payload?.subtotal) < 0 && "Quote amount cannot be negative.",
-      payload?.quoteDate && payload?.expiryDate && new Date(payload.expiryDate) < new Date(payload.quoteDate) && "Quote expiry date cannot be before quote date."
+      payload?.quoteDate && payload?.expiryDate && parseLocalDate(payload.expiryDate) < parseLocalDate(payload.quoteDate) && "Quote expiry date cannot be before quote date."
     );
 
   const validateExpensePayload = (payload) =>
@@ -2732,6 +2794,10 @@ export default function AccountingPortalPrototype() {
         : remoteProfile
           ? { ...initialProfile, ...remoteProfile }
           : initialProfile;
+      // Migrate old default of 21 days to 14 days
+      if (safeNumber(nextProfile.paymentTermsDays) === 21) {
+        nextProfile.paymentTermsDays = 14;
+      }
       const nextSetupComplete = Boolean(nextProfile.setupComplete);
 
       setProfile(nextProfile);
@@ -3280,8 +3346,8 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
 };
     useEffect(() => {
     setInvoiceForm((prev) => {
-      const currentDate = prev.invoiceDate || new Date().toISOString().slice(0, 10);
-      const autoDueDate = addDays(currentDate, safeNumber(profile.paymentTermsDays));
+      const currentDate = prev.invoiceDate || todayLocal();
+      const autoDueDate = addDays(currentDate, (safeNumber(profile.paymentTermsDays) || 14));
       return { ...prev,
         dueDate: autoDueDate,
         hidePhoneNumber: profile.hidePhoneOnDocs,
@@ -3291,7 +3357,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
 
     useEffect(() => {
     setInvoiceForm((prev) => ({ ...prev,
-      dueDate: addDays(prev.invoiceDate || new Date().toISOString().slice(0, 10), safeNumber(profile.paymentTermsDays)),
+      dueDate: addDays(prev.invoiceDate || todayLocal(), (safeNumber(profile.paymentTermsDays) || 14)),
     }));
     }, [invoiceForm.invoiceDate]);
 
@@ -3463,8 +3529,8 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     ...(client || {}),
     });
     const buildExpenseEditorForm = (expense) => ({ ...(expense || {}),
-    date: expense?.date || new Date().toISOString().slice(0, 10),
-    dueDate: expense?.dueDate || expense?.date || new Date().toISOString().slice(0, 10),
+    date: expense?.date || todayLocal(),
+    dueDate: expense?.dueDate || expense?.date || todayLocal(),
     supplier: expense?.supplier || "",
     category: expense?.category || "",
     description: expense?.description || "",
@@ -3686,8 +3752,8 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       purchaseOrderReference: invoiceForm.purchaseOrderReference,
     });
     const invoiceNumber = nextNumber(profile.invoicePrefix, invoices, "invoiceNumber");
-    const invoiceDate = invoiceForm.invoiceDate || new Date().toISOString().slice(0, 10);
-    const dueDate = invoiceForm.dueDate || addDays(invoiceDate, safeNumber(profile.paymentTermsDays));
+    const invoiceDate = invoiceForm.invoiceDate || todayLocal();
+    const dueDate = invoiceForm.dueDate || addDays(invoiceDate, (safeNumber(profile.paymentTermsDays) || 14));
     const payload = {
       id: Date.now(),
       invoiceNumber,
@@ -3823,7 +3889,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       gst,
     });
     const quoteNumber = nextNumber(profile.quotePrefix, quotes, "quoteNumber");
-    const quoteDate = quoteForm.quoteDate || new Date().toISOString().slice(0, 10);
+    const quoteDate = quoteForm.quoteDate || todayLocal();
     const expiryDate = quoteForm.expiryDate || addDays(quoteDate, 31);
     const payload = {
       id: Date.now(),
@@ -4109,8 +4175,8 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
 
       setExpenses((prev) => [...prev, savedExpense]);
       setExpenseForm({
-        date: new Date().toISOString().slice(0, 10),
-        dueDate: new Date().toISOString().slice(0, 10),
+        date: todayLocal(),
+        dueDate: addDaysEOM(todayLocal()),
         supplier: "",
         category: "",
         description: "",
@@ -4578,7 +4644,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
         if (beforeTax <= 0) return;
         const incomeType = classifyIncomeType(src);
         incomeRecords.push({
-          date: new Date().toISOString().slice(0, 10),
+          date: todayLocal(),
           type: incomeType,
           payer: src.name || "",
           gross: beforeTax,
@@ -5364,7 +5430,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
             { key: "name", label: "Client" },
             { key: "contactPerson", label: "Contact" },
             { key: "workType", label: "Work Type" },
-            { key: "isPaid", label: "Status", render: (v, row) => (row.isPaid ? "Paid" : (((row.dueDate || row.date || "") < new Date().toISOString().slice(0, 10)) ? "Overdue" : "Unpaid")) },
+            { key: "isPaid", label: "Status", render: (v, row) => (row.isPaid ? "Paid" : (((row.dueDate || row.date || "") < todayLocal()) ? "Overdue" : "Unpaid")) },
             { key: "email", label: "Email" },
             { key: "defaultCurrency", label: "Currency" },
             {
@@ -5897,7 +5963,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
                             onChange={(e) =>
                               setInvoiceEditorForm((prev) => ({ ...prev,
                                 invoiceDate: e.target.value,
-                                dueDate: addDays(e.target.value, safeNumber(profile.paymentTermsDays)),
+                                dueDate: addDays(e.target.value, (safeNumber(profile.paymentTermsDays) || 14)),
                               }))
                             }
                           />
@@ -6871,11 +6937,8 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
 
 
     const renderBillsPayables = () => {
-    const today = new Date();
-    const todayKey = today.toISOString().slice(0, 10);
-    const sevenDays = new Date(today);
-    sevenDays.setDate(sevenDays.getDate() + 7);
-    const sevenDayKey = sevenDays.toISOString().slice(0, 10);
+    const todayKey = todayLocal();
+    const sevenDayKey = addDays(todayKey, 7);
 
     const billRows = expenses.map((item) => {
       const dueDate = item.dueDate || item.date || "";
@@ -6949,7 +7012,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
             <div>
               <label style={labelStyle}>Bill date</label>
               <input type="date" style={inputStyle} value={expenseForm.date}
-                onChange={(e) => setExpenseForm((prev) => ({ ...prev, date: e.target.value }))} />
+                onChange={(e) => setExpenseForm((prev) => ({ ...prev, date: e.target.value, dueDate: addDaysEOM(e.target.value) }))} />
             </div>
             <div>
               <label style={labelStyle}>Due date</label>
@@ -7055,12 +7118,12 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
                 const saved = await upsertRecordInDatabase(SUPABASE_TABLES.expenses, payload);
                 setExpenses((prev) => [...prev, saved]);
                 setSupabaseSyncStatus("Bill saved");
-                setExpenseForm({ date: new Date().toISOString().slice(0, 10), dueDate: new Date().toISOString().slice(0, 10), supplier: "", category: "", description: "", amount: "", expenseType: "", workType: profile.workType, receiptFileName: "", receiptUrl: "" });
+                setExpenseForm({ date: todayLocal(), dueDate: addDaysEOM(todayLocal()), supplier: "", category: "", description: "", amount: "", expenseType: "", workType: profile.workType, receiptFileName: "", receiptUrl: "" });
                 setBillLineItems([blankBillLine()]);
               } catch (err) { toast.error(err.message || "Save failed"); }
             }}>Save bill</button>
             <button style={buttonSecondary} onClick={() => {
-              setExpenseForm({ date: new Date().toISOString().slice(0, 10), dueDate: new Date().toISOString().slice(0, 10), supplier: "", category: "", description: "", amount: "", expenseType: "", workType: profile.workType, receiptFileName: "", receiptUrl: "" });
+              setExpenseForm({ date: todayLocal(), dueDate: addDaysEOM(todayLocal()), supplier: "", category: "", description: "", amount: "", expenseType: "", workType: profile.workType, receiptFileName: "", receiptUrl: "" });
               setBillLineItems([blankBillLine()]);
             }}>Clear</button>
           </div>
@@ -7149,7 +7212,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
               type="date"
               style={inputStyle}
               value={expenseForm.date}
-              onChange={(e) => setExpenseForm({ ...expenseForm, date: e.target.value })}
+              onChange={(e) => setExpenseForm({ ...expenseForm, date: e.target.value, dueDate: addDaysEOM(e.target.value) })}
             />
           </div>
 
@@ -7501,7 +7564,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       </DashboardHero>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16 }}>
         <MetricCard title="Tax rate" value={`${profile.taxRate || 30}%`} subtitle="Income tax rate used for reserve estimates." accent={colours.navy} />
-        <MetricCard title="Payment terms" value={`${profile.paymentTermsDays || 21} days`} subtitle="Default days until invoice is due." accent={colours.teal} />
+        <MetricCard title="Payment terms" value={`${profile.paymentTermsDays || 14} days`} subtitle="Default days until invoice is due." accent={colours.teal} />
         <MetricCard title="Subscription fee" value={currency(safeNumber(profile.monthlySubscription ?? DEFAULT_MONTHLY_SUBSCRIPTION))} subtitle="Monthly portal fee deducted from Safe to Spend." accent={colours.purple} />
         <MetricCard title="Invoice prefix" value={profile.invoicePrefix || "INV"} subtitle="Auto-applied to all new invoice numbers." accent={colours.navy} />
       </div>
@@ -8021,6 +8084,45 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       />
       <ToastContainer toasts={toasts} onRemove={removeToast} />
       {confirmModal}
+      {showInvoiceAlerts && invoiceAlerts.length > 0 && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 99997, background: "rgba(15,23,42,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div style={{ background: "#fff", borderRadius: 18, padding: 28, width: "100%", maxWidth: 460, boxShadow: "0 20px 60px rgba(0,0,0,0.2)", fontFamily: "sans-serif" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
+              <div style={{ fontSize: 28 }}>🔔</div>
+              <div>
+                <div style={{ fontSize: 17, fontWeight: 800, color: "#14202B" }}>Bills & Payables Reminders</div>
+                <div style={{ fontSize: 13, color: "#64748B", marginTop: 2 }}>
+                  {invoiceAlerts.length} bill{invoiceAlerts.length !== 1 ? "s" : ""} need{invoiceAlerts.length === 1 ? "s" : ""} your attention
+                </div>
+              </div>
+            </div>
+            <div style={{ display: "grid", gap: 10, marginBottom: 24 }}>
+              {invoiceAlerts.map((alert) => (
+                <div key={alert.id} style={{
+                  display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderRadius: 12,
+                  background: alert.type === "overdue" ? "#FEF2F2" : alert.type === "today" ? "#FFF7ED" : "#FEFCE8",
+                  border: `1px solid ${alert.type === "overdue" ? "#FECACA" : alert.type === "today" ? "#FED7AA" : "#FDE68A"}`,
+                }}>
+                  <div style={{ fontSize: 18 }}>{alert.type === "overdue" ? "🔴" : alert.type === "today" ? "🟠" : "🟡"}</div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: alert.type === "overdue" ? "#991B1B" : alert.type === "today" ? "#92400E" : "#78350F" }}>
+                    {alert.label}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button onClick={() => { setShowInvoiceAlerts(false); setActivePage("bills / payables"); }}
+                style={{ background: colours.purple, color: "#fff", border: "none", borderRadius: 10, padding: "10px 20px", fontWeight: 700, cursor: "pointer", fontSize: 14 }}>
+                View Bills
+              </button>
+              <button onClick={() => setShowInvoiceAlerts(false)}
+                style={{ background: "#F1F5F9", color: "#475569", border: "none", borderRadius: 10, padding: "10px 20px", fontWeight: 700, cursor: "pointer", fontSize: 14 }}>
+                Dismiss
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <style>{`@keyframes toastIn { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }`}</style>
     </div> 
     );
