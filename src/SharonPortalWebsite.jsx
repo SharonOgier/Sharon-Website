@@ -609,6 +609,7 @@ const initialProfile = {
   setupComplete: false,
   setupCompletedAt: "",
   monthlySubscription: DEFAULT_MONTHLY_SUBSCRIPTION,
+  accountStatus: "",
   trialStartedAt: "",
   subscriptionStatus: "",
   subscriptionId: "",
@@ -2618,6 +2619,18 @@ export default function AccountingPortalPrototype() {
       console.error("SUPABASE SIGN OUT ERROR:", error);
     } finally {
       isSigningOut.current = false;
+    }
+  };
+
+  const handleCloseAccount = async () => {
+    if (!supabase || !authUser?.id) return;
+    try {
+      const closedProfile = { ...profile, accountStatus: "closed" };
+      await saveProfileToSupabase(closedProfile);
+      await handleSignOut();
+    } catch (error) {
+      console.error("CLOSE ACCOUNT ERROR:", error);
+      toast.error("Could not close account. Please try again.");
     }
   };
 
@@ -7586,6 +7599,34 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
               />
               Enable two-factor authentication
             </label>
+
+            <div style={{ borderTop: `1px solid ${colours.border}`, paddingTop: 20, marginTop: 8 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: colours.text, marginBottom: 6 }}>Close Account</div>
+              <div style={{ fontSize: 13, color: colours.muted, marginBottom: 16, lineHeight: 1.6 }}>
+                Closing your account will sign you out and disable access to the portal. Your data will be kept safe and your account can be reactivated at any time by contacting{" "}
+                <a href="mailto:info@sharonogier.com" style={{ color: colours.purple }}>info@sharonogier.com</a>.
+              </div>
+              <button
+                onClick={() => confirm({
+                  title: "Close your account?",
+                  message: "You will be signed out and lose access to the portal. Your data is kept safe and your account can be reactivated at any time by contacting us.",
+                  confirmLabel: "Close Account",
+                  onConfirm: handleCloseAccount,
+                })}
+                style={{
+                  background: "#fff",
+                  color: "#EF4444",
+                  border: "1px solid #FECACA",
+                  borderRadius: 10,
+                  padding: "10px 20px",
+                  fontSize: 14,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                Close Account
+              </button>
+            </div>
           </div>
         )}
       </SectionCard>
@@ -7613,7 +7654,27 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     return renderAuthScreen();
     }
 
-    if (isSupabaseRestoring || !hasLoadedUserProfile) {
+    if (profile?.accountStatus === "closed") {
+    return (
+      <div style={{ minHeight: "100vh", background: colours.bg, display: "flex", alignItems: "center", justifyContent: "center", padding: 24, fontFamily: "sans-serif" }}>
+        <div style={{ maxWidth: 480, width: "100%", textAlign: "center" }}>
+          <div style={{ fontSize: 48, marginBottom: 16 }}>🔒</div>
+          <div style={{ fontSize: 22, fontWeight: 800, color: colours.text, marginBottom: 10 }}>Account closed</div>
+          <div style={{ fontSize: 15, color: colours.muted, lineHeight: 1.7, marginBottom: 28 }}>
+            Your account has been closed. Your data is safe and your account can be reactivated at any time.
+          </div>
+          <a href="mailto:info@sharonogier.com" style={{ display: "inline-block", background: colours.purple, color: "#fff", borderRadius: 12, padding: "12px 28px", fontWeight: 700, textDecoration: "none", fontSize: 15, marginBottom: 16 }}>
+            Contact us to reactivate
+          </a>
+          <div style={{ marginTop: 16 }}>
+            <button onClick={handleSignOut} style={{ background: "none", border: "none", color: colours.muted, cursor: "pointer", fontSize: 13 }}>
+              Sign out
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+    }
     return (
       <div
         style={{
@@ -7767,4 +7828,4 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       <style>{`@keyframes toastIn { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }`}</style>
     </div> 
     );
-}
+
