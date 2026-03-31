@@ -66,230 +66,6 @@ function useToast() {
 }
 // ────────────────────────────────────────────────────────────
 
-// ── Confirm Modal ───────────────────────────────────────────
-function ConfirmModal({ isOpen, title, message, confirmLabel = "Delete", onConfirm, onCancel }) {
-  if (!isOpen) return null;
-  return (
-    <div style={{
-      position: "fixed", inset: 0, zIndex: 99998,
-      background: "rgba(15,23,42,0.5)",
-      display: "flex", alignItems: "center", justifyContent: "center",
-      padding: 20,
-    }}>
-      <div style={{
-        background: "#fff", borderRadius: 18, padding: 28,
-        width: "100%", maxWidth: 420,
-        boxShadow: "0 20px 60px rgba(0,0,0,0.2)",
-        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-      }}>
-        <div style={{ fontSize: 18, fontWeight: 800, color: "#14202B", marginBottom: 10 }}>
-          {title}
-        </div>
-        <div style={{ fontSize: 14, color: "#64748B", lineHeight: 1.6, marginBottom: 24 }}>
-          {message}
-        </div>
-        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-          <button
-            onClick={onCancel}
-            style={{
-              background: "#fff", color: "#14202B",
-              border: "1px solid #E2E8F0", borderRadius: 10,
-              padding: "10px 18px", fontWeight: 700, cursor: "pointer", fontSize: 14,
-            }}
-          >
-            Cancel
-          </button>
-          <button
-            onClick={onConfirm}
-            style={{
-              background: "#EF4444", color: "#fff",
-              border: "none", borderRadius: 10,
-              padding: "10px 18px", fontWeight: 700, cursor: "pointer", fontSize: 14,
-            }}
-          >
-            {confirmLabel}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function useConfirm() {
-  const [confirmState, setConfirmState] = React.useState(null);
-  const confirm = ({ title, message, confirmLabel = "Delete", onConfirm }) => {
-    setConfirmState({ title, message, confirmLabel, onConfirm });
-  };
-  const close = () => setConfirmState(null);
-  const modal = confirmState ? (
-    <ConfirmModal
-      isOpen
-      title={confirmState.title}
-      message={confirmState.message}
-      confirmLabel={confirmState.confirmLabel}
-      onConfirm={() => { close(); confirmState.onConfirm(); }}
-      onCancel={close}
-    />
-  ) : null;
-  return { confirm, modal };
-}
-// ────────────────────────────────────────────────────────────
-
-// ── Subscription helpers ────────────────────────────────────
-function getSubscriptionAccess(profile) {
-  const status = profile?.subscriptionStatus || "";
-  const trialStarted = profile?.trialStartedAt || profile?.setupCompletedAt || "";
-
-  // Active paid subscription
-  if (status === "active") return { allowed: true, reason: "active" };
-
-  // Trial period
-  if (trialStarted) {
-    const msElapsed = Date.now() - new Date(trialStarted).getTime();
-    const daysElapsed = msElapsed / (1000 * 60 * 60 * 24);
-    const daysLeft = Math.max(0, Math.ceil(TRIAL_DAYS - daysElapsed));
-    if (daysLeft > 0) return { allowed: true, reason: "trial", daysLeft };
-    return { allowed: false, reason: "trial_expired", daysLeft: 0 };
-  }
-
-  // No trial started yet (brand new user before setup)
-  if (!profile?.setupComplete) return { allowed: true, reason: "setup" };
-
-  // Cancelled or past_due
-  if (status === "canceled" || status === "past_due") {
-    return { allowed: false, reason: status };
-  }
-
-  // Legacy users with no trial date — give them access
-  return { allowed: true, reason: "legacy" };
-}
-
-function PaywallScreen({ profile, serverBaseUrl, onSubscribed }) {
-  const [loading, setLoading] = React.useState(false);
-  const [error, setError] = React.useState("");
-  const access = getSubscriptionAccess(profile);
-
-  const handleSubscribe = async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const res = await fetch(`${serverBaseUrl}/api/create-subscription-checkout`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: profile.email,
-          userId: profile.user_id || profile.id,
-          businessName: profile.businessName,
-          successUrl: window.location.origin + "?subscribed=1",
-          cancelUrl: window.location.origin + "?subscribed=0",
-        }),
-      });
-      const data = await res.json();
-      if (data.url) {
-        window.location.href = data.url;
-      } else {
-        setError(data.error || "Could not start checkout. Please try again.");
-      }
-    } catch (err) {
-      setError("Could not reach the server. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div style={{
-      minHeight: "100vh", background: "#F8FAFC",
-      display: "flex", alignItems: "center", justifyContent: "center",
-      padding: 24,
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-    }}>
-      <div style={{ width: "100%", maxWidth: 480, textAlign: "center" }}>
-        {/* Logo / brand */}
-        {profile.logoDataUrl && (
-          <img src={profile.logoDataUrl} alt="Logo" style={{ maxHeight: 60, marginBottom: 24, objectFit: "contain" }} />
-        )}
-        <div style={{ fontSize: 22, fontWeight: 900, color: "#6A1B9A", marginBottom: 8 }}>
-          {profile.businessName || "Your Portal"}
-        </div>
-
-        {/* Status message */}
-        <div style={{
-          background: "#fff", border: "1px solid #E2E8F0", borderRadius: 18,
-          padding: 32, marginTop: 24, boxShadow: "0 2px 12px rgba(0,0,0,0.06)",
-        }}>
-          {access.reason === "trial_expired" ? (
-            <>
-              <div style={{ fontSize: 40, marginBottom: 12 }}>⏰</div>
-              <div style={{ fontSize: 20, fontWeight: 800, color: "#14202B", marginBottom: 10 }}>
-                Your free trial has ended
-              </div>
-              <div style={{ fontSize: 14, color: "#64748B", lineHeight: 1.7, marginBottom: 24 }}>
-                Your 14-day free trial is complete. Subscribe now to keep access to all your invoices, clients, quotes and financial data.
-              </div>
-            </>
-          ) : (
-            <>
-              <div style={{ fontSize: 40, marginBottom: 12 }}>🔒</div>
-              <div style={{ fontSize: 20, fontWeight: 800, color: "#14202B", marginBottom: 10 }}>
-                Subscription required
-              </div>
-              <div style={{ fontSize: 14, color: "#64748B", lineHeight: 1.7, marginBottom: 24 }}>
-                Your subscription has {access.reason === "past_due" ? "a payment overdue" : "been cancelled"}. Reactivate to regain access.
-              </div>
-            </>
-          )}
-
-          {/* Price */}
-          <div style={{
-            background: "#F5ECFB", borderRadius: 14, padding: "20px 24px",
-            marginBottom: 24,
-          }}>
-            <div style={{ fontSize: 36, fontWeight: 900, color: "#6A1B9A" }}>$45</div>
-            <div style={{ fontSize: 14, color: "#64748B", marginTop: 4 }}>per month · cancel anytime</div>
-            <div style={{ fontSize: 13, color: "#64748B", marginTop: 10, lineHeight: 1.6 }}>
-              ✓ Unlimited invoices &amp; quotes &nbsp;·&nbsp; ✓ Client management<br />
-              ✓ Expense tracking &nbsp;·&nbsp; ✓ GST calculations &nbsp;·&nbsp; ✓ PDF generation
-            </div>
-          </div>
-
-          {error && (
-            <div style={{ background: "#FEE2E2", color: "#991B1B", borderRadius: 10, padding: "10px 14px", marginBottom: 16, fontSize: 13 }}>
-              {error}
-            </div>
-          )}
-
-          <button
-            onClick={handleSubscribe}
-            disabled={loading}
-            style={{
-              width: "100%", background: loading ? "#9CA3AF" : "#6A1B9A",
-              color: "#fff", border: "none", borderRadius: 12,
-              padding: "14px 20px", fontSize: 16, fontWeight: 800,
-              cursor: loading ? "not-allowed" : "pointer",
-            }}
-          >
-            {loading ? "Redirecting to checkout..." : "Subscribe now — $45/month"}
-          </button>
-
-          <div style={{ fontSize: 12, color: "#94A3B8", marginTop: 14 }}>
-            Secure payment via Stripe · Cancel anytime in your account
-          </div>
-        </div>
-
-        <div style={{ fontSize: 12, color: "#94A3B8", marginTop: 20 }}>
-          Already subscribed?{" "}
-          <button onClick={() => window.location.reload()}
-            style={{ background: "none", border: "none", color: "#6A1B9A", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>
-            Refresh to continue
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-// ────────────────────────────────────────────────────────────
-
 const colours = {
   purple: "#6A1B9A",
   teal: "#006D6D",
@@ -392,7 +168,6 @@ const getApiBaseUrl = (preferredValue = "") => {
 
 const LOCKED_FEE_RATE_PERCENT = 1;
 const DEFAULT_MONTHLY_SUBSCRIPTION = 45;
-const TRIAL_DAYS = 14;
 
 const SUPABASE_STORAGE_BUCKET = "receipts";
 
@@ -738,10 +513,6 @@ const initialProfile = {
   setupComplete: false,
   setupCompletedAt: "",
   monthlySubscription: DEFAULT_MONTHLY_SUBSCRIPTION,
-  trialStartedAt: "",
-  subscriptionStatus: "",   // "trialing" | "active" | "past_due" | "canceled" | ""
-  subscriptionId: "",
-  stripeCustomerId: "",
 };
 
 const initialClients = [];
@@ -1049,7 +820,32 @@ function ActivityListCard({ title, rows, emptyText = "No recent activity yet." }
   );
 }
 
-function DataTable({ columns, rows }) {
+function EmptyState({ icon, title, message, action }) {
+  return (
+    <div style={{
+      display: "flex", flexDirection: "column", alignItems: "center",
+      justifyContent: "center", padding: "56px 24px", textAlign: "center",
+    }}>
+      <div style={{ fontSize: 48, marginBottom: 16 }}>{icon}</div>
+      <div style={{ fontSize: 18, fontWeight: 700, color: colours.text, marginBottom: 8 }}>{title}</div>
+      <div style={{ fontSize: 14, color: colours.muted, lineHeight: 1.7, maxWidth: 360, marginBottom: action ? 24 : 0 }}>{message}</div>
+      {action && (
+        <button onClick={action.onClick} style={{
+          background: colours.purple, color: "#fff", border: "none",
+          borderRadius: 12, padding: "12px 24px", fontSize: 14,
+          fontWeight: 700, cursor: "pointer",
+        }}>
+          {action.label}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function DataTable({ columns, rows, emptyState }) {
+  if (!rows.length && emptyState) {
+    return <EmptyState {...emptyState} />;
+  }
   return (
     <div style={{ overflowX: "auto" }}>
       <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 780 }}>
@@ -1284,7 +1080,7 @@ function ExpenseTypeModal({
                 <div style={{ fontSize: 14, color: colours.muted }}>
                   Uploaded: {expenseForm.receiptFileName}
                 </div>
-              ) : null}
+              ) : <EmptyState icon="📁" title="No documents yet" message="Upload receipts, contracts and generated PDFs here. All documents are stored securely against your account." />}
 
               {receiptFile ? (
                 <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
@@ -1313,7 +1109,7 @@ function ExpenseTypeModal({
                     Remove
                   </button>
                 </div>
-              ) : null}
+              ) : <EmptyState icon="📁" title="No documents yet" message="Upload receipts, contracts and generated PDFs here. All documents are stored securely against your account." />}
             </div>
           )}
         </div>
@@ -1979,19 +1775,6 @@ try {
 
 export default function AccountingPortalPrototype() {
   const { toasts, toast, removeToast } = useToast();
-  const { confirm, modal: confirmModal } = useConfirm();
-  const [savingClient, setSavingClient] = useState(false);
-  const [savingClientEdits, setSavingClientEdits] = useState(false);
-  const [savingInvoice, setSavingInvoice] = useState(false);
-  const [savingInvoiceEdits, setSavingInvoiceEdits] = useState(false);
-  const [savingQuote, setSavingQuote] = useState(false);
-  const [savingQuoteEdits, setSavingQuoteEdits] = useState(false);
-  const [savingExpense, setSavingExpense] = useState(false);
-  const [savingBill, setSavingBill] = useState(false);
-  const [savingService, setSavingService] = useState(false);
-  const [savingIncomeSource, setSavingIncomeSource] = useState(false);
-  const [savingDocumentEdits, setSavingDocumentEdits] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activePage, setActivePage] = useState("settings");
   const [activeSettingsTab, setActiveSettingsTab] = useState("Profile");
   const [authUser, setAuthUser] = useState(null);
@@ -2021,7 +1804,6 @@ export default function AccountingPortalPrototype() {
   });
   const hasHydratedSupabaseState = useRef(false);
   const syncTimeoutRef = useRef(null);
-  const isSigningOut = useRef(false);
   const [isSupabaseRestoring, setIsSupabaseRestoring] = useState(false);
   const [supabaseSyncStatus, setSupabaseSyncStatus] = useState(
     supabase ? "Ready to sync to database" : "Supabase not connected"
@@ -2253,8 +2035,6 @@ export default function AccountingPortalPrototype() {
     const nextProfile = { ...buildWizardProfile(),
       setupComplete: true,
       setupCompletedAt: new Date().toISOString(),
-      trialStartedAt: new Date().toISOString(),
-      subscriptionStatus: "trialing",
     };
     const wizardErrors = collectValidationErrors(
       !nextProfile.businessName && "Please enter your business name.",
@@ -2317,7 +2097,6 @@ export default function AccountingPortalPrototype() {
 
     supabase.auth.getSession().then(({ data, error }) => {
       if (!active) return;
-      if (isSigningOut.current) return;
       if (error) {
         console.error("SUPABASE AUTH SESSION ERROR:", error);
         return;
@@ -2326,13 +2105,7 @@ export default function AccountingPortalPrototype() {
       setAuthReady(true);
     });
 
-    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === "SIGNED_OUT") {
-        setAuthUser(null);
-        setAuthReady(true);
-        return;
-      }
-      if (isSigningOut.current) return;
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
       setAuthUser(session?.user || null);
       setAuthReady(true);
     });
@@ -2410,7 +2183,7 @@ export default function AccountingPortalPrototype() {
   }, [invoices, quotes, profile, clients]);
 
   useEffect(() => {
-    if (authUser && !isSigningOut.current) {
+    if (authUser) {
       restorePortalStateFromSupabase();
     }
   }, [authUser]);
@@ -2437,14 +2210,6 @@ export default function AccountingPortalPrototype() {
         }
       }
       restorePortalStateFromSupabase();
-    }
-
-    // Subscription checkout completed
-    const subscribedStatus = params.get("subscribed");
-    if (subscribedStatus === "1" && authUser) {
-      toast.success("Subscription activated! Welcome aboard.", "");
-      restorePortalStateFromSupabase();
-      window.history.replaceState({}, "", window.location.pathname);
     }
   }, [authUser]);
 
@@ -2700,15 +2465,9 @@ export default function AccountingPortalPrototype() {
   const handleSignOut = async () => {
     if (!supabase?.auth) return;
     try {
-      isSigningOut.current = true;
       await supabase.auth.signOut();
-      // Clear any cached Supabase session from localStorage
-      Object.keys(localStorage).forEach((key) => {
-        if (key.startsWith("sb-")) localStorage.removeItem(key);
-      });
       hasHydratedSupabaseState.current = false;
       setIsSupabaseRestoring(false);
-      setAuthUser(null);
       setProfile(initialProfile);
       setClients([]);
       setInvoices([]);
@@ -2736,8 +2495,6 @@ export default function AccountingPortalPrototype() {
       setActiveSettingsTab("Profile");
     } catch (error) {
       console.error("SUPABASE SIGN OUT ERROR:", error);
-    } finally {
-      isSigningOut.current = false;
     }
   };
 
@@ -2911,12 +2668,8 @@ export default function AccountingPortalPrototype() {
     }
   };
 
-  const deleteDocument = (id) => {
-    confirm({
-      title: "Delete document",
-      message: "This document will be permanently removed. This cannot be undone.",
-      confirmLabel: "Delete",
-      onConfirm: async () => {
+  const deleteDocument = async (id) => {
+    if (!window.confirm("Delete this document from the list?")) return;
     try {
       await deleteRecordFromDatabase(SUPABASE_TABLES.documents, id);
       setDocuments((prev) => prev.filter((item) => item.id !== id));
@@ -2926,8 +2679,6 @@ export default function AccountingPortalPrototype() {
       setSupabaseSyncStatus(error.message || "Document delete failed");
       toast.error(error.message || "Document delete failed");
     }
-      },
-    });
   };
 
   const calculateServiceValues = (priceValue, gstTypeValue) => {
@@ -3023,12 +2774,8 @@ export default function AccountingPortalPrototype() {
     }
   };
 
-  const deleteService = (serviceId) => {
-    confirm({
-      title: "Delete service",
-      message: "This service will be removed from your catalogue. Any invoices or quotes already created will not be affected.",
-      confirmLabel: "Delete",
-      onConfirm: async () => {
+  const deleteService = async (serviceId) => {
+    if (!window.confirm("Delete this service?")) return;
     try {
       await deleteRecordFromDatabase(SUPABASE_TABLES.services, serviceId);
       setServices((prev) => prev.filter((item) => item.id !== serviceId));
@@ -3038,8 +2785,6 @@ export default function AccountingPortalPrototype() {
       setSupabaseSyncStatus(error.message || "Service delete failed");
       toast.error(error.message || "Service delete failed");
     }
-      },
-    });
   };
 
   const resetIncomeSourceForm = () => {
@@ -3334,6 +3079,18 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       ? `${serverBaseUrl}/api/send-invoice-attachment-email`
       : `${serverBaseUrl}/api/send-document-email`;
 
+  console.log("SEND DOCUMENT EMAIL REQUEST:", {
+    endpoint,
+    documentType,
+    recipients: recipientList,
+    subject: payload.subject,
+    filename: payload.filename,
+    hasHtml: Boolean(payload.html),
+    hasDocumentHtml: Boolean(payload.documentHtml),
+    hasInvoiceHtml: Boolean(payload.invoiceHtml),
+    hasQuoteHtml: Boolean(payload.quoteHtml),
+    quoteHtmlLength: payload.quoteHtml?.length || 0,
+  });
 
   let response;
 
@@ -3359,6 +3116,12 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     console.error("EMAIL RESPONSE PARSE ERROR:", error);
   }
 
+  console.log("SEND DOCUMENT EMAIL RESPONSE:", {
+    endpoint,
+    status: response.status,
+    ok: response.ok,
+    data,
+  });
 
   if (!response.ok) {
     console.error("EMAIL ERROR:", data);
@@ -4165,6 +3928,8 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
         summariseValidationErrors("Expense", expenseErrors, toast);
         return;
       }
+      console.log("SAVE EXPENSE CLICKED");
+      console.log("receiptFile:", receiptFile);
       if (!expenseForm.supplier || !expenseForm.amount || !expenseForm.category) {
         toast.warning("Please fill in supplier, amount and category");
         return;
@@ -4176,10 +3941,14 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       let receiptFileName = "";
 
       if (receiptFile) {
+        console.log("Uploading receipt now...");
+        console.log("UPLOAD FUNCTION CALLED");
         const uploaded = await uploadReceiptToSupabase(receiptFile);
+        console.log("Upload result:", uploaded);
         receiptUrl = uploaded.receiptUrl;
         receiptFileName = uploaded.fileName;
       } else {
+        console.log("No receipt file selected");
       }
 
       const payload = {
@@ -4255,6 +4024,10 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       );
       const client = getClientById(invoice.clientId);
 
+      console.log("📧 SIMULATED PAYMENT RECEIPT");
+      console.log("To:", client?.email || "no email");
+      console.log("Invoice:", invoice.invoiceNumber);
+      console.log("Amount:", invoice.total);
       setSupabaseSyncStatus("Simulated payment saved to Supabase database");
       toast.success(`Simulated payment completed for ${invoice.invoiceNumber}`);
     } catch (error) {
@@ -4264,12 +4037,8 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     }
     }
 
-    const deleteInvoice = (id) => {
-    confirm({
-      title: "Delete invoice",
-      message: "This invoice will be permanently deleted and cannot be recovered. Paid invoices cannot be deleted.",
-      confirmLabel: "Delete",
-      onConfirm: async () => {
+    const deleteInvoice = async (id) => {
+    if (!window.confirm("Delete this invoice?")) return;
     try {
       await deleteRecordFromDatabase(SUPABASE_TABLES.invoices, id);
       setInvoices((prev) => prev.filter((item) => item.id !== id));
@@ -4279,15 +4048,9 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       setSupabaseSyncStatus(error.message || "Invoice delete failed");
       toast.error(error.message || "Invoice delete failed");
     }
-      },
-    });
     };
-    const deleteQuote = (id) => {
-    confirm({
-      title: "Delete quote",
-      message: "This quote will be permanently deleted and cannot be recovered.",
-      confirmLabel: "Delete",
-      onConfirm: async () => {
+    const deleteQuote = async (id) => {
+    if (!window.confirm("Delete this quote?")) return;
     try {
       await deleteRecordFromDatabase(SUPABASE_TABLES.quotes, id);
       setQuotes((prev) => prev.filter((item) => item.id !== id));
@@ -4297,15 +4060,9 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       setSupabaseSyncStatus(error.message || "Quote delete failed");
       toast.error(error.message || "Quote delete failed");
     }
-      },
-    });
     };
-    const deleteExpense = (id) => {
-    confirm({
-      title: "Delete expense",
-      message: "This expense record will be permanently deleted. Your GST calculations will update automatically.",
-      confirmLabel: "Delete",
-      onConfirm: async () => {
+    const deleteExpense = async (id) => {
+    if (!window.confirm("Delete this expense?")) return;
     try {
       await deleteRecordFromDatabase(SUPABASE_TABLES.expenses, id);
       setExpenses((prev) => prev.filter((item) => item.id !== id));
@@ -4315,15 +4072,9 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       setSupabaseSyncStatus(error.message || "Expense delete failed");
       toast.error(error.message || "Expense delete failed");
     }
-      },
-    });
     };
-    const deleteClient = (id) => {
-    confirm({
-      title: "Delete client",
-      message: "This client will be permanently deleted. Their invoices and quotes will remain but will show no client name.",
-      confirmLabel: "Delete",
-      onConfirm: async () => {
+    const deleteClient = async (id) => {
+    if (!window.confirm("Delete this client?")) return;
     try {
       await deleteRecordFromDatabase(SUPABASE_TABLES.clients, id);
       setClients((prev) => prev.filter((item) => item.id !== id));
@@ -4333,15 +4084,9 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       setSupabaseSyncStatus(error.message || "Client delete failed");
       toast.error(error.message || "Client delete failed");
     }
-      },
-    });
     };
-    const deleteIncomeSource = (id) => {
-    confirm({
-      title: "Delete income source",
-      message: "This income source will be permanently deleted and removed from your ATO export.",
-      confirmLabel: "Delete",
-      onConfirm: async () => {
+    const deleteIncomeSource = async (id) => {
+    if (!window.confirm("Delete this income source?")) return;
     try {
       await deleteRecordFromDatabase(SUPABASE_TABLES.incomeSources, id);
       setIncomeSources((prev) => prev.filter((item) => item.id !== id));
@@ -4351,8 +4096,6 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       setSupabaseSyncStatus(error.message || "Income source delete failed");
       toast.error(error.message || "Income source delete failed");
     }
-      },
-    });
     };
 
   const resolveInvoiceStripeAmount = (invoice) => {
@@ -4379,11 +4122,21 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     return 0;
   };
 
-  const createStripeCheckoutForInvoice = async (invoice) => {
+    const createStripeCheckoutForInvoice = async (invoice) => {
     const serverBaseUrl = getApiBaseUrl(profile?.stripeServerUrl);
     const selectedClient = getClientById(invoice?.clientId) || {};
 
+    console.log("FULL INVOICE OBJECT:", invoice);
+
     const rawTotal = resolveInvoiceStripeAmount(invoice);
+
+    console.log("INVOICE TOTAL DEBUG:", {
+      total: invoice?.total,
+      subtotal: invoice?.subtotal,
+      gst: invoice?.gst,
+      quantity: invoice?.quantity,
+      rawTotal,
+    });
 
     if (!Number.isFinite(rawTotal) || rawTotal <= 0) {
       console.error("Stripe invoice total could not be resolved", { invoice, rawTotal });
@@ -4410,7 +4163,11 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       )}&invoiceId=${encodeURIComponent(String(invoice?.id || ""))}`,
     };
 
+    console.log("Stripe invoice payload", payload);
+    console.log("Stripe amount being sent:", payload.amount, "type:", typeof payload.amount);
+    
     let response;
+
     try {
       response = await fetch(`${serverBaseUrl}/api/create-checkout-session`, {
         method: "POST",
@@ -4418,7 +4175,10 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
         body: JSON.stringify(payload),
       });
     } catch (error) {
-      console.error("STRIPE CHECKOUT NETWORK ERROR:", error);
+      console.error("STRIPE CHECKOUT NETWORK ERROR:", {
+        serverBaseUrl,
+        error,
+      });
       throw new Error(`Could not reach the Stripe server at ${serverBaseUrl}. Check the Stripe Server URL setting and your backend deployment.`);
     }
 
@@ -4434,7 +4194,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     }
 
     return data.url;
-  };
+    };
 
     const payInvoiceWithStripe = async (invoice) => {
     try {
@@ -4501,6 +4261,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
 
     try {
       if (!stripeCheckoutUrl && resolveInvoiceStripeAmount(invoice) > 0) {
+        console.log("PREVIEW REQUESTING STRIPE SESSION FOR:", invoice.invoiceNumber);
         stripeCheckoutUrl = await createStripeCheckoutForInvoice(invoice);
 
         if (stripeCheckoutUrl) {
@@ -5445,6 +5206,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
 
       <SectionCard title="Client List">
         <DataTable
+          emptyState={{ icon: "👥", title: "No clients yet", message: "Add your first client above to start creating invoices and quotes." }}
           columns={[
             { key: "name", label: "Client" },
             { key: "contactPerson", label: "Contact" },
@@ -5491,7 +5253,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
               <button style={buttonPrimary} onClick={saveClientEdits}>Save Changes</button>
             </div>
           </div>
-        ) : null}
+        ) : <EmptyState icon="📁" title="No documents yet" message="Upload receipts, contracts and generated PDFs here. All documents are stored securely against your account." />}
       </SectionCard>
     </div>
     );
@@ -5670,7 +5432,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
                     onChange={(e) => setInvoiceForm({ ...invoiceForm, purchaseOrderReference: e.target.value })}
                   />
                 </div>
-              ) : null}
+              ) : <EmptyState icon="📁" title="No documents yet" message="Upload receipts, contracts and generated PDFs here. All documents are stored securely against your account." />}
 
               <div style={{ gridColumn: "1 / -1" }}>
                 <label style={labelStyle}>Comments</label>
@@ -5725,6 +5487,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
 
         <SectionCard title="Invoice List">
           <DataTable
+            emptyState={{ icon: "🧾", title: "No invoices yet", message: "Create your first invoice using the form above. Invoices can be emailed as a PDF with a Stripe payment link." }}
             columns={[
               { key: "invoiceNumber", label: "Invoice" },
               { key: "clientId", label: "Client", render: (_, row) => getClientName(row.clientId) },
@@ -6027,7 +5790,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
                               onChange={(e) => setInvoiceEditorForm((prev) => ({ ...prev, purchaseOrderReference: e.target.value }))}
                             />
                           </div>
-                        ) : null}
+                        ) : <EmptyState icon="📁" title="No documents yet" message="Upload receipts, contracts and generated PDFs here. All documents are stored securely against your account." />}
 
                         <div style={{ gridColumn: "1 / -1" }}>
                           <label style={labelStyle}>Comments</label>
@@ -6272,6 +6035,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
 
         <SectionCard title="Quote List">
           <DataTable
+            emptyState={{ icon: "📋", title: "No quotes yet", message: "Create your first quote using the form above. Quotes can be converted to invoices once accepted." }}
             columns={[
               { key: "quoteNumber", label: "Quote" },
               { key: "clientId", label: "Client", render: (_, row) => getClientName(row.clientId) },
@@ -6632,6 +6396,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
           }
         >
           <DataTable
+            emptyState={{ icon: "⚙️", title: "No services yet", message: "Add services to your catalogue and they will auto-populate into new invoices and quotes." }}
             columns={[
               { key: "name", label: "Service" },
               { key: "gstType", label: "GST Type" },
@@ -6958,6 +6723,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
 
         <SectionCard title="Bills list" right={<div style={{ fontSize: 12, color: colours.muted }}>Based on expense records</div>}>
           <DataTable
+            emptyState={{ icon: "📄", title: "No bills yet", message: "Bills and payables you record will appear here. Use the form above to add your first bill." }}
             columns={[
               { key: "supplier", label: "Supplier" },
               { key: "category", label: "Category" },
@@ -7112,7 +6878,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
           <div style={{ marginTop: 12, fontSize: 14, color: colours.muted }}>
             Selected receipt: {expenseForm.receiptFileName}
           </div>
-        ) : null}
+        ) : <EmptyState icon="📁" title="No documents yet" message="Upload receipts, contracts and generated PDFs here. All documents are stored securely against your account." />}
 
         {receiptFile ? (
           <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
@@ -7141,7 +6907,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
               Remove Receipt
             </button>
           </div>
-        ) : null}
+        ) : <EmptyState icon="📁" title="No documents yet" message="Upload receipts, contracts and generated PDFs here. All documents are stored securely against your account." />}
 
         <div style={{ marginTop: 18 }}>
           <button style={buttonPrimary} onClick={saveExpense}>
@@ -7152,6 +6918,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
 
       <SectionCard title="Expense List">
         <DataTable
+          emptyState={{ icon: "💸", title: "No expenses yet", message: "Record your first expense using the form above. GST credits are calculated automatically and your Safe to Spend updates in real time." }}
           columns={[
             { key: "date", label: "Date", render: (v) => formatDateAU(v) },
             { key: "dueDate", label: "Due Date", render: (v, row) => formatDateAU(v || row.date) },
@@ -7220,6 +6987,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       </div>
       <SectionCard title="Income Sources" right={<button style={buttonPrimary} onClick={() => setShowIncomeSourceModal(true)}>New Income Source</button>}>
         <DataTable
+          emptyState={{ icon: "💰", title: "No income sources yet", message: "Add your income sources for your ATO export — employment, freelance, rental income and other earnings.", action: { label: "Add income source", onClick: () => {} } }}
           columns={[
             { key: "name", label: "Name" },
             { key: "incomeType", label: "Income Type" },
@@ -7314,7 +7082,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
               <button style={buttonPrimary} onClick={saveDocumentEdits}>Save Changes</button>
             </div>
           </div>
-        ) : null}
+        ) : <EmptyState icon="📁" title="No documents yet" message="Upload receipts, contracts and generated PDFs here. All documents are stored securely against your account." />}
       </SectionCard>
     </div>
     );
@@ -7367,7 +7135,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
               <label style={labelStyle}>Confirm Password</label>
               <input type="password" style={inputStyle} value={authForm.confirmPassword} onChange={(e) => setAuthForm((prev) => ({ ...prev, confirmPassword: e.target.value }))} />
             </div>
-          ) : null}
+          ) : <EmptyState icon="📁" title="No documents yet" message="Upload receipts, contracts and generated PDFs here. All documents are stored securely against your account." />}
         </div>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 20 }}>
           <button style={buttonPrimary} onClick={handleAuthSubmit} disabled={authLoading}>{authLoading ? "Working..." : authMode === "signup" ? "Create Account" : "Sign In"}</button>
@@ -7630,7 +7398,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
                   style={{ maxHeight: LOGO_PREVIEW_MAX_HEIGHT, maxWidth: LOGO_PREVIEW_MAX_WIDTH, objectFit: "contain" }}
                 />
               </div>
-            ) : null}
+            ) : <EmptyState icon="📁" title="No documents yet" message="Upload receipts, contracts and generated PDFs here. All documents are stored securely against your account." />}
 
             <div>
               <label style={labelStyle}>Legal Business Name</label>
@@ -7729,19 +7497,6 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     return renderSetupWizard();
     }
 
-    // ── Subscription / paywall check ─────────────────────────
-    const subscriptionAccess = getSubscriptionAccess(profile);
-    if (!subscriptionAccess.allowed) {
-      return (
-        <PaywallScreen
-          profile={profile}
-          serverBaseUrl={getApiBaseUrl(profile.stripeServerUrl)}
-          onSubscribed={() => window.location.reload()}
-        />
-      );
-    }
-    // ─────────────────────────────────────────────────────────
-
     return (
     <div
       style={{
@@ -7752,92 +7507,14 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
           '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
       }}
     >
-      <style>{`
-        .sas-layout { display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; }
-        .sas-sidebar { background: #fff; border-right: 1px solid #E2E8F0; padding: 20px; position: relative; z-index: 100; }
-        .sas-overlay { display: none; }
-        .sas-hamburger { display: none; }
-        .sas-main { padding: 24px; overflow-x: hidden; }
-        @media (max-width: 768px) {
-          .sas-layout { grid-template-columns: 1fr; }
-          .sas-sidebar {
-            position: fixed; top: 0; left: -260px; width: 240px; height: 100vh;
-            overflow-y: auto; transition: left 0.25s ease; z-index: 200;
-            box-shadow: 4px 0 20px rgba(0,0,0,0.12);
-          }
-          .sas-sidebar.open { left: 0; }
-          .sas-overlay { display: block; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 199; }
-          .sas-hamburger {
-            display: flex; align-items: center; gap: 12px;
-            background: #fff; border-bottom: 1px solid #E2E8F0;
-            padding: 14px 16px; position: sticky; top: 0; z-index: 100;
-          }
-          .sas-hamburger-btn {
-            background: none; border: none; cursor: pointer; padding: 4px;
-            display: flex; flex-direction: column; gap: 5px;
-          }
-          .sas-hamburger-btn span {
-            display: block; width: 22px; height: 2px; background: #6A1B9A; border-radius: 2px;
-          }
-          .sas-main { padding: 16px; }
-        }
-      `}</style>
-
-      {/* Trial countdown banner */}
-      {subscriptionAccess.reason === "trial" && subscriptionAccess.daysLeft <= 7 && (
-        <div style={{
-          background: subscriptionAccess.daysLeft <= 2 ? "#FEF2F2" : "#FEF9C3",
-          borderBottom: `1px solid ${subscriptionAccess.daysLeft <= 2 ? "#FECACA" : "#FDE68A"}`,
-          padding: "10px 20px", fontSize: 13, textAlign: "center",
-          color: subscriptionAccess.daysLeft <= 2 ? "#991B1B" : "#92400E",
-          fontWeight: 600,
-        }}>
-          {subscriptionAccess.daysLeft <= 2
-            ? `⚠️ Your free trial ends in ${subscriptionAccess.daysLeft} day${subscriptionAccess.daysLeft === 1 ? "" : "s"} — subscribe now to keep your data`
-            : `Your free trial ends in ${subscriptionAccess.daysLeft} days`}
-          {" · "}
-          <button
-            onClick={async () => {
-              try {
-                const res = await fetch(`${getApiBaseUrl(profile.stripeServerUrl)}/api/create-subscription-checkout`, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    email: profile.email,
-                    userId: profile.user_id || profile.id,
-                    businessName: profile.businessName,
-                    successUrl: window.location.origin + "?subscribed=1",
-                    cancelUrl: window.location.href,
-                  }),
-                });
-                const data = await res.json();
-                if (data.url) window.location.href = data.url;
-              } catch (e) { toast.error("Could not start checkout"); }
-            }}
-            style={{ background: "none", border: "none", cursor: "pointer", fontWeight: 800, color: "inherit", textDecoration: "underline", fontSize: 13 }}
-          >
-            Subscribe $45/month
-          </button>
-        </div>
-      )}
-
-      {/* Mobile top bar */}
-      <div className="sas-hamburger">
-        <button className="sas-hamburger-btn" onClick={() => setSidebarOpen(true)} aria-label="Open menu">
-          <span /><span /><span />
-        </button>
-        <span style={{ fontSize: 16, fontWeight: 900, color: colours.purple }}>
-          {profile.businessName || "My Portal"}
-        </span>
-      </div>
-
-      {/* Overlay for mobile */}
-      {sidebarOpen && (
-        <div className="sas-overlay" onClick={() => setSidebarOpen(false)} />
-      )}
-
-      <div className="sas-layout">
-        <aside className={`sas-sidebar${sidebarOpen ? " open" : ""}`}>
+      <div style={{ display: "grid", gridTemplateColumns: "240px 1fr", minHeight: "100vh" }}>
+        <aside
+          style={{
+            background: colours.white,
+            borderRight: `1px solid ${colours.border}`,
+            padding: 20,
+          }}
+        >
           <div style={{ fontSize: 20, fontWeight: 900, color: colours.purple, marginBottom: 20 }}>
             {profile.businessName || "My Portal"}
           </div>
@@ -7850,7 +7527,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
             {navItems.map((item) => (
               <button
                 key={item}
-                onClick={() => { setActivePage(item); setSidebarOpen(false); }}
+                onClick={() => setActivePage(item)}
                 style={{
                   textAlign: "left",
                   border: "none",
@@ -7875,7 +7552,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
           </button>
         </aside>
 
-        <main className="sas-main">
+        <main style={{ padding: 24 }}>
           <div style={{ maxWidth: 1400, margin: "0 auto" }}>
             {activePage === "dashboard" && renderDashboard()}
             {activePage === "financial insights" && renderFinancialInsights()}
@@ -7922,7 +7599,6 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
         onSave={saveIncomeSource}
       />
       <ToastContainer toasts={toasts} onRemove={removeToast} />
-      {confirmModal}
       <style>{`@keyframes toastIn { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }`}</style>
     </div> 
     );
