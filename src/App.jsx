@@ -1,5 +1,5 @@
-import SharonPortalWebsite from "./SharonPortalWebsite";
+import AppShell from "./app/AppShell";
 
 export default function App() {
-  return <SharonPortalWebsite />;
+  return <AppShell />;
 }
