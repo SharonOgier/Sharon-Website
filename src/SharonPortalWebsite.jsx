@@ -1889,6 +1889,8 @@ export default function AccountingPortalPrototype() {
   const [savingIncomeSource, setSavingIncomeSource] = useState(false);
   const [savingDocumentEdits, setSavingDocumentEdits] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [invoiceWizardStep, setInvoiceWizardStep] = useState(1);
+  const [quoteWizardStep, setQuoteWizardStep] = useState(1);
   const [activePage, setActivePage] = useState("settings");
   const [activeSettingsTab, setActiveSettingsTab] = useState("Profile");
   const [authUser, setAuthUser] = useState(null);
@@ -5452,58 +5454,214 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
           </div>
         </div>
         <SectionCard title="Create Invoice">
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12, marginBottom: 16 }}>
-            <div style={{ ...cardStyle, padding: 14, background: colours.lightPurple }}>
-              <div style={{ fontSize: 12, color: colours.muted, fontWeight: 700 }}>Auto-filled from Profile</div>
-              <div style={{ fontSize: 14, fontWeight: 700, color: colours.text, marginTop: 6 }}>{profile.businessName}</div>
-              <div style={{ fontSize: 13, color: colours.muted, marginTop: 4 }}>ABN: {profile.abn || "-"}</div>
-            </div>
-            <div style={{ ...cardStyle, padding: 14, background: colours.lightTeal }}>
-              <div style={{ fontSize: 12, color: colours.muted, fontWeight: 700 }}>Payment Details</div>
-              <div style={{ fontSize: 14, fontWeight: 700, color: colours.text, marginTop: 6 }}>{profile.bankName || profile.businessName}</div>
-              <div style={{ fontSize: 13, color: colours.muted, marginTop: 4 }}>Terms: {profile.paymentTermsDays} days</div>
-            </div>
-            <div style={{ ...cardStyle, padding: 14, background: colours.white }}>
-              <div style={{ fontSize: 12, color: colours.muted, fontWeight: 700 }}>Contact on Document</div>
-              <div style={{ fontSize: 14, fontWeight: 700, color: colours.text, marginTop: 6 }}>{profile.email || "-"}</div>
-              <div style={{ fontSize: 13, color: colours.muted, marginTop: 4 }}>{profile.hidePhoneOnDocs ? "Phone hidden from docs" : profile.phone || "-"}</div>
-            </div>
+          {/* ── Wizard progress bar ── */}
+          <div style={{ display: "flex", alignItems: "center", marginBottom: 28 }}>
+            {["Client", "Details", "Line Items", "Review & Save"].map((label, i) => {
+              const step = i + 1;
+              const active = invoiceWizardStep === step;
+              const done = invoiceWizardStep > step;
+              return (
+                <React.Fragment key={step}>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, cursor: done ? "pointer" : "default" }}
+                    onClick={() => done && setInvoiceWizardStep(step)}>
+                    <div style={{ width: 32, height: 32, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 13,
+                      background: done ? colours.teal : active ? colours.purple : colours.border,
+                      color: done || active ? "#fff" : colours.muted, transition: "all 0.2s" }}>
+                      {done ? "✓" : step}
+                    </div>
+                    <div style={{ fontSize: 11, fontWeight: active ? 800 : 500, color: active ? colours.purple : done ? colours.teal : colours.muted, whiteSpace: "nowrap" }}>{label}</div>
+                  </div>
+                  {i < 3 && <div style={{ flex: 1, height: 2, background: done ? colours.teal : colours.border, margin: "0 6px", marginBottom: 18, transition: "background 0.2s" }} />}
+                </React.Fragment>
+              );
+            })}
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16, marginBottom: 20 }}>
-            <div>
-              <label style={labelStyle}>Client</label>
-              <select style={inputStyle} value={invoiceForm.clientId} onChange={(e) => {
-                const sel = getClientById(e.target.value);
-                setInvoiceForm((prev) => ({ ...prev, clientId: e.target.value, currencyCode: getClientCurrencyCode(sel) }));
-              }}>
-                <option value="">Select client...</option>
-                {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
+          {/* ── Step 1: Client ── */}
+          {invoiceWizardStep === 1 && (
+            <div style={{ display: "grid", gap: 20 }}>
+              <div>
+                <label style={labelStyle}>Select Client</label>
+                <select style={{ ...inputStyle, fontSize: 15 }} value={invoiceForm.clientId} onChange={(e) => {
+                  const sel = getClientById(e.target.value);
+                  setInvoiceForm((prev) => ({ ...prev, clientId: e.target.value, currencyCode: getClientCurrencyCode(sel) }));
+                }}>
+                  <option value="">Choose a client...</option>
+                  {clients.map((c) => <option key={c.id} value={c.id}>{c.name}{c.businessName ? ` — ${c.businessName}` : ""}</option>)}
+                </select>
+              </div>
+              {invoiceForm.clientId && (() => {
+                const c = getClientById(invoiceForm.clientId);
+                return c ? (
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
+                    <div style={{ ...cardStyle, padding: 16, background: colours.lightPurple }}>
+                      <div style={{ fontSize: 11, fontWeight: 800, color: colours.muted, textTransform: "uppercase", marginBottom: 8 }}>Client Details</div>
+                      <div style={{ fontSize: 15, fontWeight: 800, color: colours.text }}>{c.name}</div>
+                      {c.businessName && <div style={{ fontSize: 13, color: colours.muted, marginTop: 4 }}>{c.businessName}</div>}
+                      {c.abn && <div style={{ fontSize: 13, color: colours.muted, marginTop: 2 }}>ABN: {c.abn}</div>}
+                    </div>
+                    <div style={{ ...cardStyle, padding: 16, background: colours.lightTeal }}>
+                      <div style={{ fontSize: 11, fontWeight: 800, color: colours.muted, textTransform: "uppercase", marginBottom: 8 }}>Contact</div>
+                      {c.email && <div style={{ fontSize: 13, color: colours.text, marginTop: 2 }}>✉ {c.email}</div>}
+                      {c.phone && <div style={{ fontSize: 13, color: colours.text, marginTop: 4 }}>📞 {c.phone}</div>}
+                      {c.address && <div style={{ fontSize: 13, color: colours.muted, marginTop: 4 }}>{c.address}</div>}
+                    </div>
+                    <div style={{ ...cardStyle, padding: 16, background: colours.white }}>
+                      <div style={{ fontSize: 11, fontWeight: 800, color: colours.muted, textTransform: "uppercase", marginBottom: 8 }}>Billing</div>
+                      <div style={{ fontSize: 13, color: colours.text }}>Currency: {c.defaultCurrency || "AUD $"}</div>
+                      <div style={{ fontSize: 13, color: colours.text, marginTop: 4 }}>GST: {clientIsGstExempt(c.id) ? "Exempt" : "Applicable"}</div>
+                      {c.workType && <div style={{ fontSize: 13, color: colours.muted, marginTop: 4 }}>{c.workType}</div>}
+                    </div>
+                  </div>
+                ) : null;
+              })()}
+              <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
+                <button style={{ ...buttonPrimary, opacity: invoiceForm.clientId ? 1 : 0.4 }}
+                  disabled={!invoiceForm.clientId}
+                  onClick={() => setInvoiceWizardStep(2)}>Next: Details →</button>
+              </div>
             </div>
-            <div>
-              <label style={labelStyle}>Invoice Date</label>
-              <input type="date" style={inputStyle} value={invoiceForm.invoiceDate} onChange={(e) => setInvoiceForm({ ...invoiceForm, invoiceDate: e.target.value })} />
-            </div>
-            <div>
-              <label style={labelStyle}>Due Date</label>
-              <input type="date" style={inputStyle} value={invoiceForm.dueDate} onChange={(e) => setInvoiceForm({ ...invoiceForm, dueDate: e.target.value })} />
-            </div>
-          </div>
+          )}
 
-          {/* ── Line items table ── */}
-          <div style={{ overflowX: "auto", marginBottom: 8 }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 680 }}>
-              <thead>
-                <tr style={{ background: colours.bg }}>
-                  {["Description", "Qty", "Unit Price (ex GST)", "GST Type", "GST", "Total"].map((h) => (
-                    <th key={h} style={{ padding: "10px 8px", textAlign: "left", fontSize: 12, fontWeight: 700, color: colours.muted, borderBottom: `1px solid ${colours.border}` }}>{h}</th>
-                  ))}
-                  <th style={{ padding: "10px 8px", borderBottom: `1px solid ${colours.border}` }} />
-                </tr>
-              </thead>
-              <tbody>
-                {(invoiceForm.lineItems || []).map((item, idx) => {
+          {/* ── Step 2: Details ── */}
+          {invoiceWizardStep === 2 && (
+            <div style={{ display: "grid", gap: 20 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16 }}>
+                <div>
+                  <label style={labelStyle}>Invoice Date</label>
+                  <input type="date" style={inputStyle} value={invoiceForm.invoiceDate} onChange={(e) => setInvoiceForm({ ...invoiceForm, invoiceDate: e.target.value })} />
+                </div>
+                <div>
+                  <label style={labelStyle}>Due Date</label>
+                  <input type="date" style={inputStyle} value={invoiceForm.dueDate} onChange={(e) => setInvoiceForm({ ...invoiceForm, dueDate: e.target.value })} />
+                </div>
+                <div>
+                  <label style={labelStyle}>Invoice Number</label>
+                  <input style={inputStyle} value={invoiceForm.invoiceNumber || ""} onChange={(e) => setInvoiceForm({ ...invoiceForm, invoiceNumber: e.target.value })} placeholder="Auto-generated if blank" />
+                </div>
+                {invoiceClient?.hasPurchaseOrder && (
+                  <div>
+                    <label style={labelStyle}>Purchase Order / Reference</label>
+                    <input style={inputStyle} value={invoiceForm.purchaseOrderReference || ""} onChange={(e) => setInvoiceForm({ ...invoiceForm, purchaseOrderReference: e.target.value })} />
+                  </div>
+                )}
+              </div>
+              <div>
+                <label style={labelStyle}>Comments (optional)</label>
+                <textarea style={{ ...inputStyle, minHeight: 80, resize: "vertical" }} value={invoiceForm.comments || ""} onChange={(e) => setInvoiceForm({ ...invoiceForm, comments: e.target.value })} placeholder="Any notes to appear on the invoice..." />
+              </div>
+              <div style={{ display: "grid", gap: 10 }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14 }}>
+                  <input type="checkbox" checked={invoiceForm.hidePhoneNumber} onChange={(e) => setInvoiceForm({ ...invoiceForm, hidePhoneNumber: e.target.checked })} />
+                  Hide my phone number on this invoice
+                </label>
+                <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14 }}>
+                  <input type="checkbox" checked={invoiceForm.includesUntaxedPortion} onChange={(e) => setInvoiceForm({ ...invoiceForm, includesUntaxedPortion: e.target.checked })} />
+                  Includes untaxed portion
+                </label>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8 }}>
+                <button style={buttonSecondary} onClick={() => setInvoiceWizardStep(1)}>← Back</button>
+                <button style={buttonPrimary} onClick={() => setInvoiceWizardStep(3)}>Next: Line Items →</button>
+              </div>
+            </div>
+          )}
+
+          {/* ── Step 3: Line Items ── */}
+          {invoiceWizardStep === 3 && (
+            <div style={{ display: "grid", gap: 16 }}>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 680 }}>
+                  <thead>
+                    <tr style={{ background: colours.bg }}>
+                      {["Description", "Qty", "Unit Price (ex GST)", "GST Type", "GST", "Total", ""].map((h) => (
+                        <th key={h} style={{ padding: "10px 8px", textAlign: "left", fontSize: 12, fontWeight: 700, color: colours.muted, borderBottom: `1px solid ${colours.border}` }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(invoiceForm.lineItems || []).map((item, idx) => {
+                      const qty = Math.max(1, safeNumber(item.quantity || 1));
+                      const unit = safeNumber(item.unitPrice);
+                      const rowSub = unit * qty;
+                      const exempt = clientIsGstExempt(invoiceForm.clientId);
+                      const effectiveGst = exempt ? "GST Free" : (item.gstType || "GST on Income (10%)");
+                      const rowGst = effectiveGst === "GST on Income (10%)" ? rowSub * 0.1 : 0;
+                      return (
+                        <tr key={item.id} style={{ borderBottom: `1px solid ${colours.border}` }}>
+                          <td style={{ padding: "8px 6px", minWidth: 200 }}>
+                            <input style={{ ...inputStyle, fontSize: 13 }} value={item.description}
+                              onChange={(e) => setInvoiceForm((prev) => ({ ...prev, lineItems: prev.lineItems.map((l, i) => i === idx ? { ...l, description: e.target.value } : l) }))}
+                              placeholder="Description" />
+                          </td>
+                          <td style={{ padding: "8px 6px", width: 70 }}>
+                            <input type="number" min="1" style={{ ...inputStyle, fontSize: 13 }} value={item.quantity}
+                              onChange={(e) => setInvoiceForm((prev) => ({ ...prev, lineItems: prev.lineItems.map((l, i) => i === idx ? { ...l, quantity: e.target.value } : l) }))} />
+                          </td>
+                          <td style={{ padding: "8px 6px", width: 130 }}>
+                            <input type="number" min="0" step="0.01" style={{ ...inputStyle, fontSize: 13 }} value={item.unitPrice}
+                              onChange={(e) => setInvoiceForm((prev) => ({ ...prev, lineItems: prev.lineItems.map((l, i) => i === idx ? { ...l, unitPrice: e.target.value } : l) }))}
+                              placeholder="0.00" />
+                          </td>
+                          <td style={{ padding: "8px 6px", width: 160 }}>
+                            <select style={{ ...inputStyle, fontSize: 13, background: exempt ? "#F8FAFC" : colours.white }} disabled={exempt} value={effectiveGst}
+                              onChange={(e) => setInvoiceForm((prev) => ({ ...prev, lineItems: prev.lineItems.map((l, i) => i === idx ? { ...l, gstType: e.target.value } : l) }))}>
+                              {GST_TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                            </select>
+                          </td>
+                          <td style={{ padding: "8px 6px", width: 90, fontSize: 13, color: colours.muted, textAlign: "right" }}>{invoiceMoney(rowGst)}</td>
+                          <td style={{ padding: "8px 6px", width: 110, fontSize: 13, fontWeight: 700, textAlign: "right" }}>{invoiceMoney(rowSub + rowGst)}</td>
+                          <td style={{ padding: "8px 6px", width: 40 }}>
+                            {(invoiceForm.lineItems || []).length > 1 && (
+                              <button onClick={() => setInvoiceForm((prev) => ({ ...prev, lineItems: prev.lineItems.filter((_, i) => i !== idx) }))}
+                                style={{ background: "none", border: "none", cursor: "pointer", color: colours.muted, fontSize: 18, lineHeight: 1 }}>×</button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                <button onClick={() => setInvoiceForm((prev) => ({ ...prev, lineItems: [...(prev.lineItems || []), blankLineItem()] }))}
+                  style={{ ...buttonSecondary, fontSize: 13, padding: "7px 14px" }}>+ Add line</button>
+                <span style={{ fontSize: 13, color: colours.muted }}>{(invoiceForm.lineItems || []).length} line{(invoiceForm.lineItems || []).length !== 1 ? "s" : ""}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8 }}>
+                <button style={buttonSecondary} onClick={() => setInvoiceWizardStep(2)}>← Back</button>
+                <button style={buttonPrimary} onClick={() => setInvoiceWizardStep(4)}>Next: Review →</button>
+              </div>
+            </div>
+          )}
+
+          {/* ── Step 4: Review & Save ── */}
+          {invoiceWizardStep === 4 && (
+            <div style={{ display: "grid", gap: 20 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
+                <div style={{ ...cardStyle, padding: 16, background: colours.lightPurple }}>
+                  <div style={{ fontSize: 11, fontWeight: 800, color: colours.muted, textTransform: "uppercase", marginBottom: 8 }}>From</div>
+                  <div style={{ fontSize: 14, fontWeight: 800, color: colours.text }}>{profile.businessName}</div>
+                  <div style={{ fontSize: 13, color: colours.muted, marginTop: 2 }}>ABN: {profile.abn || "-"}</div>
+                  <div style={{ fontSize: 13, color: colours.muted, marginTop: 2 }}>{profile.email}</div>
+                </div>
+                <div style={{ ...cardStyle, padding: 16, background: colours.lightTeal }}>
+                  <div style={{ fontSize: 11, fontWeight: 800, color: colours.muted, textTransform: "uppercase", marginBottom: 8 }}>To</div>
+                  <div style={{ fontSize: 14, fontWeight: 800, color: colours.text }}>{invoiceClient?.name || "-"}</div>
+                  {invoiceClient?.businessName && <div style={{ fontSize: 13, color: colours.muted, marginTop: 2 }}>{invoiceClient.businessName}</div>}
+                  {invoiceClient?.email && <div style={{ fontSize: 13, color: colours.muted, marginTop: 2 }}>{invoiceClient.email}</div>}
+                </div>
+                <div style={{ ...cardStyle, padding: 16, background: colours.white }}>
+                  <div style={{ fontSize: 11, fontWeight: 800, color: colours.muted, textTransform: "uppercase", marginBottom: 8 }}>Dates</div>
+                  <div style={{ fontSize: 13, color: colours.text }}>Invoice: {invoiceForm.invoiceDate || "-"}</div>
+                  <div style={{ fontSize: 13, color: colours.text, marginTop: 4 }}>Due: {invoiceForm.dueDate || "-"}</div>
+                  {invoiceForm.purchaseOrderReference && <div style={{ fontSize: 13, color: colours.muted, marginTop: 4 }}>PO: {invoiceForm.purchaseOrderReference}</div>}
+                </div>
+              </div>
+
+              <div style={{ ...cardStyle, padding: 16 }}>
+                <div style={{ fontSize: 12, fontWeight: 800, color: colours.muted, textTransform: "uppercase", marginBottom: 12 }}>Line Items</div>
+                {(invoiceForm.lineItems || []).filter(l => l.description || l.unitPrice).map((item, idx) => {
                   const qty = Math.max(1, safeNumber(item.quantity || 1));
                   const unit = safeNumber(item.unitPrice);
                   const rowSub = unit * qty;
@@ -5511,129 +5669,40 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
                   const effectiveGst = exempt ? "GST Free" : (item.gstType || "GST on Income (10%)");
                   const rowGst = effectiveGst === "GST on Income (10%)" ? rowSub * 0.1 : 0;
                   return (
-                    <tr key={item.id} style={{ borderBottom: `1px solid ${colours.border}` }}>
-                      <td style={{ padding: "8px 6px", minWidth: 200 }}>
-                        <input style={{ ...inputStyle, fontSize: 13 }} value={item.description}
-                          onChange={(e) => setInvoiceForm((prev) => ({ ...prev, lineItems: prev.lineItems.map((l, i) => i === idx ? { ...l, description: e.target.value } : l) }))}
-                          placeholder="Description" />
-                      </td>
-                      <td style={{ padding: "8px 6px", width: 70 }}>
-                        <input type="number" min="1" style={{ ...inputStyle, fontSize: 13 }} value={item.quantity}
-                          onChange={(e) => setInvoiceForm((prev) => ({ ...prev, lineItems: prev.lineItems.map((l, i) => i === idx ? { ...l, quantity: e.target.value } : l) }))} />
-                      </td>
-                      <td style={{ padding: "8px 6px", width: 130 }}>
-                        <input type="number" min="0" step="0.01" style={{ ...inputStyle, fontSize: 13 }} value={item.unitPrice}
-                          onChange={(e) => setInvoiceForm((prev) => ({ ...prev, lineItems: prev.lineItems.map((l, i) => i === idx ? { ...l, unitPrice: e.target.value } : l) }))}
-                          placeholder="0.00" />
-                      </td>
-                      <td style={{ padding: "8px 6px", width: 160 }}>
-                        <select style={{ ...inputStyle, fontSize: 13, background: exempt ? "#F8FAFC" : colours.white }} disabled={exempt}
-                          value={effectiveGst}
-                          onChange={(e) => setInvoiceForm((prev) => ({ ...prev, lineItems: prev.lineItems.map((l, i) => i === idx ? { ...l, gstType: e.target.value } : l) }))}>
-                          {GST_TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                        </select>
-                      </td>
-                      <td style={{ padding: "8px 6px", width: 90, fontSize: 13, color: colours.muted, textAlign: "right" }}>{invoiceMoney(rowGst)}</td>
-                      <td style={{ padding: "8px 6px", width: 110, fontSize: 13, fontWeight: 700, textAlign: "right" }}>{invoiceMoney(rowSub + rowGst)}</td>
-                      <td style={{ padding: "8px 6px", width: 40 }}>
-                        {(invoiceForm.lineItems || []).length > 1 && (
-                          <button onClick={() => setInvoiceForm((prev) => ({ ...prev, lineItems: prev.lineItems.filter((_, i) => i !== idx) }))}
-                            style={{ background: "none", border: "none", cursor: "pointer", color: colours.muted, fontSize: 18, lineHeight: 1 }} title="Remove row">×</button>
-                        )}
-                      </td>
-                    </tr>
+                    <div key={idx} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: `1px solid ${colours.border}`, fontSize: 14 }}>
+                      <div>
+                        <span style={{ fontWeight: 600 }}>{item.description || "—"}</span>
+                        <span style={{ color: colours.muted, marginLeft: 10 }}>× {qty} @ {invoiceMoney(unit)}</span>
+                      </div>
+                      <strong>{invoiceMoney(rowSub + rowGst)}</strong>
+                    </div>
                   );
                 })}
-              </tbody>
-            </table>
-          </div>
-          <button onClick={() => setInvoiceForm((prev) => ({ ...prev, lineItems: [...(prev.lineItems || []), blankLineItem()] }))}
-            style={{ ...buttonSecondary, fontSize: 13, padding: "7px 14px", marginBottom: 20 }}>+ Add line</button>
-
-          <div style={{ display: "flex", justifyContent: "flex-end" }}>
-            <div style={{ minWidth: 360, fontSize: 14 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0" }}><span style={{ color: colours.muted }}>Subtotal (ex GST):</span><strong>{invoiceMoney(previewSubtotal)}</strong></div>
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0" }}><span style={{ color: colours.muted }}>Total GST:</span><strong>{invoiceMoney(previewGst)}</strong></div>
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0" }}><span style={{ color: colours.muted }}>GST status:</span><strong>{invoiceGstStatus}</strong></div>
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0" }}><span style={{ color: colours.muted }}>Less fees:</span><strong>{invoiceMoney(invoiceAdjustments.feeAmount)}</strong></div>
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0" }}><span style={{ color: colours.muted }}>Less tax withheld:</span><strong>{invoiceMoney(invoiceAdjustments.taxWithheld)}</strong></div>
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", fontSize: 18 }}><span style={{ color: colours.teal, fontWeight: 800 }}>Amount due:</span><strong style={{ color: colours.teal }}>{invoiceMoney(previewTotal)}</strong></div>
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", fontSize: 18 }}><span style={{ color: colours.purple, fontWeight: 800 }}>Net expected:</span><strong style={{ color: colours.purple }}>{invoiceMoney(invoiceAdjustments.netExpected)}</strong></div>
-            </div>
-          </div>
-        </SectionCard>
-
-        <SectionCard title="Additional Settings">
-          <details>
-            <summary style={{ fontWeight: 800, cursor: "pointer", color: colours.text }}>Show additional settings</summary>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-                gap: 16,
-                marginTop: 16,
-              }}
-            >
-              {invoiceClient?.hasPurchaseOrder ? (
-                <div>
-                  <label style={labelStyle}>Purchase order / reference</label>
-                  <input
-                    style={inputStyle}
-                    value={invoiceForm.purchaseOrderReference}
-                    onChange={(e) => setInvoiceForm({ ...invoiceForm, purchaseOrderReference: e.target.value })}
-                  />
+                <div style={{ marginTop: 16, borderTop: `2px solid ${colours.border}`, paddingTop: 12, display: "grid", gap: 6 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14 }}><span style={{ color: colours.muted }}>Subtotal (ex GST)</span><span>{invoiceMoney(previewSubtotal)}</span></div>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14 }}><span style={{ color: colours.muted }}>GST</span><span>{invoiceMoney(previewGst)}</span></div>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 18, fontWeight: 800, color: colours.teal, marginTop: 6 }}><span>Amount Due</span><span>{invoiceMoney(previewTotal)}</span></div>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 15, fontWeight: 700, color: colours.purple }}><span>Net Expected</span><span>{invoiceMoney(invoiceAdjustments.netExpected)}</span></div>
                 </div>
-              ) : <EmptyState icon="📁" title="No documents yet" message="Upload receipts, contracts and generated PDFs here. All documents are stored securely against your account." />}
+              </div>
 
-              <div style={{ gridColumn: "1 / -1" }}>
-                <label style={labelStyle}>Comments</label>
-                <textarea
-                  style={{ ...inputStyle, minHeight: 90, resize: "vertical" }}
-                  value={invoiceForm.comments}
-                  onChange={(e) => setInvoiceForm({ ...invoiceForm, comments: e.target.value })}
-                />
+              {invoiceForm.comments && (
+                <div style={{ ...cardStyle, padding: 14, background: colours.bg }}>
+                  <div style={{ fontSize: 12, fontWeight: 800, color: colours.muted, textTransform: "uppercase", marginBottom: 6 }}>Comments</div>
+                  <div style={{ fontSize: 14, color: colours.text }}>{invoiceForm.comments}</div>
+                </div>
+              )}
+
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, marginTop: 8 }}>
+                <button style={buttonSecondary} onClick={() => setInvoiceWizardStep(3)}>← Back</button>
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  <button style={buttonSecondary} onClick={openInvoicePreview}>Preview PDF</button>
+                  <button style={buttonSecondary} onClick={() => { setInvoiceForm((prev) => ({ ...prev, status: "Draft" })); saveInvoice(); setInvoiceWizardStep(1); }}>Save Draft</button>
+                  <button style={buttonPrimary} onClick={() => { saveInvoice(); setInvoiceWizardStep(1); }}>{savingInvoice ? "Saving..." : "Save Invoice ✓"}</button>
+                </div>
               </div>
             </div>
-
-            <div style={{ marginTop: 12, display: "grid", gap: 12 }}>
-              <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14 }}>
-                <input
-                  type="checkbox"
-                  checked={invoiceForm.hidePhoneNumber}
-                  onChange={(e) => setInvoiceForm({ ...invoiceForm, hidePhoneNumber: e.target.checked })}
-                />
-                Hide my phone number
-              </label>
-
-              <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14 }}>
-                <input
-                  type="checkbox"
-                  checked={invoiceForm.includesUntaxedPortion}
-                  onChange={(e) => setInvoiceForm({ ...invoiceForm, includesUntaxedPortion: e.target.checked })}
-                />
-                Includes untaxed portion
-              </label>
-            </div>
-          </details>
-        </SectionCard>
-
-        <SectionCard
-          title="Invoice Actions"
-          right={
-            <div style={{ display: "flex", gap: 10 }}>
-              <button style={buttonSecondary} onClick={openInvoicePreview}>
-                Preview
-              </button>
-              <button style={buttonSecondary}>Save Draft</button>
-              <button style={buttonPrimary} onClick={saveInvoice}>
-                Save Invoice
-              </button>
-            </div>
-          }
-        >
-          <div style={{ color: colours.muted, fontSize: 14 }}>
-            Use Preview to open a print-style invoice in a new tab, then click Print / Download PDF.
-          </div>
+          )}
         </SectionCard>
 
         <SectionCard title="Invoice List">
@@ -6065,53 +6134,207 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
           </div>
         </div>
         <SectionCard title="Create Quote">
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12, marginBottom: 16 }}>
-            <div style={{ ...cardStyle, padding: 14, background: colours.lightPurple }}>
-              <div style={{ fontSize: 12, color: colours.muted, fontWeight: 700 }}>Auto-filled from Profile</div>
-              <div style={{ fontSize: 14, fontWeight: 700, color: colours.text, marginTop: 6 }}>{profile.businessName}</div>
-              <div style={{ fontSize: 13, color: colours.muted, marginTop: 4 }}>Quote Prefix: {profile.quotePrefix || "QUO"}</div>
-            </div>
-            <div style={{ ...cardStyle, padding: 14, background: colours.lightTeal }}>
-              <div style={{ fontSize: 12, color: colours.muted, fontWeight: 700 }}>Contact on Quote</div>
-              <div style={{ fontSize: 14, fontWeight: 700, color: colours.text, marginTop: 6 }}>{profile.email || "-"}</div>
-              <div style={{ fontSize: 13, color: colours.muted, marginTop: 4 }}>{profile.hidePhoneOnDocs ? "Phone hidden" : profile.phone || "-"}</div>
-            </div>
+          {/* ── Wizard progress bar ── */}
+          <div style={{ display: "flex", alignItems: "center", marginBottom: 28 }}>
+            {["Client", "Details", "Line Items", "Review & Save"].map((label, i) => {
+              const step = i + 1;
+              const active = quoteWizardStep === step;
+              const done = quoteWizardStep > step;
+              return (
+                <React.Fragment key={step}>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, cursor: done ? "pointer" : "default" }}
+                    onClick={() => done && setQuoteWizardStep(step)}>
+                    <div style={{ width: 32, height: 32, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 13,
+                      background: done ? colours.teal : active ? colours.purple : colours.border,
+                      color: done || active ? "#fff" : colours.muted, transition: "all 0.2s" }}>
+                      {done ? "✓" : step}
+                    </div>
+                    <div style={{ fontSize: 11, fontWeight: active ? 800 : 500, color: active ? colours.purple : done ? colours.teal : colours.muted, whiteSpace: "nowrap" }}>{label}</div>
+                  </div>
+                  {i < 3 && <div style={{ flex: 1, height: 2, background: done ? colours.teal : colours.border, margin: "0 6px", marginBottom: 18, transition: "background 0.2s" }} />}
+                </React.Fragment>
+              );
+            })}
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16, marginBottom: 20 }}>
-            <div>
-              <label style={labelStyle}>Client</label>
-              <select style={inputStyle} value={quoteForm.clientId} onChange={(e) => {
-                const sel = getClientById(e.target.value);
-                setQuoteForm((prev) => ({ ...prev, clientId: e.target.value, currencyCode: getClientCurrencyCode(sel) }));
-              }}>
-                <option value="">Select client...</option>
-                {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
+          {/* ── Step 1: Client ── */}
+          {quoteWizardStep === 1 && (
+            <div style={{ display: "grid", gap: 20 }}>
+              <div>
+                <label style={labelStyle}>Select Client</label>
+                <select style={{ ...inputStyle, fontSize: 15 }} value={quoteForm.clientId} onChange={(e) => {
+                  const sel = getClientById(e.target.value);
+                  setQuoteForm((prev) => ({ ...prev, clientId: e.target.value, currencyCode: getClientCurrencyCode(sel) }));
+                }}>
+                  <option value="">Choose a client...</option>
+                  {clients.map((c) => <option key={c.id} value={c.id}>{c.name}{c.businessName ? ` — ${c.businessName}` : ""}</option>)}
+                </select>
+              </div>
+              {quoteForm.clientId && (() => {
+                const c = getClientById(quoteForm.clientId);
+                return c ? (
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
+                    <div style={{ ...cardStyle, padding: 16, background: colours.lightPurple }}>
+                      <div style={{ fontSize: 11, fontWeight: 800, color: colours.muted, textTransform: "uppercase", marginBottom: 8 }}>Client Details</div>
+                      <div style={{ fontSize: 15, fontWeight: 800, color: colours.text }}>{c.name}</div>
+                      {c.businessName && <div style={{ fontSize: 13, color: colours.muted, marginTop: 4 }}>{c.businessName}</div>}
+                      {c.abn && <div style={{ fontSize: 13, color: colours.muted, marginTop: 2 }}>ABN: {c.abn}</div>}
+                    </div>
+                    <div style={{ ...cardStyle, padding: 16, background: colours.lightTeal }}>
+                      <div style={{ fontSize: 11, fontWeight: 800, color: colours.muted, textTransform: "uppercase", marginBottom: 8 }}>Contact</div>
+                      {c.email && <div style={{ fontSize: 13, color: colours.text, marginTop: 2 }}>✉ {c.email}</div>}
+                      {c.phone && <div style={{ fontSize: 13, color: colours.text, marginTop: 4 }}>📞 {c.phone}</div>}
+                      {c.address && <div style={{ fontSize: 13, color: colours.muted, marginTop: 4 }}>{c.address}</div>}
+                    </div>
+                    <div style={{ ...cardStyle, padding: 16, background: colours.white }}>
+                      <div style={{ fontSize: 11, fontWeight: 800, color: colours.muted, textTransform: "uppercase", marginBottom: 8 }}>Billing</div>
+                      <div style={{ fontSize: 13, color: colours.text }}>Currency: {c.defaultCurrency || "AUD $"}</div>
+                      <div style={{ fontSize: 13, color: colours.text, marginTop: 4 }}>GST: {clientIsGstExempt(c.id) ? "Exempt" : "Applicable"}</div>
+                      {c.workType && <div style={{ fontSize: 13, color: colours.muted, marginTop: 4 }}>{c.workType}</div>}
+                    </div>
+                  </div>
+                ) : null;
+              })()}
+              <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
+                <button style={{ ...buttonPrimary, opacity: quoteForm.clientId ? 1 : 0.4 }}
+                  disabled={!quoteForm.clientId}
+                  onClick={() => setQuoteWizardStep(2)}>Next: Details →</button>
+              </div>
             </div>
-            <div>
-              <label style={labelStyle}>Quote Date</label>
-              <input type="date" style={inputStyle} value={quoteForm.quoteDate} onChange={(e) => setQuoteForm({ ...quoteForm, quoteDate: e.target.value })} />
-            </div>
-            <div>
-              <label style={labelStyle}>Expiry Date</label>
-              <input type="date" style={inputStyle} value={quoteForm.expiryDate} onChange={(e) => setQuoteForm({ ...quoteForm, expiryDate: e.target.value })} />
-            </div>
-          </div>
+          )}
 
-          {/* ── Line items table ── */}
-          <div style={{ overflowX: "auto", marginBottom: 8 }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 680 }}>
-              <thead>
-                <tr style={{ background: colours.bg }}>
-                  {["Description", "Qty", "Unit Price (ex GST)", "GST Type", "GST", "Total"].map((h) => (
-                    <th key={h} style={{ padding: "10px 8px", textAlign: "left", fontSize: 12, fontWeight: 700, color: colours.muted, borderBottom: `1px solid ${colours.border}` }}>{h}</th>
-                  ))}
-                  <th style={{ padding: "10px 8px", borderBottom: `1px solid ${colours.border}` }} />
-                </tr>
-              </thead>
-              <tbody>
-                {(quoteForm.lineItems || []).map((item, idx) => {
+          {/* ── Step 2: Details ── */}
+          {quoteWizardStep === 2 && (
+            <div style={{ display: "grid", gap: 20 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16 }}>
+                <div>
+                  <label style={labelStyle}>Quote Date</label>
+                  <input type="date" style={inputStyle} value={quoteForm.quoteDate} onChange={(e) => setQuoteForm({ ...quoteForm, quoteDate: e.target.value })} />
+                </div>
+                <div>
+                  <label style={labelStyle}>Expiry Date</label>
+                  <input type="date" style={inputStyle} value={quoteForm.expiryDate} onChange={(e) => setQuoteForm({ ...quoteForm, expiryDate: e.target.value })} />
+                </div>
+                <div>
+                  <label style={labelStyle}>Quote Number</label>
+                  <input style={inputStyle} value={quoteForm.quoteNumber || ""} onChange={(e) => setQuoteForm({ ...quoteForm, quoteNumber: e.target.value })} placeholder="Auto-generated if blank" />
+                </div>
+              </div>
+              <div>
+                <label style={labelStyle}>Comments (optional)</label>
+                <textarea style={{ ...inputStyle, minHeight: 80, resize: "vertical" }} value={quoteForm.comments || ""} onChange={(e) => setQuoteForm({ ...quoteForm, comments: e.target.value })} placeholder="Any notes to appear on the quote..." />
+              </div>
+              <div>
+                <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14 }}>
+                  <input type="checkbox" checked={quoteForm.hidePhoneNumber} onChange={(e) => setQuoteForm({ ...quoteForm, hidePhoneNumber: e.target.checked })} />
+                  Hide my phone number on this quote
+                </label>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8 }}>
+                <button style={buttonSecondary} onClick={() => setQuoteWizardStep(1)}>← Back</button>
+                <button style={buttonPrimary} onClick={() => setQuoteWizardStep(3)}>Next: Line Items →</button>
+              </div>
+            </div>
+          )}
+
+          {/* ── Step 3: Line Items ── */}
+          {quoteWizardStep === 3 && (
+            <div style={{ display: "grid", gap: 16 }}>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 680 }}>
+                  <thead>
+                    <tr style={{ background: colours.bg }}>
+                      {["Description", "Qty", "Unit Price (ex GST)", "GST Type", "GST", "Total", ""].map((h) => (
+                        <th key={h} style={{ padding: "10px 8px", textAlign: "left", fontSize: 12, fontWeight: 700, color: colours.muted, borderBottom: `1px solid ${colours.border}` }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(quoteForm.lineItems || []).map((item, idx) => {
+                      const qty = Math.max(1, safeNumber(item.quantity || 1));
+                      const unit = safeNumber(item.unitPrice);
+                      const rowSub = unit * qty;
+                      const exempt = clientIsGstExempt(quoteForm.clientId);
+                      const effectiveGst = exempt ? "GST Free" : (item.gstType || "GST on Income (10%)");
+                      const rowGst = effectiveGst === "GST on Income (10%)" ? rowSub * 0.1 : 0;
+                      return (
+                        <tr key={item.id} style={{ borderBottom: `1px solid ${colours.border}` }}>
+                          <td style={{ padding: "8px 6px", minWidth: 200 }}>
+                            <input style={{ ...inputStyle, fontSize: 13 }} value={item.description}
+                              onChange={(e) => setQuoteForm((prev) => ({ ...prev, lineItems: prev.lineItems.map((l, i) => i === idx ? { ...l, description: e.target.value } : l) }))}
+                              placeholder="Description" />
+                          </td>
+                          <td style={{ padding: "8px 6px", width: 70 }}>
+                            <input type="number" min="1" style={{ ...inputStyle, fontSize: 13 }} value={item.quantity}
+                              onChange={(e) => setQuoteForm((prev) => ({ ...prev, lineItems: prev.lineItems.map((l, i) => i === idx ? { ...l, quantity: e.target.value } : l) }))} />
+                          </td>
+                          <td style={{ padding: "8px 6px", width: 130 }}>
+                            <input type="number" min="0" step="0.01" style={{ ...inputStyle, fontSize: 13 }} value={item.unitPrice}
+                              onChange={(e) => setQuoteForm((prev) => ({ ...prev, lineItems: prev.lineItems.map((l, i) => i === idx ? { ...l, unitPrice: e.target.value } : l) }))}
+                              placeholder="0.00" />
+                          </td>
+                          <td style={{ padding: "8px 6px", width: 160 }}>
+                            <select style={{ ...inputStyle, fontSize: 13, background: exempt ? "#F8FAFC" : colours.white }} disabled={exempt} value={effectiveGst}
+                              onChange={(e) => setQuoteForm((prev) => ({ ...prev, lineItems: prev.lineItems.map((l, i) => i === idx ? { ...l, gstType: e.target.value } : l) }))}>
+                              {GST_TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                            </select>
+                          </td>
+                          <td style={{ padding: "8px 6px", width: 90, fontSize: 13, color: colours.muted, textAlign: "right" }}>{quoteMoney(rowGst)}</td>
+                          <td style={{ padding: "8px 6px", width: 110, fontSize: 13, fontWeight: 700, textAlign: "right" }}>{quoteMoney(rowSub + rowGst)}</td>
+                          <td style={{ padding: "8px 6px", width: 40 }}>
+                            {(quoteForm.lineItems || []).length > 1 && (
+                              <button onClick={() => setQuoteForm((prev) => ({ ...prev, lineItems: prev.lineItems.filter((_, i) => i !== idx) }))}
+                                style={{ background: "none", border: "none", cursor: "pointer", color: colours.muted, fontSize: 18, lineHeight: 1 }}>×</button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                <button onClick={() => setQuoteForm((prev) => ({ ...prev, lineItems: [...(prev.lineItems || []), { id: Date.now() + Math.random(), description: "", quantity: 1, unitPrice: "", gstType: "GST on Income (10%)" }] }))}
+                  style={{ ...buttonSecondary, fontSize: 13, padding: "7px 14px" }}>+ Add line</button>
+                <span style={{ fontSize: 13, color: colours.muted }}>{(quoteForm.lineItems || []).length} line{(quoteForm.lineItems || []).length !== 1 ? "s" : ""}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8 }}>
+                <button style={buttonSecondary} onClick={() => setQuoteWizardStep(2)}>← Back</button>
+                <button style={buttonPrimary} onClick={() => setQuoteWizardStep(4)}>Next: Review →</button>
+              </div>
+            </div>
+          )}
+
+          {/* ── Step 4: Review & Save ── */}
+          {quoteWizardStep === 4 && (
+            <div style={{ display: "grid", gap: 20 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
+                <div style={{ ...cardStyle, padding: 16, background: colours.lightPurple }}>
+                  <div style={{ fontSize: 11, fontWeight: 800, color: colours.muted, textTransform: "uppercase", marginBottom: 8 }}>From</div>
+                  <div style={{ fontSize: 14, fontWeight: 800, color: colours.text }}>{profile.businessName}</div>
+                  <div style={{ fontSize: 13, color: colours.muted, marginTop: 2 }}>ABN: {profile.abn || "-"}</div>
+                  <div style={{ fontSize: 13, color: colours.muted, marginTop: 2 }}>{profile.email}</div>
+                </div>
+                <div style={{ ...cardStyle, padding: 16, background: colours.lightTeal }}>
+                  <div style={{ fontSize: 11, fontWeight: 800, color: colours.muted, textTransform: "uppercase", marginBottom: 8 }}>To</div>
+                  {(() => { const c = getClientById(quoteForm.clientId); return c ? (
+                    <>
+                      <div style={{ fontSize: 14, fontWeight: 800, color: colours.text }}>{c.name}</div>
+                      {c.businessName && <div style={{ fontSize: 13, color: colours.muted, marginTop: 2 }}>{c.businessName}</div>}
+                      {c.email && <div style={{ fontSize: 13, color: colours.muted, marginTop: 2 }}>{c.email}</div>}
+                    </>
+                  ) : null; })()}
+                </div>
+                <div style={{ ...cardStyle, padding: 16, background: colours.white }}>
+                  <div style={{ fontSize: 11, fontWeight: 800, color: colours.muted, textTransform: "uppercase", marginBottom: 8 }}>Dates</div>
+                  <div style={{ fontSize: 13, color: colours.text }}>Quote: {quoteForm.quoteDate || "-"}</div>
+                  <div style={{ fontSize: 13, color: colours.text, marginTop: 4 }}>Expires: {quoteForm.expiryDate || "-"}</div>
+                </div>
+              </div>
+
+              <div style={{ ...cardStyle, padding: 16 }}>
+                <div style={{ fontSize: 12, fontWeight: 800, color: colours.muted, textTransform: "uppercase", marginBottom: 12 }}>Line Items</div>
+                {(quoteForm.lineItems || []).filter(l => l.description || l.unitPrice).map((item, idx) => {
                   const qty = Math.max(1, safeNumber(item.quantity || 1));
                   const unit = safeNumber(item.unitPrice);
                   const rowSub = unit * qty;
@@ -6119,69 +6342,40 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
                   const effectiveGst = exempt ? "GST Free" : (item.gstType || "GST on Income (10%)");
                   const rowGst = effectiveGst === "GST on Income (10%)" ? rowSub * 0.1 : 0;
                   return (
-                    <tr key={item.id} style={{ borderBottom: `1px solid ${colours.border}` }}>
-                      <td style={{ padding: "8px 6px", minWidth: 200 }}>
-                        <input style={{ ...inputStyle, fontSize: 13 }} value={item.description}
-                          onChange={(e) => setQuoteForm((prev) => ({ ...prev, lineItems: prev.lineItems.map((l, i) => i === idx ? { ...l, description: e.target.value } : l) }))}
-                          placeholder="Description" />
-                      </td>
-                      <td style={{ padding: "8px 6px", width: 70 }}>
-                        <input type="number" min="1" style={{ ...inputStyle, fontSize: 13 }} value={item.quantity}
-                          onChange={(e) => setQuoteForm((prev) => ({ ...prev, lineItems: prev.lineItems.map((l, i) => i === idx ? { ...l, quantity: e.target.value } : l) }))} />
-                      </td>
-                      <td style={{ padding: "8px 6px", width: 130 }}>
-                        <input type="number" min="0" step="0.01" style={{ ...inputStyle, fontSize: 13 }} value={item.unitPrice}
-                          onChange={(e) => setQuoteForm((prev) => ({ ...prev, lineItems: prev.lineItems.map((l, i) => i === idx ? { ...l, unitPrice: e.target.value } : l) }))}
-                          placeholder="0.00" />
-                      </td>
-                      <td style={{ padding: "8px 6px", width: 160 }}>
-                        <select style={{ ...inputStyle, fontSize: 13, background: exempt ? "#F8FAFC" : colours.white }} disabled={exempt}
-                          value={effectiveGst}
-                          onChange={(e) => setQuoteForm((prev) => ({ ...prev, lineItems: prev.lineItems.map((l, i) => i === idx ? { ...l, gstType: e.target.value } : l) }))}>
-                          {GST_TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                        </select>
-                      </td>
-                      <td style={{ padding: "8px 6px", width: 90, fontSize: 13, color: colours.muted, textAlign: "right" }}>{quoteMoney(rowGst)}</td>
-                      <td style={{ padding: "8px 6px", width: 110, fontSize: 13, fontWeight: 700, textAlign: "right" }}>{quoteMoney(rowSub + rowGst)}</td>
-                      <td style={{ padding: "8px 6px", width: 40 }}>
-                        {(quoteForm.lineItems || []).length > 1 && (
-                          <button onClick={() => setQuoteForm((prev) => ({ ...prev, lineItems: prev.lineItems.filter((_, i) => i !== idx) }))}
-                            style={{ background: "none", border: "none", cursor: "pointer", color: colours.muted, fontSize: 18, lineHeight: 1 }} title="Remove row">×</button>
-                        )}
-                      </td>
-                    </tr>
+                    <div key={idx} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: `1px solid ${colours.border}`, fontSize: 14 }}>
+                      <div>
+                        <span style={{ fontWeight: 600 }}>{item.description || "—"}</span>
+                        <span style={{ color: colours.muted, marginLeft: 10 }}>× {qty} @ {quoteMoney(unit)}</span>
+                      </div>
+                      <strong>{quoteMoney(rowSub + rowGst)}</strong>
+                    </div>
                   );
                 })}
-              </tbody>
-            </table>
-          </div>
-          <button onClick={() => setQuoteForm((prev) => ({ ...prev, lineItems: [...(prev.lineItems || []), { id: Date.now() + Math.random(), description: "", quantity: 1, unitPrice: "", gstType: "GST on Income (10%)" }] }))}
-            style={{ ...buttonSecondary, fontSize: 13, padding: "7px 14px", marginBottom: 20 }}>+ Add line</button>
+                <div style={{ marginTop: 16, borderTop: `2px solid ${colours.border}`, paddingTop: 12, display: "grid", gap: 6 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14 }}><span style={{ color: colours.muted }}>Subtotal (ex GST)</span><span>{quoteMoney(qSubtotal)}</span></div>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14 }}><span style={{ color: colours.muted }}>GST</span><span>{quoteMoney(qGst)}</span></div>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 18, fontWeight: 800, color: colours.teal, marginTop: 6 }}><span>Total Estimate</span><span>{quoteMoney(qTotal)}</span></div>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 15, fontWeight: 700, color: colours.purple }}><span>Net Expected</span><span>{quoteMoney(quoteAdjustments.netExpected)}</span></div>
+                </div>
+              </div>
 
-          <div style={{ display: "flex", justifyContent: "flex-end" }}>
-            <div style={{ minWidth: 360, fontSize: 14 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0" }}><span style={{ color: colours.muted }}>Subtotal (ex GST):</span><strong>{quoteMoney(qSubtotal)}</strong></div>
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0" }}><span style={{ color: colours.muted }}>Total GST:</span><strong>{quoteMoney(qGst)}</strong></div>
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0" }}><span style={{ color: colours.muted }}>GST status:</span><strong>{quoteGstStatus}</strong></div>
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0" }}><span style={{ color: colours.muted }}>Less fees:</span><strong>{quoteMoney(quoteAdjustments.feeAmount)}</strong></div>
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0" }}><span style={{ color: colours.muted }}>Less tax withheld:</span><strong>{quoteMoney(quoteAdjustments.taxWithheld)}</strong></div>
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", fontSize: 18 }}><span style={{ color: colours.teal, fontWeight: 800 }}>Total estimate:</span><strong style={{ color: colours.teal }}>{quoteMoney(qTotal)}</strong></div>
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", fontSize: 18 }}><span style={{ color: colours.purple, fontWeight: 800 }}>Net expected:</span><strong style={{ color: colours.purple }}>{quoteMoney(quoteAdjustments.netExpected)}</strong></div>
-            </div>
-          </div>
-        </SectionCard>
+              {quoteForm.comments && (
+                <div style={{ ...cardStyle, padding: 14, background: colours.bg }}>
+                  <div style={{ fontSize: 12, fontWeight: 800, color: colours.muted, textTransform: "uppercase", marginBottom: 6 }}>Comments</div>
+                  <div style={{ fontSize: 14, color: colours.text }}>{quoteForm.comments}</div>
+                </div>
+              )}
 
-        <SectionCard
-          title="Quote Actions"
-          right={
-            <div style={{ display: "flex", gap: 10 }}>
-              <button style={buttonSecondary} onClick={openQuotePreview}>Preview</button>
-              <button style={buttonSecondary}>Save Draft</button>
-              <button style={buttonPrimary} onClick={saveQuote}>Save Quote</button>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, marginTop: 8 }}>
+                <button style={buttonSecondary} onClick={() => setQuoteWizardStep(3)}>← Back</button>
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  <button style={buttonSecondary} onClick={openQuotePreview}>Preview PDF</button>
+                  <button style={buttonSecondary} onClick={() => { setQuoteForm((prev) => ({ ...prev, status: "Draft" })); saveQuote(); setQuoteWizardStep(1); }}>Save Draft</button>
+                  <button style={buttonPrimary} onClick={() => { saveQuote(); setQuoteWizardStep(1); }}>{savingQuote ? "Saving..." : "Save Quote ✓"}</button>
+                </div>
+              </div>
             </div>
-          }
-        >
-          <div style={{ color: colours.muted, fontSize: 14 }}>Use Preview to open a print-style quote in a new tab, then click Print / Download PDF.</div>
+          )}
         </SectionCard>
 
         <SectionCard title="Quote List">
