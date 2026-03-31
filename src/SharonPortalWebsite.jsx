@@ -293,44 +293,75 @@ const SUPABASE_TABLES = {
 const SUPABASE_SCHEMA_SQL = `-- Run this once in Supabase SQL Editor
 create table if not exists sas_profile (
   id bigint primary key,
+  user_id text not null,
   data jsonb not null default '{}'::jsonb,
   updated_at timestamptz not null default timezone('utc', now())
 );
+create index if not exists sas_profile_user_id_idx on sas_profile (user_id);
+
 create table if not exists sas_clients (
   id bigint primary key,
+  user_id text not null,
   data jsonb not null default '{}'::jsonb,
   updated_at timestamptz not null default timezone('utc', now())
 );
+create index if not exists sas_clients_user_id_idx on sas_clients (user_id);
+
 create table if not exists sas_invoices (
   id bigint primary key,
+  user_id text not null,
   data jsonb not null default '{}'::jsonb,
   updated_at timestamptz not null default timezone('utc', now())
 );
+create index if not exists sas_invoices_user_id_idx on sas_invoices (user_id);
+
 create table if not exists sas_quotes (
   id bigint primary key,
+  user_id text not null,
   data jsonb not null default '{}'::jsonb,
   updated_at timestamptz not null default timezone('utc', now())
 );
+create index if not exists sas_quotes_user_id_idx on sas_quotes (user_id);
+
 create table if not exists sas_expenses (
   id bigint primary key,
+  user_id text not null,
   data jsonb not null default '{}'::jsonb,
   updated_at timestamptz not null default timezone('utc', now())
 );
+create index if not exists sas_expenses_user_id_idx on sas_expenses (user_id);
+
 create table if not exists sas_income_sources (
   id bigint primary key,
+  user_id text not null,
   data jsonb not null default '{}'::jsonb,
   updated_at timestamptz not null default timezone('utc', now())
 );
+create index if not exists sas_income_sources_user_id_idx on sas_income_sources (user_id);
+
 create table if not exists sas_services (
   id bigint primary key,
+  user_id text not null,
   data jsonb not null default '{}'::jsonb,
   updated_at timestamptz not null default timezone('utc', now())
 );
+create index if not exists sas_services_user_id_idx on sas_services (user_id);
+
 create table if not exists sas_documents (
   id bigint primary key,
+  user_id text not null,
   data jsonb not null default '{}'::jsonb,
   updated_at timestamptz not null default timezone('utc', now())
-);`;
+);
+create index if not exists sas_documents_user_id_idx on sas_documents (user_id);
+
+create table if not exists sas_suppliers (
+  id bigint primary key,
+  user_id text not null,
+  data jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default timezone('utc', now())
+);
+create index if not exists sas_suppliers_user_id_idx on sas_suppliers (user_id);`;
 
 const GST_TYPE_OPTIONS = [
   { value: "GST on Income (10%)", label: "GST on Income (10%)" },
@@ -442,6 +473,16 @@ const safeNumber = (value) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
 };
+
+const escapeHtml = (value) =>
+  String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+
+const nl2br = (value) => escapeHtml(value).replace(/\n/g, "<br/>");
 
 // Parse YYYY-MM-DD as LOCAL date (not UTC) — prevents day-shift in AU timezones
 const parseLocalDate = (dateString) => {
@@ -1233,7 +1274,11 @@ function ExpenseTypeModal({
                     style={buttonSecondary}
                     onClick={() => {
                       const previewUrl = URL.createObjectURL(receiptFile);
-                      window.open(previewUrl, "_blank");
+                      const previewWindow = window.open(previewUrl, "_blank");
+                      setTimeout(() => URL.revokeObjectURL(previewUrl), 60000);
+                      if (!previewWindow) {
+                        toast.warning("Preview popup was blocked by your browser.");
+                      }
                     }}
                   >
                     Preview Receipt
@@ -1491,11 +1536,15 @@ const gstStatus =
     : safeNumber(quote.gst) > 0
       ? "GST applies"
       : "GST free");
-const businessName = getDocumentBusinessName();
-const businessAddress = getDocumentAddress();
+const businessName = escapeHtml(getDocumentBusinessName());
+const businessAddress = escapeHtml(getDocumentAddress());
+const clientName = escapeHtml(qClient?.name || "");
+const businessEmail = escapeHtml(profile.email || "");
+const businessPhone = escapeHtml(profile.phone || "");
+const businessAbn = escapeHtml(profile.abn || "");
 const clientDetails =
   qClient?.includeAddressDetails && qClient?.addressDetails
-    ? `<div style="margin-top:6px; color:#555;">${String(qClient.addressDetails).replace(/\n/g, "<br/>")}</div>`
+    ? `<div style="margin-top:6px; color:#555;">${nl2br(qClient.addressDetails)}</div>`
     : "";
 
 return `<!doctype html>
@@ -1545,8 +1594,8 @@ th { text-align:left; color:#667085; }
   <div class="title">QUOTE</div>
   <div style="margin-top:8px; font-weight:700;">${businessName}</div>
   <div style="font-size:13px; color:#555;">${businessAddress || ""}</div>
-  <div style="font-size:13px; color:#555;">${profile.email || ""}${quote.hidePhoneNumber ? "" : ` | ${profile.phone || ""}`}</div>
-  <div style="font-size:13px; color:#555;">ABN: ${profile.abn}</div>
+  <div style="font-size:13px; color:#555;">${businessEmail}${quote.hidePhoneNumber ? "" : ` | ${businessPhone}`}</div>
+  <div style="font-size:13px; color:#555;">ABN: ${businessAbn}</div>
 </div>
 
 <div class="right">
@@ -1556,7 +1605,7 @@ th { text-align:left; color:#667085; }
 </div>
 </div>
 
-<div style="margin-top:20px; font-weight:700;">${qClient?.name || ""}</div>
+<div style="margin-top:20px; font-weight:700;">${clientName}</div>
 ${clientDetails}
 
 <table>
@@ -1579,7 +1628,7 @@ ${clientDetails}
     const rowSub = unit * qty;
     const rowGst = safeNumber(item.rowGst != null ? item.rowGst : ((item.gstType || "GST on Income (10%)") === "GST on Income (10%)" ? rowSub * 0.1 : 0));
     return `<tr>
-    <td>${item.description || "Service"}</td>
+    <td>${escapeHtml(item.description || "Service")}</td>
     <td>${qty}</td>
     <td style="text-align:right">${money(unit)}</td>
     <td style="text-align:right">${money(rowGst)}</td>
@@ -1618,15 +1667,22 @@ function buildQuoteEmailHtml(quote, ctx = {}) {
 const qClient = getClientById(quote.clientId);
 const currencyCode = quote.currencyCode || getClientCurrencyCode(qClient);
 const money = (value) => formatCurrencyByCode(value, currencyCode);
-const businessName = getDocumentBusinessName();
-const businessAddress = getDocumentAddress();
+const businessName = escapeHtml(getDocumentBusinessName());
+const businessAddress = escapeHtml(getDocumentAddress());
+const clientName = escapeHtml(qClient?.name || "");
+const businessEmail = escapeHtml(profile.email || "");
+const businessPhone = escapeHtml(profile.phone || "");
+const businessAbn = escapeHtml(profile.abn || "");
 const clientDetails =
   qClient?.includeAddressDetails && qClient?.addressDetails
-    ? `<div style="margin-top:6px; color:#475569;">${String(qClient.addressDetails).replace(/\n/g, "<br/>")}</div>`
+    ? `<div style="margin-top:6px; color:#475569;">${nl2br(qClient.addressDetails)}</div>`
     : "";
 const notesHtml = quote.comments
-  ? `<div style="margin-top:20px; padding:16px; background:#F8FAFC; border:1px solid #E2E8F0; border-radius:12px;">${String(quote.comments).replace(/\n/g, "<br/>")}</div>`
+  ? `<div style="margin-top:20px; padding:16px; background:#F8FAFC; border:1px solid #E2E8F0; border-radius:12px;">${nl2br(quote.comments)}</div>`
   : "";
+const quoteLineItems = (quote.lineItems && quote.lineItems.length > 0)
+  ? quote.lineItems
+  : [{ description: quote.description || "Professional services", quantity: quote.quantity || 1, unitPrice: safeNumber(quote.subtotal) / Math.max(1, safeNumber(quote.quantity || 1)), rowGst: quote.gst, rowTotal: quote.total }];
 
 return `<!doctype html>
 <html>
@@ -1645,8 +1701,8 @@ return `<!doctype html>
         <div style="font-size:30px; font-weight:900; color:#6A1B9A;">QUOTE</div>
         <div style="margin-top:8px; font-weight:700;">${businessName}</div>
         <div style="font-size:13px; color:#475569; margin-top:4px;">${businessAddress || ""}</div>
-        <div style="font-size:13px; color:#475569; margin-top:4px;">${profile.email || ""}${quote.hidePhoneNumber ? "" : ` | ${profile.phone || ""}`}</div>
-        <div style="font-size:13px; color:#475569; margin-top:4px;">ABN: ${profile.abn || ""}</div>
+        <div style="font-size:13px; color:#475569; margin-top:4px;">${businessEmail}${quote.hidePhoneNumber ? "" : ` | ${businessPhone}`}</div>
+        <div style="font-size:13px; color:#475569; margin-top:4px;">ABN: ${businessAbn}</div>
       </div>
       <div style="text-align:right; font-size:14px; color:#14202B;">
         <div><strong>Quote ref:</strong> ${quote.quoteNumber || ""}</div>
@@ -1656,7 +1712,7 @@ return `<!doctype html>
     </div>
 
     <div style="margin-top:20px;">
-      <div style="font-weight:700;">${qClient?.name || ""}</div>
+      <div style="font-weight:700;">${clientName}</div>
       ${clientDetails}
     </div>
 
@@ -1671,13 +1727,19 @@ return `<!doctype html>
         </tr>
       </thead>
       <tbody>
-        <tr>
-          <td style="padding:10px; border-bottom:1px solid #E2E8F0;">${quote.description || "Professional services"}</td>
-          <td style="padding:10px; border-bottom:1px solid #E2E8F0;">${quote.quantity || 1}</td>
-          <td style="padding:10px; border-bottom:1px solid #E2E8F0; text-align:right;">${money(safeNumber(quote.subtotal) / Math.max(1, safeNumber(quote.quantity || 1)))}</td>
-          <td style="padding:10px; border-bottom:1px solid #E2E8F0; text-align:right;">${money(quote.gst)}</td>
-          <td style="padding:10px; border-bottom:1px solid #E2E8F0; text-align:right;">${money(quote.subtotal)}</td>
-        </tr>
+        ${quoteLineItems.map((item) => {
+          const qty = safeNumber(item.quantity || item.qty || 1);
+          const unit = safeNumber(item.unitPrice || item.unit || 0);
+          const rowSub = unit * qty;
+          const rowGst = safeNumber(item.rowGst != null ? item.rowGst : ((item.gstType || "GST on Income (10%)") === "GST on Income (10%)" ? rowSub * 0.1 : 0));
+          return `<tr>
+          <td style="padding:10px; border-bottom:1px solid #E2E8F0;">${escapeHtml(item.description || "Professional services")}</td>
+          <td style="padding:10px; border-bottom:1px solid #E2E8F0;">${qty}</td>
+          <td style="padding:10px; border-bottom:1px solid #E2E8F0; text-align:right;">${money(unit)}</td>
+          <td style="padding:10px; border-bottom:1px solid #E2E8F0; text-align:right;">${money(rowGst)}</td>
+          <td style="padding:10px; border-bottom:1px solid #E2E8F0; text-align:right;">${money(rowSub)}</td>
+        </tr>`;
+        }).join("")}
       </tbody>
     </table>
 
@@ -1744,15 +1806,22 @@ const gstStatus =
       : "GST free");
 const purchaseOrderBlock =
   previewClient?.hasPurchaseOrder && invoice.purchaseOrderReference
-    ? `<div style="margin-top:10px; font-size:14px; color:#555;"><strong>PO / Reference:</strong> ${invoice.purchaseOrderReference}</div>`
+    ? `<div style="margin-top:10px; font-size:14px; color:#555;"><strong>PO / Reference:</strong> ${purchaseOrderReference}</div>`
     : "";
-const businessName = getDocumentBusinessName();
-const businessAddress = getDocumentAddress();
+const businessName = escapeHtml(getDocumentBusinessName());
+const businessAddress = escapeHtml(getDocumentAddress());
+const clientName = escapeHtml(previewClient?.name || "");
+const clientEmail = escapeHtml(previewClient?.email || "");
+const businessEmail = escapeHtml(profile.email || "");
+const businessPhone = escapeHtml(profile.phone || "");
+const businessAbn = escapeHtml(profile.abn || "");
+const paymentReference = escapeHtml(invoice.paymentReference || invoice.invoiceNumber || "");
+const purchaseOrderReference = escapeHtml(invoice.purchaseOrderReference || "");
 
 const clientDetails =
   previewClient?.includeAddressDetails && previewClient?.addressDetails
     ? `<div style="margin-top:6px; color:#555;">
-          ${String(previewClient.addressDetails).replace(/\n/g, "<br/>")}
+          ${nl2br(previewClient.addressDetails)}
         </div>`
     : "";
 return `<!doctype html>
@@ -1804,8 +1873,8 @@ th { text-align:left; color:#64748B; }
   <div class="title">TAX INVOICE</div>
   <div style="margin-top:10px; font-weight:700;">${businessName}</div>
   <div style="font-size:14px; color:#555;">${businessAddress || ""}</div>
-  <div style="font-size:14px; color:#555;">${profile.email || ""}${invoice.hidePhoneNumber ? "" : ` | ${profile.phone || ""}`}</div>
-  <div style="font-size:14px; color:#555;">ABN: ${profile.abn || ""}</div>
+  <div style="font-size:14px; color:#555;">${businessEmail}${invoice.hidePhoneNumber ? "" : ` | ${businessPhone}`}</div>
+  <div style="font-size:14px; color:#555;">ABN: ${businessAbn}</div>
 </div>
 
 <div class="right">
@@ -1817,8 +1886,8 @@ th { text-align:left; color:#64748B; }
 
 <div class="section">
 <strong>Billed To:</strong><br/>
-${previewClient?.name || ""}<br/>
-${previewClient?.email || ""}
+${clientName}<br/>
+${clientEmail}
 ${clientDetails}
 ${purchaseOrderBlock}
 </div>
@@ -1844,7 +1913,7 @@ ${purchaseOrderBlock}
     const rowGst = safeNumber(item.rowGst != null ? item.rowGst : ((item.gstType || "GST on Income (10%)") === "GST on Income (10%)" ? rowSub * 0.1 : 0));
     const rowTotal = rowSub + rowGst;
     return `<tr>
-    <td>${item.description || "Service"}</td>
+    <td>${escapeHtml(item.description || "Service")}</td>
     <td>${qty}</td>
     <td class="right">${money(unit)}</td>
     <td class="right">${money(rowGst)}</td>
@@ -1873,7 +1942,7 @@ ${purchaseOrderBlock}
   ${profile.payId ? `<div><strong>PayID:</strong> ${profile.payId}</div>` : ""}
 </div>
 <div style="margin-top:10px; font-size:13px; color:#555;">
-  Please use reference: ${invoice.paymentReference || invoice.invoiceNumber || ""}
+  Please use reference: ${paymentReference}
 </div>
 ${stripeCheckoutUrl || profile.paypalPaymentLink
     ? `<div style="margin-top:16px; padding:14px; border:1px solid #E2E8F0; border-radius:12px; background:#F7F6F5;">
@@ -1904,16 +1973,44 @@ ${stripeCheckoutUrl || profile.paypalPaymentLink
 </html>`;
 }
 
-function writeInvoicePreviewToWindow(w, invoice, stripeCheckoutUrl = "", options = {}, ctx = {}) {
-const html = buildInvoiceHtml(invoice, stripeCheckoutUrl, options, ctx);
-const blob = new Blob([html], { type: "text/html" });
+function openBlobUrlInWindow(w, blob) {
 const url = URL.createObjectURL(blob);
+try {
+  if (w.location.origin === "null") {
+    try {
+      URL.revokeObjectURL(w.location.href);
+    } catch (error) {
+      console.warn("Could not revoke previous preview URL", error);
+    }
+  }
+} catch (error) {
+  console.warn("Could not inspect previous preview URL", error);
+}
 w.location.href = url;
+const revoke = () => {
+  try {
+    URL.revokeObjectURL(url);
+  } catch (error) {
+    console.warn("Could not revoke preview URL", error);
+  }
+};
+try {
+  w.addEventListener("beforeunload", revoke, { once: true });
+} catch (error) {
+  console.warn("Preview cleanup listener failed", error);
+}
+setTimeout(revoke, 60000);
 try {
   w.focus();
 } catch (error) {
   console.warn("Preview window focus failed", error);
 }
+}
+
+function writeInvoicePreviewToWindow(w, invoice, stripeCheckoutUrl = "", options = {}, ctx = {}) {
+const html = buildInvoiceHtml(invoice, stripeCheckoutUrl, options, ctx);
+const blob = new Blob([html], { type: "text/html" });
+openBlobUrlInWindow(w, blob);
 }
 
 
@@ -2399,17 +2496,8 @@ export default function AccountingPortalPrototype() {
     setKnownSuppliers(combined);
   }, [expenses, suppliers]);
 
-  useEffect(() => {
-    window.localStorage.setItem("sas_incomeSources", JSON.stringify(incomeSources));
-  }, [incomeSources]);
-
-  useEffect(() => {
-    window.localStorage.setItem("sas_services", JSON.stringify(services));
-  }, [services]);
-
-  useEffect(() => {
-    window.localStorage.setItem("sas_documents", JSON.stringify(documents));
-  }, [documents]);
+  // Note: incomeSources, services, and documents are persisted in Supabase only.
+  // localStorage writes were removed to avoid a stale shadow copy with no reader.
 
   useEffect(() => {
     window.simulateInvoicePayment = simulateInvoicePayment;
@@ -2434,11 +2522,12 @@ export default function AccountingPortalPrototype() {
   }, [authUser]);
 
   useEffect(() => {
+    if (!authUser || !hasLoadedUserProfile) return;
     const params = new URLSearchParams(window.location.search);
     const stripeStatus = params.get("stripe");
     const invoiceId = params.get("invoiceId");
 
-    if (stripeStatus === "success" && authUser) {
+    if (stripeStatus === "success") {
       if (invoiceId) {
         setActivePage("invoices");
         const invoice = invoices.find((inv) => String(inv.id) === String(invoiceId));
@@ -2446,17 +2535,18 @@ export default function AccountingPortalPrototype() {
           const updatedInvoice = { ...invoice, status: "Paid", paidAt: new Date().toISOString(), paidVia: "Stripe" };
           (async () => {
             try {
-              const savedInvoice = await upsertRecordInDatabase("sas_invoices", updatedInvoice);
+              const savedInvoice = await upsertRecordInDatabase(SUPABASE_TABLES.invoices, updatedInvoice);
               setInvoices((prev) => prev.map((inv) => String(inv.id) === String(invoiceId) ? savedInvoice : inv));
+              // Clear the query string so a refresh doesn't re-trigger this
+              window.history.replaceState({}, "", window.location.pathname);
             } catch (e) {
               console.error("Failed to mark invoice paid on stripe success:", e);
             }
           })();
         }
       }
-      restorePortalStateFromSupabase();
     }
-  }, [authUser]);
+  }, [authUser, hasLoadedUserProfile, invoices]);
 
   useEffect(() => {
     if (!authUser) return;
@@ -2528,7 +2618,9 @@ export default function AccountingPortalPrototype() {
   const coerceRowId = (value, fallbackIndex = 0) => {
     const parsed = Number(value);
     if (Number.isFinite(parsed) && parsed > 0) return parsed;
-    return Date.now() + fallbackIndex;
+    // Multiply by 1000 and add a random 0-999 offset so records created
+    // within the same millisecond (e.g. bulk import) don't collide.
+    return Date.now() * 1000 + Math.floor(Math.random() * 1000) + fallbackIndex;
   };
 
   const buildSupabaseRow = (item, fallbackIndex = 0) => {
@@ -2783,7 +2875,6 @@ export default function AccountingPortalPrototype() {
     try {
       const cn = {
         ...creditNoteSource,
-        id: Date.now(),
         date: creditNoteForm.date,
         amount: -Math.abs(amt),
         gst: -(Math.abs(amt) / 11),
@@ -2891,7 +2982,7 @@ export default function AccountingPortalPrototype() {
       const existing = importType === "clients" ? clients : suppliers;
       const existingNames = new Set(existing.map((r) => r.name.toLowerCase().trim()));
       const newRows = importRows.filter((r) => !existingNames.has(r.name.toLowerCase().trim()));
-      const saved = await Promise.all(newRows.map((r) => upsertRecordInDatabase(table, { ...r, id: Date.now() + Math.random() })));
+      const saved = await Promise.all(newRows.map((r) => upsertRecordInDatabase(table, { ...r })));
       if (importType === "clients") setClients((prev) => [...prev, ...saved]);
       else setSuppliers((prev) => [...prev, ...saved]);
       toast.success(`Imported ${saved.length} ${importType}${newRows.length < importRows.length ? ` (${importRows.length - newRows.length} duplicates skipped)` : ""}!`);
@@ -2918,7 +3009,7 @@ export default function AccountingPortalPrototype() {
         const newDate = inv.dueRecurDate;
         const newDue = addDays(newDate, safeNumber(profile.paymentTermsDays) || 14);
         const nextRecur = calcNext(newDate, inv.recurs);
-        const newInvoice = { ...inv, id: Date.now() + Math.random(), invoiceDate: newDate, dueDate: newDue,
+        const newInvoice = { ...inv, invoiceDate: newDate, dueDate: newDue,
           invoiceNumber: "", status: "Draft", paidAt: null, paidVia: null, nextRecurDate: nextRecur };
         delete newInvoice.clientName; delete newInvoice.dueRecurDate;
         const saved = await upsertRecordInDatabase(SUPABASE_TABLES.invoices, newInvoice);
@@ -2978,15 +3069,36 @@ export default function AccountingPortalPrototype() {
 
     try {
       await saveProfileToSupabase(profile);
-      await Promise.all([ ...clients.map((item) => upsertRecordInDatabase(SUPABASE_TABLES.clients, item)),
-        ...invoices.map((item) => upsertRecordInDatabase(SUPABASE_TABLES.invoices, item)),
-        ...quotes.map((item) => upsertRecordInDatabase(SUPABASE_TABLES.quotes, item)),
-        ...expenses.map((item) => upsertRecordInDatabase(SUPABASE_TABLES.expenses, item)),
-        ...incomeSources.map((item) => upsertRecordInDatabase(SUPABASE_TABLES.incomeSources, item)),
-        ...services.map((item) => upsertRecordInDatabase(SUPABASE_TABLES.services, item)),
-        ...documents.map((item) => upsertRecordInDatabase(SUPABASE_TABLES.documents, item)),
-      ]);
-      setSupabaseSyncStatus("All portal records saved to Supabase database");
+
+      // Save each collection independently so one table's failure doesn't
+      // mask errors in others. Collect all failures and report them together.
+      const collections = [
+        { name: "clients",       items: clients,       table: SUPABASE_TABLES.clients },
+        { name: "invoices",      items: invoices,      table: SUPABASE_TABLES.invoices },
+        { name: "quotes",        items: quotes,        table: SUPABASE_TABLES.quotes },
+        { name: "expenses",      items: expenses,      table: SUPABASE_TABLES.expenses },
+        { name: "income sources",items: incomeSources, table: SUPABASE_TABLES.incomeSources },
+        { name: "services",      items: services,      table: SUPABASE_TABLES.services },
+        { name: "documents",     items: documents,     table: SUPABASE_TABLES.documents },
+        { name: "suppliers",     items: suppliers,     table: SUPABASE_TABLES.suppliers },
+      ];
+
+      const saveResults = await Promise.all(
+        collections.map(({ name, items, table }) =>
+          Promise.all(items.map((item) => upsertRecordInDatabase(table, item)))
+            .then(() => ({ name, ok: true }))
+            .catch((err) => ({ name, ok: false, message: err?.message || "Unknown error" }))
+        )
+      );
+
+      const failures = saveResults.filter((r) => !r.ok);
+      if (failures.length) {
+        const summary = failures.map((f) => `${f.name}: ${f.message}`).join("; ");
+        console.error("SUPABASE BULK SAVE — partial failure:", summary);
+        setSupabaseSyncStatus(`Saved with errors — ${summary}`);
+      } else {
+        setSupabaseSyncStatus("All portal records saved to Supabase database");
+      }
     } catch (error) {
       console.error("SUPABASE BULK SAVE ERROR:", error);
       setSupabaseSyncStatus(error.message || "Supabase bulk save failed");
@@ -3000,6 +3112,12 @@ export default function AccountingPortalPrototype() {
     setSupabaseSyncStatus("Loading from Supabase database...");
 
     try {
+      // Each table is fetched independently so a missing/broken table never
+      // blocks the others from loading.
+      const safeF = (table) => fetchCollectionFromDatabase(table).catch((err) => {
+        console.warn(`[restore] Could not load table "${table}":`, err?.message);
+        return [];
+      });
       const [
         remoteProfileRows,
         remoteClients,
@@ -3009,18 +3127,18 @@ export default function AccountingPortalPrototype() {
         remoteIncomeSources,
         remoteServices,
         remoteDocuments,
+        remoteSuppliers,
       ] = await Promise.all([
-        fetchCollectionFromDatabase(SUPABASE_TABLES.profile),
-        fetchCollectionFromDatabase(SUPABASE_TABLES.clients),
-        fetchCollectionFromDatabase(SUPABASE_TABLES.invoices),
-        fetchCollectionFromDatabase(SUPABASE_TABLES.quotes),
-        fetchCollectionFromDatabase(SUPABASE_TABLES.expenses),
-        fetchCollectionFromDatabase(SUPABASE_TABLES.incomeSources),
-        fetchCollectionFromDatabase(SUPABASE_TABLES.services),
-        fetchCollectionFromDatabase(SUPABASE_TABLES.documents),
+        safeF(SUPABASE_TABLES.profile),
+        safeF(SUPABASE_TABLES.clients),
+        safeF(SUPABASE_TABLES.invoices),
+        safeF(SUPABASE_TABLES.quotes),
+        safeF(SUPABASE_TABLES.expenses),
+        safeF(SUPABASE_TABLES.incomeSources),
+        safeF(SUPABASE_TABLES.services),
+        safeF(SUPABASE_TABLES.documents),
+        safeF(SUPABASE_TABLES.suppliers),
       ]);
-      // Fetch suppliers separately — table may not exist yet
-      const remoteSuppliers = await fetchCollectionFromDatabase(SUPABASE_TABLES.suppliers).catch(() => []);
       hasHydratedSupabaseState.current = true;
 
       const remoteProfile =
@@ -3093,7 +3211,6 @@ export default function AccountingPortalPrototype() {
 
       const uploaded = await uploadDocumentToSupabase(documentFile);
       const newDocument = {
-        id: Date.now(),
         name: uploaded.fileName,
         filePath: uploaded.filePath,
         url: uploaded.url,
@@ -3196,7 +3313,7 @@ export default function AccountingPortalPrototype() {
   const saveService = async () => {
     if (!serviceForm.name.trim() || !serviceForm.gstType) return;
     const payload = {
-      id: editingServiceId || Date.now(),
+      ...(editingServiceId ? { id: editingServiceId } : {}),
       name: serviceForm.name.trim(),
       gstType: serviceForm.gstType,
       price: safeNumber(serviceForm.price),
@@ -3255,7 +3372,6 @@ export default function AccountingPortalPrototype() {
     }
 
     const payload = {
-      id: Date.now(),
       name: incomeSourceForm.name.trim(),
       incomeType: incomeSourceForm.incomeType,
       beforeTax: safeNumber(incomeSourceForm.beforeTax),
@@ -3528,19 +3644,6 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       ? `${serverBaseUrl}/api/send-invoice-attachment-email`
       : `${serverBaseUrl}/api/send-document-email`;
 
-  console.log("SEND DOCUMENT EMAIL REQUEST:", {
-    endpoint,
-    documentType,
-    recipients: recipientList,
-    subject: payload.subject,
-    filename: payload.filename,
-    hasHtml: Boolean(payload.html),
-    hasDocumentHtml: Boolean(payload.documentHtml),
-    hasInvoiceHtml: Boolean(payload.invoiceHtml),
-    hasQuoteHtml: Boolean(payload.quoteHtml),
-    quoteHtmlLength: payload.quoteHtml?.length || 0,
-  });
-
   let response;
 
   try {
@@ -3564,13 +3667,6 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
   } catch (error) {
     console.error("EMAIL RESPONSE PARSE ERROR:", error);
   }
-
-  console.log("SEND DOCUMENT EMAIL RESPONSE:", {
-    endpoint,
-    status: response.status,
-    ok: response.ok,
-    data,
-  });
 
   if (!response.ok) {
     console.error("EMAIL ERROR:", data);
@@ -3617,7 +3713,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
         invoiceNumber: "",
       };
     });
-    }, [invoiceForm.clientId, invoiceForm.invoiceDate, invoiceForm.dueDate, invoiceForm.description, invoiceForm.subtotal, invoiceForm.quantity, invoiceForm.comments, invoiceForm.purchaseOrderReference, invoiceForm.includesUntaxedPortion, invoiceForm.hidePhoneNumber, invoiceForm.gstType, invoiceForm.gstOverride, invoiceForm.manualGst, invoiceForm.startDate, invoiceForm.endDate, invoiceForm.sendDate, invoiceForm.sendTime, invoiceForm.recurs, invoiceForm.serviceId]);
+    }, [invoiceForm.clientId, invoiceForm.invoiceDate, invoiceForm.dueDate, invoiceForm.lineItems, invoiceForm.description, invoiceForm.subtotal, invoiceForm.quantity, invoiceForm.comments, invoiceForm.purchaseOrderReference, invoiceForm.includesUntaxedPortion, invoiceForm.hidePhoneNumber, invoiceForm.gstType, invoiceForm.gstOverride, invoiceForm.manualGst, invoiceForm.startDate, invoiceForm.endDate, invoiceForm.sendDate, invoiceForm.sendTime, invoiceForm.recurs, invoiceForm.serviceId]);
 
     useEffect(() => {
     setQuoteForm((prev) => {
@@ -3628,7 +3724,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
         quoteNumber: "",
       };
     });
-    }, [quoteForm.clientId, quoteForm.quoteDate, quoteForm.expiryDate, quoteForm.serviceId, quoteForm.gstType, quoteForm.manualGst, quoteForm.currencyCode, quoteForm.description, quoteForm.quantity, quoteForm.subtotal, quoteForm.gstOverride, quoteForm.comments, quoteForm.hidePhoneNumber]);
+    }, [quoteForm.clientId, quoteForm.quoteDate, quoteForm.expiryDate, quoteForm.lineItems, quoteForm.serviceId, quoteForm.gstType, quoteForm.manualGst, quoteForm.currencyCode, quoteForm.description, quoteForm.quantity, quoteForm.subtotal, quoteForm.gstOverride, quoteForm.comments, quoteForm.hidePhoneNumber]);
 
     useEffect(() => {
     if (!invoiceEditorOpen || !invoiceEditorForm) return;
@@ -3841,6 +3937,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       setClients((prev) => prev.map((item) => (item.id === savedClient.id ? savedClient : item)));
       closeClientEditor();
       setSupabaseSyncStatus("Client updated in Supabase database");
+      toast.success("Client updated!");
     } catch (error) {
       console.error("CLIENT EDIT SAVE ERROR:", error);
       setSupabaseSyncStatus(error.message || "Client update failed");
@@ -3868,6 +3965,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       setExpenses((prev) => prev.map((item) => (item.id === savedExpense.id ? savedExpense : item)));
       closeExpenseEditor();
       setSupabaseSyncStatus("Expense updated in Supabase database");
+      toast.success("Expense updated!");
     } catch (error) {
       console.error("EXPENSE EDIT SAVE ERROR:", error);
       setSupabaseSyncStatus(error.message || "Expense update failed");
@@ -3922,6 +4020,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       setIncomeSources((prev) => prev.map((item) => (item.id === savedItem.id ? savedItem : item)));
       closeIncomeSourceEditor();
       setSupabaseSyncStatus("Income source updated in Supabase database");
+      toast.success("Income source updated!");
     } catch (error) {
       console.error("INCOME SOURCE EDIT SAVE ERROR:", error);
       setSupabaseSyncStatus(error.message || "Income source update failed");
@@ -3943,6 +4042,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       setDocuments((prev) => prev.map((item) => (item.id === savedDocument.id ? savedDocument : item)));
       closeDocumentEditor();
       setSupabaseSyncStatus("Document updated in Supabase database");
+      toast.success("Document updated!");
     } catch (error) {
       console.error("DOCUMENT EDIT SAVE ERROR:", error);
       setSupabaseSyncStatus(error.message || "Document update failed");
@@ -3953,7 +4053,6 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     const saveClient = async () => {
     setSavingClient(true);
     const payload = {
-      id: Date.now(),
       ...clientForm,
       name: String(clientForm.name || "").trim(),
       address: clientForm.addressDetails || clientForm.address || "",
@@ -3969,10 +4068,13 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       setClients((prev) => [...prev, savedClient]);
       setSupabaseSyncStatus("Client saved to Supabase database");
       setClientForm(blankClient);
+      toast.success("Client saved!");
     } catch (error) {
       console.error("CLIENT SAVE ERROR:", error);
       setSupabaseSyncStatus(error.message || "Client save failed");
       toast.error(error.message || "Client save failed");
+    } finally {
+      setSavingClient(false);
     }
     };
 
@@ -3996,7 +4098,6 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     const invoiceDate = invoiceForm.invoiceDate || todayLocal();
     const dueDate = invoiceForm.dueDate || addDays(invoiceDate, (safeNumber(profile.paymentTermsDays) || 14));
     const payload = {
-      id: Date.now(),
       invoiceNumber,
       clientId: safeNumber(invoiceForm.clientId),
       invoiceDate,
@@ -4027,6 +4128,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       stripeCheckoutUrl: "",
     };
 
+    setSavingInvoice(true);
     try {
       const savedInvoice = await upsertRecordInDatabase(SUPABASE_TABLES.invoices, payload);
       let nextInvoice = savedInvoice;
@@ -4041,10 +4143,14 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       }));
       setSupabaseSyncStatus(saveMessage);
       toast.success(saveMessage);
+      return true;
     } catch (error) {
       console.error("INVOICE SAVE ERROR:", error);
       setSupabaseSyncStatus(error.message || "Invoice save failed");
       toast.error(error.message || "Invoice save failed");
+      return false;
+    } finally {
+      setSavingInvoice(false);
     }
     };
 
@@ -4101,6 +4207,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       stripeCheckoutUrl: invoiceEditorForm.stripeCheckoutUrl || "",
     };
 
+    setSavingInvoiceEdits(true);
     try {
       const savedInvoice = await upsertRecordInDatabase(SUPABASE_TABLES.invoices, updatedInvoice);
       setInvoices((prev) =>
@@ -4112,6 +4219,8 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       console.error("INVOICE UPDATE ERROR:", error);
       setSupabaseSyncStatus(error.message || "Invoice update failed");
       toast.error(error.message || "Invoice update failed");
+    } finally {
+      setSavingInvoiceEdits(false);
     }
     };
     const saveQuote = async () => {
@@ -4133,7 +4242,6 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     const quoteDate = quoteForm.quoteDate || todayLocal();
     const expiryDate = quoteForm.expiryDate || addDays(quoteDate, 31);
     const payload = {
-      id: Date.now(),
       quoteNumber,
       clientId: safeNumber(quoteForm.clientId),
       quoteDate,
@@ -4154,6 +4262,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       hidePhoneNumber: quoteForm.hidePhoneNumber,
       status: "Draft",
     };
+    setSavingQuote(true);
     try {
       const savedQuote = await upsertRecordInDatabase(SUPABASE_TABLES.quotes, payload);
       let nextQuote = savedQuote;
@@ -4168,10 +4277,14 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       }));
       setSupabaseSyncStatus(saveMessage);
       toast.success(saveMessage);
+      return true;
     } catch (error) {
       console.error("QUOTE SAVE ERROR:", error);
       setSupabaseSyncStatus(error.message || "Quote save failed");
       toast.error(error.message || "Quote save failed");
+      return false;
+    } finally {
+      setSavingQuote(false);
     }
     };
 
@@ -4218,6 +4331,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       status: quoteEditorForm.status || "Draft",
     };
 
+    setSavingQuoteEdits(true);
     try {
       const savedQuote = await upsertRecordInDatabase(SUPABASE_TABLES.quotes, updatedQuote);
       setQuotes((prev) =>
@@ -4229,6 +4343,57 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       console.error("QUOTE UPDATE ERROR:", error);
       setSupabaseSyncStatus(error.message || "Quote update failed");
       toast.error(error.message || "Quote update failed");
+    } finally {
+      setSavingQuoteEdits(false);
+    }
+    };   const convertQuoteToInvoice = async (quote) => {
+    if (!quote?.id) return;
+    try {
+      // 1. Mark the quote as Accepted and save
+      const acceptedQuote = { ...quote, status: "Accepted" };
+      const savedQuote = await upsertRecordInDatabase(SUPABASE_TABLES.quotes, acceptedQuote);
+      setQuotes((prev) => prev.map((q) => q.id === quote.id ? savedQuote : q));
+
+      // 2. Build the invoice payload from the quote — preserve all line items, amounts, client
+      const invoiceNumber = nextNumber(profile.invoicePrefix, invoices, "invoiceNumber");
+      const invoiceDate = todayLocal();
+      const dueDate = addDays(invoiceDate, safeNumber(profile.paymentTermsDays) || 14);
+      const invoicePayload = {
+        invoiceNumber,
+        clientId: safeNumber(quote.clientId),
+        invoiceDate,
+        dueDate,
+        lineItems: quote.lineItems || [],
+        gstType: quote.gstType || "GST on Income (10%)",
+        currencyCode: quote.currencyCode || "AUD",
+        gstStatus: quote.gstStatus || "",
+        description: quote.description || "",
+        subtotal: safeNumber(quote.subtotal),
+        gst: safeNumber(quote.gst),
+        total: safeNumber(quote.total),
+        feeAmount: safeNumber(quote.feeAmount),
+        taxWithheld: safeNumber(quote.taxWithheld),
+        netExpected: safeNumber(quote.netExpected),
+        quantity: safeNumber(quote.quantity) || 1,
+        comments: quote.comments || "",
+        purchaseOrderReference: quote.purchaseOrderReference || "",
+        hidePhoneNumber: quote.hidePhoneNumber ?? profile.hidePhoneOnDocs,
+        status: "Draft",
+        paymentReference: makePaymentReference(invoiceNumber),
+        stripeCheckoutUrl: "",
+        convertedFromQuoteId: quote.id,
+        convertedFromQuoteNumber: quote.quoteNumber || "",
+      };
+      const savedInvoice = await upsertRecordInDatabase(SUPABASE_TABLES.invoices, invoicePayload);
+      setInvoices((prev) => [...prev, savedInvoice]);
+
+      toast.success(`Invoice ${invoiceNumber} created from quote ${quote.quoteNumber || quote.id}!`);
+      setSupabaseSyncStatus("Quote converted to invoice");
+      closeQuoteEditor();
+      setActivePage("invoices");
+    } catch (error) {
+      console.error("CONVERT QUOTE TO INVOICE ERROR:", error);
+      toast.error(error.message || "Could not convert quote to invoice");
     }
     };
     const sendInvoiceFromPreview = async (invoiceId, previewWindow) => {
@@ -4356,13 +4521,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     const writeQuotePreviewToWindow = (w, quote, options = {}) => {
     const html = buildQuoteHtml(quote, options, { profile, clients });
     const blob = new Blob([html], { type: "text/html" });
-    const url = URL.createObjectURL(blob);
-    w.location.href = url;
-    try {
-      w.focus();
-    } catch (error) {
-      console.warn("Preview window focus failed", error);
-    }
+    openBlobUrlInWindow(w, blob);
     };
 
     const openSavedQuotePreview = (quote) => {
@@ -4378,8 +4537,6 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
         summariseValidationErrors("Expense", expenseErrors, toast);
         return;
       }
-      console.log("SAVE EXPENSE CLICKED");
-      console.log("receiptFile:", receiptFile);
       if (!expenseForm.supplier || !expenseForm.amount || !expenseForm.category) {
         toast.warning("Please fill in supplier, amount and category");
         return;
@@ -4391,18 +4548,12 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       let receiptFileName = "";
 
       if (receiptFile) {
-        console.log("Uploading receipt now...");
-        console.log("UPLOAD FUNCTION CALLED");
         const uploaded = await uploadReceiptToSupabase(receiptFile);
-        console.log("Upload result:", uploaded);
         receiptUrl = uploaded.receiptUrl;
         receiptFileName = uploaded.fileName;
-      } else {
-        console.log("No receipt file selected");
       }
 
       const payload = {
-        id: Date.now(),
         ...expenseForm,
         dueDate: expenseForm.dueDate || expenseForm.date,
         amount,
@@ -4473,11 +4624,6 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
         )
       );
       const client = getClientById(invoice.clientId);
-
-      console.log("📧 SIMULATED PAYMENT RECEIPT");
-      console.log("To:", client?.email || "no email");
-      console.log("Invoice:", invoice.invoiceNumber);
-      console.log("Amount:", invoice.total);
       setSupabaseSyncStatus("Simulated payment saved to Supabase database");
       toast.success(`Simulated payment completed for ${invoice.invoiceNumber}`);
     } catch (error) {
@@ -4586,17 +4732,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     const serverBaseUrl = getApiBaseUrl(profile?.stripeServerUrl);
     const selectedClient = getClientById(invoice?.clientId) || {};
 
-    console.log("FULL INVOICE OBJECT:", invoice);
-
     const rawTotal = resolveInvoiceStripeAmount(invoice);
-
-    console.log("INVOICE TOTAL DEBUG:", {
-      total: invoice?.total,
-      subtotal: invoice?.subtotal,
-      gst: invoice?.gst,
-      quantity: invoice?.quantity,
-      rawTotal,
-    });
 
     if (!Number.isFinite(rawTotal) || rawTotal <= 0) {
       console.error("Stripe invoice total could not be resolved", { invoice, rawTotal });
@@ -4623,9 +4759,6 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       )}&invoiceId=${encodeURIComponent(String(invoice?.id || ""))}`,
     };
 
-    console.log("Stripe invoice payload", payload);
-    console.log("Stripe amount being sent:", payload.amount, "type:", typeof payload.amount);
-    
     let response;
 
     try {
@@ -4721,7 +4854,6 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
 
     try {
       if (!stripeCheckoutUrl && resolveInvoiceStripeAmount(invoice) > 0) {
-        console.log("PREVIEW REQUESTING STRIPE SESSION FOR:", invoice.invoiceNumber);
         stripeCheckoutUrl = await createStripeCheckoutForInvoice(invoice);
 
         if (stripeCheckoutUrl) {
@@ -4742,16 +4874,9 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     };
 
     const openInvoicePreview = async () => {
-    const previewSubtotal = safeNumber(invoiceForm.subtotal) * Math.max(1, safeNumber(invoiceForm.quantity || 1));
-    const calculatedInvoiceGst = calculateFormGst({
-      unitPrice: invoiceForm.subtotal,
-      quantity: invoiceForm.quantity,
-      gstType: invoiceForm.gstType,
-      clientId: invoiceForm.clientId,
-      manualGst: invoiceForm.manualGst,
-      gstOverride: invoiceForm.gstOverride,
-    });
-    const previewGst = calculatedInvoiceGst;
+    const computedPreviewLines = computeLineItemTotals(invoiceForm.lineItems || [], invoiceForm.clientId);
+    const previewSubtotal = computedPreviewLines.reduce((s, l) => s + l.rowSubtotal, 0);
+    const previewGst = computedPreviewLines.reduce((s, l) => s + l.rowGst, 0);
     const previewTotal = previewSubtotal + previewGst;
 
     const savedInvoiceNumber = String(invoiceForm.invoiceNumber || "").trim();
@@ -4762,12 +4887,15 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       clientId: safeNumber(invoiceForm.clientId),
       invoiceDate: invoiceForm.invoiceDate,
       dueDate: invoiceForm.dueDate,
-      description: invoiceForm.description,
+      description: computedPreviewLines.map((l) => l.description).filter(Boolean).join("; "),
+      lineItems: computedPreviewLines,
       subtotal: previewSubtotal,
       gst: previewGst,
       total: previewTotal,
+      comments: invoiceForm.comments,
+      purchaseOrderReference: invoiceForm.purchaseOrderReference,
       hidePhoneNumber: invoiceForm.hidePhoneNumber,
-      quantity: safeNumber(invoiceForm.quantity || 1),
+      quantity: computedPreviewLines.reduce((s, l) => s + l.qty, 0),
       paymentReference: makePaymentReference(previewNumber),
       stripeCheckoutUrl: "",
     };
@@ -4794,15 +4922,9 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     };
 
     const openQuotePreview = () => {
-    const qSubtotal = safeNumber(quoteForm.subtotal) * Math.max(1, safeNumber(quoteForm.quantity || 1));
-    const qGst = calculateFormGst({
-      unitPrice: quoteForm.subtotal,
-      quantity: quoteForm.quantity,
-      gstType: quoteForm.gstType,
-      clientId: quoteForm.clientId,
-      manualGst: quoteForm.manualGst,
-      gstOverride: quoteForm.gstOverride,
-    });
+    const computedPreviewLines = computeLineItemTotals(quoteForm.lineItems || [], quoteForm.clientId);
+    const qSubtotal = computedPreviewLines.reduce((s, l) => s + l.rowSubtotal, 0);
+    const qGst = computedPreviewLines.reduce((s, l) => s + l.rowGst, 0);
     const qTotal = qSubtotal + qGst;
 
     const previewNumber = nextNumber(profile.quotePrefix, quotes, "quoteNumber");
@@ -4812,7 +4934,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       clientId: safeNumber(quoteForm.clientId),
       quoteDate: quoteForm.quoteDate,
       expiryDate: quoteForm.expiryDate,
-      serviceId: quoteForm.serviceId,
+      lineItems: computedPreviewLines,
       gstType: quoteForm.gstType,
       currencyCode: getClientCurrencyCode(getClientById(quoteForm.clientId)),
       gstStatus: clientIsGstExempt(quoteForm.clientId)
@@ -4820,29 +4942,17 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
         : qGst > 0
           ? "GST applies"
           : "GST free",
-      description: quoteForm.description,
-      quantity: safeNumber(quoteForm.quantity || 1),
+      description: computedPreviewLines.map((l) => l.description).filter(Boolean).join("; "),
+      quantity: computedPreviewLines.reduce((s, l) => s + l.qty, 0),
       subtotal: qSubtotal,
       gst: qGst,
       total: qTotal,
-      feeAmount: calculateAdjustmentValues({
+      ...calculateAdjustmentValues({
         subtotal: qSubtotal,
         total: qTotal,
         client: getClientById(quoteForm.clientId),
         profile,
-      }).feeAmount,
-      taxWithheld: calculateAdjustmentValues({
-        subtotal: qSubtotal,
-        total: qTotal,
-        client: getClientById(quoteForm.clientId),
-        profile,
-      }).taxWithheld,
-      netExpected: calculateAdjustmentValues({
-        subtotal: qSubtotal,
-        total: qTotal,
-        client: getClientById(quoteForm.clientId),
-        profile,
-      }).netExpected,
+      }),
       comments: quoteForm.comments,
       hidePhoneNumber: quoteForm.hidePhoneNumber,
       status: "Preview",
@@ -6127,8 +6237,8 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
                 <button style={buttonSecondary} onClick={() => setInvoiceWizardStep(3)}>← Back</button>
                 <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                   <button style={buttonSecondary} onClick={openInvoicePreview}>Preview PDF</button>
-                  <button style={buttonSecondary} onClick={() => { setInvoiceForm((prev) => ({ ...prev, status: "Draft" })); saveInvoice(); setInvoiceWizardStep(1); }}>Save Draft</button>
-                  <button style={buttonPrimary} onClick={() => { saveInvoice(); setInvoiceWizardStep(1); }}>{savingInvoice ? "Saving..." : "Save Invoice ✓"}</button>
+                  <button style={{ ...buttonSecondary, opacity: savingInvoice ? 0.6 : 1 }} disabled={savingInvoice} onClick={async () => { setInvoiceForm((prev) => ({ ...prev, status: "Draft" })); const ok = await saveInvoice(); if (ok) setInvoiceWizardStep(1); }}>Save Draft</button>
+                  <button style={{ ...buttonPrimary, opacity: savingInvoice ? 0.6 : 1 }} disabled={savingInvoice} onClick={async () => { const ok = await saveInvoice(); if (ok) setInvoiceWizardStep(1); }}>{savingInvoice ? "Saving..." : "Save Invoice ✓"}</button>
                 </div>
               </div>
             </div>
@@ -6211,15 +6321,9 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
 
         {invoiceEditorOpen && invoiceEditorForm ? (() => {
           const editorClient = getClientById(invoiceEditorForm.clientId);
-          const editorSubtotal = safeNumber(invoiceEditorForm.subtotal) * Math.max(1, safeNumber(invoiceEditorForm.quantity || 1));
-          const editorGst = calculateFormGst({
-            unitPrice: invoiceEditorForm.subtotal,
-            quantity: invoiceEditorForm.quantity,
-            gstType: invoiceEditorForm.gstType,
-            clientId: invoiceEditorForm.clientId,
-            manualGst: false,
-            gstOverride: "",
-          });
+          const editorComputedLines = computeLineItemTotals(invoiceEditorForm.lineItems || [], invoiceEditorForm.clientId);
+          const editorSubtotal = editorComputedLines.reduce((s, l) => s + l.rowSubtotal, 0);
+          const editorGst = editorComputedLines.reduce((s, l) => s + l.rowGst, 0);
           const editorTotal = editorSubtotal + editorGst;
           const editorCurrencyCode = getClientCurrencyCode(editorClient);
           const editorMoney = (value) => formatCurrencyByCode(value, editorCurrencyCode);
@@ -6446,7 +6550,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
                               onChange={(e) => setInvoiceEditorForm((prev) => ({ ...prev, purchaseOrderReference: e.target.value }))}
                             />
                           </div>
-                        ) : <EmptyState icon="📁" title="No documents yet" message="Upload receipts, contracts and generated PDFs here. All documents are stored securely against your account." />}
+                        ) : null}
 
                         <div style={{ gridColumn: "1 / -1" }}>
                           <label style={labelStyle}>Comments</label>
@@ -6522,7 +6626,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
 
                 <div style={{ display: "flex", justifyContent: "flex-end", gap: 12 }}>
                   <button style={buttonSecondary} onClick={closeInvoiceEditor}>Cancel</button>
-                  <button style={buttonPrimary} onClick={saveInvoiceEdits}>Save Changes</button>
+                  <button style={{ ...buttonPrimary, opacity: savingInvoiceEdits ? 0.6 : 1 }} disabled={savingInvoiceEdits} onClick={saveInvoiceEdits}>{savingInvoiceEdits ? "Saving..." : "Save Changes"}</button>
                 </div>
               </div>
             </div>
@@ -6863,8 +6967,8 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
                 <button style={buttonSecondary} onClick={() => setQuoteWizardStep(3)}>← Back</button>
                 <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                   <button style={buttonSecondary} onClick={openQuotePreview}>Preview PDF</button>
-                  <button style={buttonSecondary} onClick={() => { setQuoteForm((prev) => ({ ...prev, status: "Draft" })); saveQuote(); setQuoteWizardStep(1); }}>Save Draft</button>
-                  <button style={buttonPrimary} onClick={() => { saveQuote(); setQuoteWizardStep(1); }}>{savingQuote ? "Saving..." : "Save Quote ✓"}</button>
+                  <button style={{ ...buttonSecondary, opacity: savingQuote ? 0.6 : 1 }} disabled={savingQuote} onClick={async () => { setQuoteForm((prev) => ({ ...prev, status: "Draft" })); const ok = await saveQuote(); if (ok) setQuoteWizardStep(1); }}>Save Draft</button>
+                  <button style={{ ...buttonPrimary, opacity: savingQuote ? 0.6 : 1 }} disabled={savingQuote} onClick={async () => { const ok = await saveQuote(); if (ok) setQuoteWizardStep(1); }}>{savingQuote ? "Saving..." : "Save Quote ✓"}</button>
                 </div>
               </div>
             </div>
@@ -6880,7 +6984,19 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
               { key: "quoteDate", label: "Date", render: (v) => formatDateAU(v) },
               { key: "expiryDate", label: "Expiry", render: (v) => formatDateAU(v) },
               { key: "total", label: "Total", render: (v, row) => formatCurrencyByCode(v, row.currencyCode || getClientCurrencyCode(getClientById(row.clientId))) },
-              { key: "status", label: "Status" },
+              { key: "status", label: "Status", render: (v) => (
+                <span style={{
+                  display: "inline-block",
+                  padding: "3px 10px",
+                  borderRadius: 20,
+                  fontSize: 12,
+                  fontWeight: 700,
+                  background: v === "Accepted" ? "#dcfce7" : v === "Declined" ? "#fee2e2" : v === "Expired" ? "#f1f5f9" : v === "Sent" ? "#fef9c3" : "#f1f5f9",
+                  color: v === "Accepted" ? "#16a34a" : v === "Declined" ? "#dc2626" : v === "Expired" ? "#64748b" : v === "Sent" ? "#b45309" : "#64748b",
+                }}>
+                  {v || "Draft"}
+                </span>
+              )},
               {
                 key: "actions",
                 label: "",
@@ -6892,6 +7008,15 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
                     <button style={buttonSecondary} onClick={() => openSavedQuotePreview(row)}>
                       Preview
                     </button>
+                    {row.status !== "Declined" && row.status !== "Expired" && (
+                      <button
+                        style={{ ...buttonSecondary, color: colours.teal, borderColor: colours.teal }}
+                        onClick={() => convertQuoteToInvoice(row)}
+                        title="Mark as Accepted and create a Draft invoice"
+                      >
+                        → Invoice
+                      </button>
+                    )}
                     <button style={buttonSecondary} onClick={() => deleteQuote(row.id)}>
                       Delete
                     </button>
@@ -6904,15 +7029,9 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
         </SectionCard>
         {quoteEditorOpen && quoteEditorForm ? (() => {
           const editorClient = getClientById(quoteEditorForm.clientId);
-          const editorSubtotal = safeNumber(quoteEditorForm.subtotal) * Math.max(1, safeNumber(quoteEditorForm.quantity || 1));
-          const editorGst = calculateFormGst({
-            unitPrice: quoteEditorForm.subtotal,
-            quantity: quoteEditorForm.quantity,
-            gstType: quoteEditorForm.gstType,
-            clientId: quoteEditorForm.clientId,
-            manualGst: false,
-            gstOverride: "",
-          });
+          const editorComputedLines = computeLineItemTotals(quoteEditorForm.lineItems || [], quoteEditorForm.clientId);
+          const editorSubtotal = editorComputedLines.reduce((s, l) => s + l.rowSubtotal, 0);
+          const editorGst = editorComputedLines.reduce((s, l) => s + l.rowGst, 0);
           const editorTotal = editorSubtotal + editorGst;
           const editorCurrencyCode = getClientCurrencyCode(editorClient);
           const editorMoney = (value) => formatCurrencyByCode(value, editorCurrencyCode);
@@ -7166,6 +7285,24 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
                         >
                           Preview Quote
                         </button>
+                        {quoteEditorForm.status !== "Declined" && quoteEditorForm.status !== "Expired" && (
+                          <button
+                            style={{ ...buttonSecondary, color: colours.teal, borderColor: colours.teal, fontWeight: 700 }}
+                            onClick={() => {
+                              const fullQuote = {
+                                ...(quotes.find((q) => q.id === quoteEditorForm.id) || {}),
+                                ...quoteEditorForm,
+                                subtotal: editorSubtotal,
+                                gst: editorGst,
+                                total: editorTotal,
+                                clientId: safeNumber(quoteEditorForm.clientId),
+                              };
+                              convertQuoteToInvoice(fullQuote);
+                            }}
+                          >
+                            Convert to Invoice →
+                          </button>
+                        )}
                         <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14 }}>
                           <input
                             type="checkbox"
@@ -7181,7 +7318,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
 
                 <div style={{ display: "flex", justifyContent: "flex-end", gap: 12 }}>
                   <button style={buttonSecondary} onClick={closeQuoteEditor}>Cancel</button>
-                  <button style={buttonPrimary} onClick={saveQuoteEdits}>Save Changes</button>
+                  <button style={{ ...buttonPrimary, opacity: savingQuoteEdits ? 0.6 : 1 }} disabled={savingQuoteEdits} onClick={saveQuoteEdits}>{savingQuoteEdits ? "Saving..." : "Save Changes"}</button>
                 </div>
               </div>
             </div>
@@ -7670,7 +7807,6 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
                         gst: totalGst,
                         billLineItems,
                         expenseType: "Bill / Payable",
-                        id: Date.now(),
                       };
                       try {
                         const saved = await upsertRecordInDatabase(SUPABASE_TABLES.expenses, payload);
