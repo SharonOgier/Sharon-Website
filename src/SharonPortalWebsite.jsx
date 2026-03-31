@@ -186,6 +186,7 @@ const navItems = [
   "bills / payables",
   "income sources",
   "documents",
+  "bas report",
   "settings",
 ];
 
@@ -1931,6 +1932,8 @@ export default function AccountingPortalPrototype() {
   const [showSupplierModal, setShowSupplierModal] = useState(false);
   const [showClientModal, setShowClientModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [basQuarter, setBasQuarter] = useState("0");
+  const [basNotes, setBasNotes] = useState({ lodgedDate: "", referenceNumber: "", notes: "" });
   const [importType, setImportType] = useState("clients");
   const [importRows, setImportRows] = useState([]);
   const [importError, setImportError] = useState("");
@@ -7975,6 +7978,277 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       </div>
     </div>
     );
+    const renderBASReport = () => {
+      // ── GST registration check ──────────────────────────────────
+      if (!profile.gstRegistered) {
+        return (
+          <div style={{ display: "grid", gap: 20 }}>
+            <DashboardHero title="BAS Report" subtitle="Business Activity Statement preparation for ATO lodgement." highlight="N/A" />
+            <div style={{ ...cardStyle, padding: 32, textAlign: "center" }}>
+              <div style={{ fontSize: 40, marginBottom: 16 }}>📋</div>
+              <div style={{ fontSize: 18, fontWeight: 800, color: colours.text, marginBottom: 10 }}>GST Registration Required</div>
+              <div style={{ fontSize: 14, color: colours.muted, lineHeight: 1.7, maxWidth: 400, margin: "0 auto 24px" }}>
+                This business is not marked as GST registered. BAS reports only apply to GST-registered businesses.
+              </div>
+              <button style={buttonPrimary} onClick={() => setActivePage("settings")}>Go to Settings → Financial</button>
+            </div>
+          </div>
+        );
+      }
+
+      // ── Quarter helpers ─────────────────────────────────────────
+      const now = new Date();
+      const quarters = [];
+      for (let i = 0; i < 8; i++) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i * 3, 1);
+        const qMonth = d.getMonth();
+        const qYear = d.getFullYear();
+        const atoQ = qMonth >= 6 && qMonth <= 8 ? 1 : qMonth >= 9 && qMonth <= 11 ? 2 : qMonth >= 0 && qMonth <= 2 ? 3 : 4;
+        const atoYear = qMonth >= 6 ? qYear : qYear - 1;
+        const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+        const endMonthIdx = (qMonth + 2) % 12;
+        const endYear = qMonth + 2 > 11 ? qYear + 1 : qYear;
+        const label = `Q${atoQ} ${atoYear}/${String(atoYear+1).slice(2)} (${months[qMonth]}–${months[endMonthIdx]} ${endYear})`;
+        const startDate = `${qYear}-${String(qMonth+1).padStart(2,"0")}-01`;
+        const endDay = new Date(endYear, endMonthIdx+1, 0).getDate();
+        const endDate = `${endYear}-${String(endMonthIdx+1).padStart(2,"0")}-${endDay}`;
+        quarters.push({ label, startDate, endDate, key: `${atoYear}-Q${atoQ}` });
+      }
+
+      const qIdx = parseInt(basQuarter) || 0;
+      const selectedQ = quarters[qIdx] || quarters[0];
+      const { startDate, endDate } = selectedQ;
+      const inRange = (d) => d && d >= startDate && d <= endDate;
+
+      // ── Filter data ─────────────────────────────────────────────
+      const qInvoices = invoices.filter((inv) => inv.type !== "credit_note" && inRange(inv.invoiceDate));
+      const qCreditNotes = invoices.filter((inv) => inv.type === "credit_note" && inRange(inv.invoiceDate));
+      const qExpenses = expenses.filter((exp) => exp.type !== "credit_note" && inRange(exp.date));
+
+      // ── G fields ────────────────────────────────────────────────
+      const g1 = qInvoices.reduce((s, inv) => s + safeNumber(inv.total), 0) + qCreditNotes.reduce((s, cn) => s + safeNumber(cn.total), 0);
+      const g5 = g1;
+      const g6 = g5 / 11;
+
+      // ── 1A GST on sales ─────────────────────────────────────────
+      const field1A = qInvoices.reduce((s, inv) => {
+        const al = invoiceAllocations.find((a) => String(a.id) === String(inv.id));
+        return s + (al ? al.gst : 0);
+      }, 0) + qCreditNotes.reduce((s, cn) => s + safeNumber(cn.total) / 11, 0);
+
+      // ── 1B GST credits ──────────────────────────────────────────
+      const field1B = qExpenses.reduce((s, ex) => s + safeNumber(ex.gst), 0);
+
+      // ── Net & PAYG ──────────────────────────────────────────────
+      const netGST = field1A - field1B;
+      const w1 = qInvoices.reduce((s, inv) => {
+        const al = invoiceAllocations.find((a) => String(a.id) === String(inv.id));
+        return s + (al ? al.taxWithheld : 0);
+      }, 0);
+      const t1 = qInvoices.reduce((s, inv) => {
+        const al = invoiceAllocations.find((a) => String(a.id) === String(inv.id));
+        return s + (al ? al.estimatedTax : 0);
+      }, 0);
+
+      // ── Checklist items ─────────────────────────────────────────
+      const checklist = [
+        { label: "All invoices for the period have been entered", check: qInvoices.length > 0 },
+        { label: "All expense receipts have been recorded", check: qExpenses.length > 0 },
+        { label: "GST amounts on invoices look correct", check: field1A > 0 },
+        { label: "GST credits on purchases look correct", check: field1B >= 0 },
+        { label: "Business name and ABN are in Settings", check: Boolean(profile.businessName && profile.abn) },
+        { label: "Lodgement date and reference recorded below", check: Boolean(basNotes.lodgedDate && basNotes.referenceNumber) },
+      ];
+
+      // ── Print ───────────────────────────────────────────────────
+      const printBAS = () => {
+        const win = window.open("", "_blank");
+        win.document.write(`
+          <html><head><title>BAS Report — ${selectedQ.label}</title>
+          <style>body{font-family:sans-serif;padding:32px;color:#14202B;} h1{font-size:22px;} h2{font-size:16px;margin-top:24px;border-bottom:1px solid #e2e8f0;padding-bottom:6px;} table{width:100%;border-collapse:collapse;margin-top:12px;} td{padding:8px 12px;font-size:14px;border-bottom:1px solid #f1f5f9;} td:last-child{text-align:right;font-weight:700;} .highlight{background:#F5ECFB;} .total{font-size:18px;font-weight:800;} .disclaimer{background:#FFFBEB;border:1px solid #FDE68A;padding:16px;border-radius:8px;font-size:12px;margin-top:24px;} .notes{background:#F8FAFC;padding:16px;border-radius:8px;margin-top:16px;}</style>
+          </head><body>
+          <h1>BAS Report</h1>
+          <p><strong>Business:</strong> ${profile.businessName || ""} &nbsp;|&nbsp; <strong>ABN:</strong> ${profile.abn || ""}</p>
+          <p><strong>Period:</strong> ${formatDateAU(startDate)} to ${formatDateAU(endDate)} &nbsp;|&nbsp; ${selectedQ.label}</p>
+          ${basNotes.lodgedDate ? `<p><strong>Lodged:</strong> ${formatDateAU(basNotes.lodgedDate)} &nbsp;|&nbsp; <strong>Ref:</strong> ${basNotes.referenceNumber || "—"}</p>` : ""}
+          <h2>GST on Sales</h2>
+          <table>
+            <tr><td>G1 — Total sales including GST</td><td>${currency(g1)}</td></tr>
+            <tr><td>G5 — Sales subject to GST</td><td>${currency(g5)}</td></tr>
+            <tr><td>G6 — GST on sales (÷11)</td><td>${currency(g6)}</td></tr>
+            <tr class="highlight"><td><strong>1A — GST to pay ATO</strong></td><td>${currency(field1A)}</td></tr>
+          </table>
+          <h2>GST Credits on Purchases</h2>
+          <table>
+            <tr class="highlight"><td><strong>1B — Total GST credits</strong></td><td>${currency(field1B)}</td></tr>
+          </table>
+          <h2>Net GST</h2>
+          <table>
+            <tr><td>1A — GST on sales</td><td>${currency(field1A)}</td></tr>
+            <tr><td>1B — GST credits</td><td>(${currency(field1B)})</td></tr>
+            <tr class="highlight total"><td>${netGST >= 0 ? "GST owing to ATO" : "GST refund from ATO"}</td><td>${currency(Math.abs(netGST))}</td></tr>
+          </table>
+          <h2>PAYG Withholding &amp; Income Tax</h2>
+          <table>
+            <tr><td>W1 — PAYG withheld</td><td>${currency(w1)}</td></tr>
+            <tr><td>T1 — Estimated tax instalment</td><td>${currency(t1)}</td></tr>
+          </table>
+          ${basNotes.notes ? `<div class="notes"><strong>Notes:</strong> ${basNotes.notes}</div>` : ""}
+          <div class="disclaimer">⚠️ This report is a guide only. Always verify with your registered tax agent before lodging with the ATO.</div>
+          </body></html>
+        `);
+        win.document.close();
+        win.print();
+      };
+
+      return (
+        <div style={{ display: "grid", gap: 20 }}>
+          <DashboardHero title="BAS Report" subtitle={`Business Activity Statement — ${profile.businessName || ""}. Use this to prepare your client's ATO lodgement.`} highlight={netGST >= 0 ? currency(netGST) : `(${currency(Math.abs(netGST))})`}>
+            <InsightChip label={netGST >= 0 ? "GST owing" : "GST refund"} value={currency(Math.abs(netGST))} />
+            <InsightChip label="1A sales GST" value={currency(field1A)} />
+            <InsightChip label="1B credits" value={currency(field1B)} />
+          </DashboardHero>
+
+          {/* Quarter selector */}
+          <SectionCard title="Select BAS Period" right={
+            <div style={{ display: "flex", gap: 8 }}>
+              <button style={buttonSecondary} onClick={printBAS}>🖨 Print / PDF</button>
+            </div>
+          }>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
+              {quarters.map((q, i) => (
+                <button key={q.key} onClick={() => setBasQuarter(String(i))}
+                  style={{ ...cardStyle, padding: 14, textAlign: "left", cursor: "pointer", border: `2px solid ${qIdx === i ? colours.purple : colours.border}`, background: qIdx === i ? colours.lightPurple : colours.white }}>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: colours.purple }}>{q.label}</div>
+                  <div style={{ fontSize: 12, color: colours.muted, marginTop: 4 }}>{formatDateAU(q.startDate)} – {formatDateAU(q.endDate)}</div>
+                </button>
+              ))}
+            </div>
+          </SectionCard>
+
+          {/* Checklist */}
+          <SectionCard title="Pre-Lodgement Checklist">
+            <div style={{ display: "grid", gap: 10 }}>
+              {checklist.map((item, i) => (
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", borderRadius: 10, background: item.check ? "#F0FDF4" : "#FFF7ED", border: `1px solid ${item.check ? "#BBF7D0" : "#FED7AA"}` }}>
+                  <div style={{ fontSize: 18 }}>{item.check ? "✅" : "⬜"}</div>
+                  <div style={{ fontSize: 14, color: item.check ? "#166534" : "#92400E", fontWeight: item.check ? 400 : 600 }}>{item.label}</div>
+                </div>
+              ))}
+            </div>
+          </SectionCard>
+
+          {/* Key metrics */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16 }}>
+            <MetricCard title="1A — GST on sales" value={currency(field1A)} subtitle="GST collected from invoices this period." accent={colours.purple} />
+            <MetricCard title="1B — GST credits" value={currency(field1B)} subtitle="GST paid on expenses and bills." accent={colours.teal} />
+            <MetricCard title="Net GST" value={currency(Math.abs(netGST))} subtitle={netGST >= 0 ? "Amount owing to ATO" : "Refund from ATO"} accent={netGST >= 0 ? colours.navy : colours.teal} />
+            <MetricCard title="W1 — PAYG withheld" value={currency(w1)} subtitle="Withheld from contractor payments." accent={colours.navy} />
+          </div>
+
+          {/* Section G */}
+          <SectionCard title="Section G — GST on Sales (1A)">
+            <div style={{ fontSize: 13, color: colours.muted, marginBottom: 16 }}>GST collected from clients this period — {qInvoices.length} invoice{qInvoices.length !== 1 ? "s" : ""}.</div>
+            <div style={{ display: "grid", gap: 6 }}>
+              {[
+                { label: "G1 — Total sales including GST", value: g1 },
+                { label: "G5 — Sales subject to GST", value: g5 },
+                { label: "G6 — GST on sales (÷ 11)", value: g6 },
+                { label: "1A — GST to pay ATO", value: field1A, highlight: true },
+              ].map((row, i) => (
+                <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "10px 14px", borderRadius: 10, background: row.highlight ? colours.lightPurple : i % 2 === 0 ? colours.bg : colours.white, fontSize: 14 }}>
+                  <span style={{ fontWeight: row.highlight ? 800 : 400 }}>{row.label}</span>
+                  <strong style={{ color: row.highlight ? colours.purple : colours.text }}>{currency(row.value)}</strong>
+                </div>
+              ))}
+            </div>
+          </SectionCard>
+
+          {/* Section P */}
+          <SectionCard title="Section P — GST Credits (1B)">
+            <div style={{ fontSize: 13, color: colours.muted, marginBottom: 16 }}>GST credits claimable on purchases this period — {qExpenses.length} expense{qExpenses.length !== 1 ? "s" : ""}.</div>
+            <div style={{ display: "grid", gap: 6 }}>
+              {qExpenses.filter((e) => safeNumber(e.gst) > 0).slice(0, 8).map((exp, i) => (
+                <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "8px 14px", borderRadius: 8, background: i % 2 === 0 ? colours.bg : colours.white, fontSize: 13 }}>
+                  <span>{exp.supplier || exp.description || "Expense"} <span style={{ color: colours.muted }}>· {formatDateAU(exp.date)}</span></span>
+                  <span style={{ color: colours.teal, fontWeight: 700 }}>{currency(safeNumber(exp.gst))}</span>
+                </div>
+              ))}
+              {qExpenses.filter((e) => safeNumber(e.gst) > 0).length === 0 && (
+                <div style={{ padding: "10px 14px", fontSize: 13, color: colours.muted }}>No GST credits for this period.</div>
+              )}
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "12px 14px", borderRadius: 10, background: colours.lightTeal, fontSize: 14, marginTop: 4 }}>
+                <strong>1B — Total GST credits</strong>
+                <strong style={{ color: colours.teal }}>{currency(field1B)}</strong>
+              </div>
+            </div>
+          </SectionCard>
+
+          {/* Net GST */}
+          <SectionCard title="Net GST Summary">
+            <div style={{ display: "grid", gap: 6 }}>
+              {[
+                { label: "1A — GST on sales", value: field1A },
+                { label: "1B — GST credits", value: -field1B },
+              ].map((row, i) => (
+                <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "10px 14px", borderRadius: 8, background: i % 2 === 0 ? colours.bg : colours.white, fontSize: 14 }}>
+                  <span>{row.label}</span>
+                  <strong>{row.value < 0 ? `(${currency(Math.abs(row.value))})` : currency(row.value)}</strong>
+                </div>
+              ))}
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "14px 16px", borderRadius: 12, fontSize: 17, fontWeight: 800, marginTop: 4, background: netGST >= 0 ? "#FEF2F2" : "#F0FDF4", color: netGST >= 0 ? "#991B1B" : "#166534" }}>
+                <span>{netGST >= 0 ? "💸 GST owing to ATO" : "✅ GST refund from ATO"}</span>
+                <span>{currency(Math.abs(netGST))}</span>
+              </div>
+            </div>
+          </SectionCard>
+
+          {/* PAYG */}
+          <SectionCard title="PAYG Withholding & Income Tax Instalment">
+            <div style={{ display: "grid", gap: 6 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "12px 14px", borderRadius: 10, background: colours.lightPurple, fontSize: 14 }}>
+                <strong>W1 — Total PAYG withheld</strong><strong style={{ color: colours.purple }}>{currency(w1)}</strong>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "12px 14px", borderRadius: 10, background: colours.bg, fontSize: 14 }}>
+                <strong>T1 — Estimated income tax instalment</strong><strong>{currency(t1)}</strong>
+              </div>
+            </div>
+          </SectionCard>
+
+          {/* Lodgement notes */}
+          <SectionCard title="Lodgement Record">
+            <div style={{ fontSize: 13, color: colours.muted, marginBottom: 16 }}>Record the lodgement details once you've submitted this BAS to the ATO.</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16, marginBottom: 16 }}>
+              <div>
+                <label style={labelStyle}>Date Lodged</label>
+                <input type="date" style={inputStyle} value={basNotes.lodgedDate}
+                  onChange={(e) => setBasNotes((p) => ({ ...p, lodgedDate: e.target.value }))} />
+              </div>
+              <div>
+                <label style={labelStyle}>ATO Reference Number</label>
+                <input style={inputStyle} value={basNotes.referenceNumber}
+                  onChange={(e) => setBasNotes((p) => ({ ...p, referenceNumber: e.target.value }))}
+                  placeholder="e.g. 12345678" />
+              </div>
+            </div>
+            <div>
+              <label style={labelStyle}>Notes</label>
+              <textarea style={{ ...inputStyle, minHeight: 80, resize: "vertical" }} value={basNotes.notes}
+                onChange={(e) => setBasNotes((p) => ({ ...p, notes: e.target.value }))}
+                placeholder="Any notes for your records..." />
+            </div>
+          </SectionCard>
+
+          {/* Disclaimer */}
+          <div style={{ ...cardStyle, padding: 16, background: "#FFFBEB", border: `1px solid #FDE68A` }}>
+            <div style={{ fontSize: 13, color: "#92400E", lineHeight: 1.7 }}>
+              <strong>⚠️ Important:</strong> This BAS report is a guide only based on data entered in the portal. Always review carefully before lodging with the ATO. This software does not lodge BAS directly — lodgement must be done through ATO Business Portal or your registered tax agent software.
+            </div>
+          </div>
+        </div>
+      );
+    };
+
     const renderSettings = () => (
     <div style={{ display: "grid", gap: 20 }}>
       <DashboardHero title="Settings" subtitle="Configure your business profile, financial settings, branding and security. Changes save to your Supabase database automatically." highlight={activeSettingsTab}>
@@ -8467,6 +8741,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
             {activePage === "bills / payables" && renderBillsPayables()}
             {activePage === "income sources" && renderIncomeSources()}
             {activePage === "documents" && renderDocuments()}
+            {activePage === "bas report" && renderBASReport()}
             {activePage === "settings" && renderSettings()}
           </div>
         </main>
