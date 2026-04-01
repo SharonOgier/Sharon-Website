@@ -9467,7 +9467,9 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
         .sas-sidebar { background: #fff; border-right: 1px solid #E2E8F0; padding: 20px; position: relative; z-index: 100; }
         .sas-overlay { display: none; }
         .sas-hamburger { display: none; }
-                .sas-main { padding: 24px; overflow-x: hidden; }
+                .sas-main { padding: 24px; overflow-x: auto; overflow-y: visible; -webkit-overflow-scrolling: touch; }
+        .sas-page-scroll { width: 100%; overflow-x: auto; overflow-y: visible; -webkit-overflow-scrolling: touch; }
+        .sas-page-inner { max-width: 1400px; min-width: 1100px; margin: 0 auto; }
         .sas-toasts { width: min(380px, calc(100vw - 24px)); }
         .sas-section-card, .sas-summary-box, .sas-metric-card, .sas-action-card, .sas-auth-login-card { width: 100%; }
         .sas-table-wrap { width: 100%; -webkit-overflow-scrolling: touch; }
@@ -9567,7 +9569,8 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
         </aside>
 
         <main className="sas-main">
-          <div style={{ maxWidth: 1400, margin: "0 auto" }}>
+          <div className="sas-page-scroll">
+            <div className="sas-page-inner">
             {activePage === "dashboard" && renderDashboard()}
             {activePage === "financial insights" && renderFinancialInsights()}
             {activePage === "invoices" && renderInvoices()}
@@ -9579,6 +9582,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
             {activePage === "documents" && renderDocuments()}
             {activePage === "bas report" && renderBASReport()}
             {activePage === "settings" && renderSettings()}
+            </div>
           </div>
         </main>
       </div>

@@ -270,7 +270,7 @@ export function DashboardHero({ title, subtitle, highlight, children }) {
         boxShadow: "0 18px 40px rgba(43, 47, 107, 0.18)",
       }}
     >
-      <div className="sas-hero-content" style={{ minWidth: 0 }}>
+      <div>
         <div
           style={{
             display: "inline-flex",
@@ -286,11 +286,10 @@ export function DashboardHero({ title, subtitle, highlight, children }) {
         >
           Live financial reporting
         </div>
-        <div className="sas-hero-title" style={{ fontSize: 34, fontWeight: 900, lineHeight: 1.1, marginTop: 16, overflowWrap: "anywhere", wordBreak: "break-word" }}>{title}</div>
-        <div className="sas-hero-subtitle" style={{ fontSize: 15, lineHeight: 1.6, opacity: 0.92, marginTop: 12, maxWidth: 780 }}>{subtitle}</div>
+        <div style={{ fontSize: 34, fontWeight: 900, lineHeight: 1.1, marginTop: 16 }}>{title}</div>
+        <div style={{ fontSize: 15, lineHeight: 1.6, opacity: 0.92, marginTop: 12, maxWidth: 780 }}>{subtitle}</div>
       </div>
       <div
-        className="sas-hero-focus-card"
         style={{
           background: "rgba(255,255,255,0.14)",
           border: "1px solid rgba(255,255,255,0.16)",
@@ -300,14 +299,13 @@ export function DashboardHero({ title, subtitle, highlight, children }) {
           gap: 16,
           alignContent: "space-between",
           minHeight: 200,
-          minWidth: 0,
         }}
       >
         <div>
           <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.6, opacity: 0.82 }}>
             Current focus
           </div>
-          <div className="sas-hero-focus-value" style={{ fontSize: 30, fontWeight: 900, marginTop: 10, overflowWrap: "anywhere", wordBreak: "break-word" }}>{highlight}</div>
+          <div style={{ fontSize: 30, fontWeight: 900, marginTop: 10 }}>{highlight}</div>
         </div>
         {children}
       </div>
