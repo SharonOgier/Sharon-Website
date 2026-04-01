@@ -1,84 +1,2087 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import html2pdf from "html2pdf.js";
 import { supabase } from "./client";
-import MobileWizard from "./MobileWizard";
 
-import {
-  ToastContainer,
-  useToast,
-  useConfirm,
-  PaywallScreen,
-  SectionCard,
-  SummaryBox,
-  DashboardHero,
-  InsightChip,
-  MetricCard,
-  ActionHubCard,
-  MiniBarChart,
-  TrendBarsCard,
-  WaterfallCard,
-  ActivityListCard,
-  EmptyState,
-  DataTable,
-  ExpenseTypeModal,
-  IncomeSourceModal,
-} from "./PortalComponents";
 
-import {
-  buildQuoteHtml,
-  buildQuoteEmailHtml,
-  buildInvoiceEmailHtml,
-  buildQuoteEmailHtmlInline,
-  buildInvoiceHtml,
-  openBlobUrlInWindow,
-  writeInvoicePreviewToWindow,
-} from "./PortalHTMLBuilders";
 
-import ATOTaxFormPage from "./ATOTaxFormPage";
+// ── Toast notification system ──────────────────────────────
+function ToastContainer({ toasts, onRemove }) {
+  if (!toasts.length) return null;
+  return (
+    <div style={{
+      position: "fixed", bottom: 24, right: 24, zIndex: 99999,
+      display: "grid", gap: 10, maxWidth: 380,
+    }}>
+      {toasts.map((t) => (
+        <div key={t.id} style={{
+          display: "flex", alignItems: "flex-start", gap: 12,
+          padding: "14px 16px",
+          borderRadius: 14,
+          boxShadow: "0 4px 24px rgba(0,0,0,0.13)",
+          background: t.type === "error" ? "#FEE2E2"
+            : t.type === "success" ? "#DCFCE7"
+            : t.type === "warning" ? "#FEF9C3"
+            : "#EFF6FF",
+          borderLeft: `4px solid ${
+            t.type === "error" ? "#EF4444"
+            : t.type === "success" ? "#22C55E"
+            : t.type === "warning" ? "#EAB308"
+            : "#3B82F6"
+          }`,
+          fontSize: 14,
+          color: "#14202B",
+          fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+          minWidth: 280,
+          animation: "toastIn 0.2s ease",
+        }}>
+          <div style={{ flex: 1, lineHeight: 1.5 }}>
+            {t.title && <div style={{ fontWeight: 700, marginBottom: 2 }}>{t.title}</div>}
+            <div style={{ fontWeight: t.title ? 400 : 600 }}>{t.message}</div>
+          </div>
+          <button onClick={() => onRemove(t.id)} style={{
+            background: "none", border: "none", cursor: "pointer",
+            fontSize: 18, lineHeight: 1, color: "#64748B", padding: 0, marginTop: -1,
+          }}>×</button>
+        </div>
+      ))}
+    </div>
+  );
+}
 
-import {
-  colours,
-  navSections,
-  navLabels,
-  settingsTabs,
-  inputStyle,
-  labelStyle,
-  cardStyle,
-  buttonPrimary,
-  buttonSecondary,
-  currency,
-  safeNumber,
-  parseLocalDate,
-  formatDateAU,
-  addDays,
-  addDaysEOM,
-  todayLocal,
-  formatCurrencyByCode,
-  getClientCurrencyCode,
-  calculateAdjustmentValues,
-  GST_TYPE_OPTIONS,
-  expenseCategories,
-  incomeTypeOptions,
-  incomeFrequencyOptions,
-  blankClient,
-  initialProfile,
-  makePaymentReference,
-  nextNumber,
-  formatMonthKey,
-  formatMonthLabel,
-  getApiBaseUrl,
-  DEFAULT_API_BASE_URL,
-  DEFAULT_MONTHLY_SUBSCRIPTION,
-  SUPABASE_TABLES,
-  SUPABASE_STORAGE_BUCKET,
-  isValidEmail,
-  collectValidationErrors,
-  summariseValidationErrors,
-  getSubscriptionAccess,
-  LOGO_PREVIEW_MAX_HEIGHT,
-  LOGO_PREVIEW_MAX_WIDTH,
-  LOCKED_FEE_RATE_PERCENT,
-} from "./PortalHelpers";
+function useToast() {
+  const [toasts, setToasts] = React.useState([]);
+  const remove = (id) => setToasts((prev) => prev.filter((t) => t.id !== id));
+  const add = (message, type = "info", title = "", duration = 4000) => {
+    const id = Date.now() + Math.random();
+    setToasts((prev) => [...prev.slice(-4), { id, message, type, title }]);
+    if (duration > 0) setTimeout(() => remove(id), duration);
+  };
+  const toast = {
+    success: (message, title = "")  => add(message, "success", title),
+    error:   (message, title = "")  => add(message, "error",   title, 6000),
+    warning: (message, title = "")  => add(message, "warning", title),
+    info:    (message, title = "")  => add(message, "info",    title),
+  };
+  return { toasts, toast, removeToast: remove };
+}
+// ────────────────────────────────────────────────────────────
+
+// ── Confirm Modal ────────────────────────────────────────────
+function ConfirmModal({ isOpen, title, message, confirmLabel = "Delete", onConfirm, onCancel }) {
+  if (!isOpen) return null;
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 99998, background: "rgba(15,23,42,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div style={{ background: "#fff", borderRadius: 18, padding: 28, width: "100%", maxWidth: 420, boxShadow: "0 20px 60px rgba(0,0,0,0.2)", fontFamily: 'sans-serif' }}>
+        <div style={{ fontSize: 18, fontWeight: 800, color: "#14202B", marginBottom: 10 }}>{title}</div>
+        <div style={{ fontSize: 14, color: "#64748B", lineHeight: 1.6, marginBottom: 24 }}>{message}</div>
+        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+          <button onClick={onCancel} style={{ background: "#fff", color: "#14202B", border: "1px solid #E2E8F0", borderRadius: 10, padding: "10px 18px", fontWeight: 700, cursor: "pointer", fontSize: 14 }}>Cancel</button>
+          <button onClick={onConfirm} style={{ background: "#EF4444", color: "#fff", border: "none", borderRadius: 10, padding: "10px 18px", fontWeight: 700, cursor: "pointer", fontSize: 14 }}>{confirmLabel}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function useConfirm() {
+  const [confirmState, setConfirmState] = React.useState(null);
+  const confirm = ({ title, message, confirmLabel = "Delete", onConfirm }) => {
+    setConfirmState({ title, message, confirmLabel, onConfirm });
+  };
+  const close = () => setConfirmState(null);
+  const modal = confirmState ? (
+    <ConfirmModal isOpen title={confirmState.title} message={confirmState.message} confirmLabel={confirmState.confirmLabel}
+      onConfirm={() => { close(); confirmState.onConfirm(); }} onCancel={close} />
+  ) : null;
+  return { confirm, modal };
+}
+// ─────────────────────────────────────────────────────────────
+
+// ── Subscription helpers ──────────────────────────────────────
+const TRIAL_DAYS = 14;
+
+// ── Add client emails here to give free access (no Stripe needed) ──
+const FREE_ACCESS_EMAILS = [
+  // "clientname@example.com",  ← add emails here, one per line
+];
+
+function getSubscriptionAccess(profile) {
+  // Master account — always full access, no paywall
+  const MASTER_EMAILS = ["info@sharonogier.com", "sharon@sharonogier.com"];
+  const email = (profile?.email || "").toLowerCase().trim();
+  if (MASTER_EMAILS.includes(email)) return { allowed: true, reason: "master" };
+  // Whitelisted clients — free access granted by Sharon
+  if (FREE_ACCESS_EMAILS.includes(email)) return { allowed: true, reason: "whitelisted" };
+  const status = profile?.subscriptionStatus || "";
+  const trialStarted = profile?.trialStartedAt || profile?.setupCompletedAt || "";
+  if (status === "active") return { allowed: true, reason: "active" };
+  if (trialStarted) {
+    const daysLeft = Math.max(0, Math.ceil(TRIAL_DAYS - (Date.now() - new Date(trialStarted).getTime()) / (1000 * 60 * 60 * 24)));
+    if (daysLeft > 0) return { allowed: true, reason: "trial", daysLeft };
+    return { allowed: false, reason: "trial_expired", daysLeft: 0 };
+  }
+  if (!profile?.setupComplete) return { allowed: true, reason: "setup" };
+  if (status === "canceled" || status === "past_due") return { allowed: false, reason: status };
+  return { allowed: true, reason: "legacy" };
+}
+
+function PaywallScreen({ profile, serverBaseUrl }) {
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState("");
+  const access = getSubscriptionAccess(profile);
+  const handleSubscribe = async () => {
+    setLoading(true); setError("");
+    try {
+      const res = await fetch(`${serverBaseUrl}/api/create-subscription-checkout`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: profile.email, userId: profile.user_id || profile.id, businessName: profile.businessName, successUrl: window.location.origin + "?subscribed=1", cancelUrl: window.location.origin + "?subscribed=0" }),
+      });
+      const data = await res.json();
+      if (data.url) window.location.href = data.url;
+      else setError(data.error || "Could not start checkout. Please try again.");
+    } catch { setError("Could not reach the server. Please try again."); }
+    finally { setLoading(false); }
+  };
+  return (
+    <div style={{ minHeight: "100vh", background: "#F8FAFC", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, fontFamily: "sans-serif" }}>
+      <div style={{ width: "100%", maxWidth: 480, textAlign: "center" }}>
+        <div style={{ fontSize: 22, fontWeight: 900, color: "#6A1B9A", marginBottom: 8 }}>{profile.businessName || "Your Portal"}</div>
+        <div style={{ background: "#fff", border: "1px solid #E2E8F0", borderRadius: 18, padding: 32, marginTop: 24, boxShadow: "0 2px 12px rgba(0,0,0,0.06)" }}>
+          <div style={{ fontSize: 40, marginBottom: 12 }}>{access.reason === "trial_expired" ? "⏰" : "🔒"}</div>
+          <div style={{ fontSize: 20, fontWeight: 800, color: "#14202B", marginBottom: 10 }}>
+            {access.reason === "trial_expired" ? "Your free trial has ended" : "Subscription required"}
+          </div>
+          <div style={{ fontSize: 14, color: "#64748B", lineHeight: 1.7, marginBottom: 24 }}>
+            {access.reason === "trial_expired" ? "Subscribe now to keep access to all your invoices, clients, quotes and financial data." : "Reactivate your subscription to regain access."}
+          </div>
+          <div style={{ background: "#F5ECFB", borderRadius: 14, padding: "20px 24px", marginBottom: 24 }}>
+            <div style={{ fontSize: 36, fontWeight: 900, color: "#6A1B9A" }}>${DEFAULT_MONTHLY_SUBSCRIPTION}</div>
+            <div style={{ fontSize: 14, color: "#64748B", marginTop: 4 }}>per month · cancel anytime</div>
+          </div>
+          {error && <div style={{ background: "#FEE2E2", color: "#991B1B", borderRadius: 10, padding: "10px 14px", marginBottom: 16, fontSize: 13 }}>{error}</div>}
+          <button onClick={handleSubscribe} disabled={loading} style={{ width: "100%", background: loading ? "#9CA3AF" : "#6A1B9A", color: "#fff", border: "none", borderRadius: 12, padding: "14px 20px", fontSize: 16, fontWeight: 800, cursor: loading ? "not-allowed" : "pointer" }}>
+            {loading ? "Redirecting to checkout..." : "Subscribe now — $" + DEFAULT_MONTHLY_SUBSCRIPTION + "/month"}
+          </button>
+          <div style={{ fontSize: 12, color: "#94A3B8", marginTop: 14 }}>Secure payment via Stripe · Cancel anytime</div>
+        </div>
+        <div style={{ fontSize: 12, color: "#94A3B8", marginTop: 20 }}>
+          Already subscribed? <button onClick={() => window.location.reload()} style={{ background: "none", border: "none", color: "#6A1B9A", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>Refresh to continue</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+// ─────────────────────────────────────────────────────────────
+
+const colours = {
+  purple: "#6A1B9A",
+  teal: "#006D6D",
+  navy: "#2B2F6B",
+  bg: "#F8FAFC",
+  white: "#FFFFFF",
+  text: "#14202B",
+  muted: "#64748B",
+  border: "#E2E8F0",
+  lightPurple: "#F5ECFB",
+  lightTeal: "#E7F6F5",
+  successText: "#166534",
+};
+
+const navItems = [
+  "dashboard",
+  "financial insights",
+  "invoices",
+  "quotes",
+  "services",
+  "expenses",
+  "bills / payables",
+  "income sources",
+  "documents",
+  "bas report",
+  "settings",
+];
+
+const navSections = [
+  {
+    title: "Main",
+    items: ["dashboard", "financial insights", "invoices", "quotes", "expenses"],
+  },
+  {
+    title: "Workspace",
+    items: ["services", "bills / payables", "income sources", "documents"],
+  },
+  {
+    title: "Admin",
+    items: ["bas report", "settings"],
+  },
+];
+
+const navLabels = {
+  dashboard: "Home",
+  "financial insights": "Financial Insights",
+  invoices: "Invoices",
+  quotes: "Quotes",
+  services: "Services",
+  expenses: "Expenses",
+  "bills / payables": "Bills & Payables",
+  "income sources": "Income Sources",
+  documents: "Documents",
+  "bas report": "BAS Report",
+  settings: "Settings",
+};
+
+const settingsTabs = ["Profile", "Financial", "Branding", "Security"];
+
+const LOGO_DOCUMENT_MAX_HEIGHT = 140;
+const LOGO_DOCUMENT_MAX_WIDTH = 440;
+const LOGO_PREVIEW_MAX_HEIGHT = 180;
+const LOGO_PREVIEW_MAX_WIDTH = 480;
+
+const isValidEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim());
+
+const collectValidationErrors = (...groups) => groups.flat().filter(Boolean);
+
+const summariseValidationErrors = (title, errors, toastFn) => {
+  if (!errors.length) return;
+  if (toastFn) {
+    errors.forEach((e) => toastFn.error(e, title));
+  }
+};
+
+const DEFAULT_API_BASE_URL =
+  ((typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL)
+    ? String(import.meta.env.VITE_API_BASE_URL).trim()
+    : "") ||
+  (typeof window !== "undefined"
+    ? (
+        window.location.hostname === "localhost" ||
+        window.location.hostname === "127.0.0.1"
+      )
+        ? "http://localhost:3001"
+        : (typeof window !== "undefined" ? window.location.origin : "")
+    : (typeof window !== "undefined" ? window.location.origin : ""));
+
+const normaliseApiBaseUrl = (value) => String(value || "").trim().replace(/\/$/, "");
+
+const getApiBaseUrl = (preferredValue = "") => {
+  const fallbackUrl = normaliseApiBaseUrl(DEFAULT_API_BASE_URL);
+  const rawCandidate = normaliseApiBaseUrl(preferredValue);
+
+  if (!rawCandidate) {
+    return fallbackUrl;
+  }
+
+  try {
+    const parsed = new URL(rawCandidate);
+
+    if (typeof window !== "undefined") {
+      const pageIsLocal =
+        window.location.hostname === "localhost" ||
+        window.location.hostname === "127.0.0.1";
+      const candidateIsLocal =
+        parsed.hostname === "localhost" ||
+        parsed.hostname === "127.0.0.1";
+
+      if (!pageIsLocal && candidateIsLocal) {
+        return fallbackUrl;
+      }
+
+      if (window.location.protocol === "https:" && parsed.protocol !== "https:") {
+        return fallbackUrl;
+      }
+    }
+
+    return parsed.origin.replace(/\/$/, "");
+  } catch (error) {
+    console.warn("Invalid API base URL, falling back to default.", {
+      preferredValue,
+      fallbackUrl,
+      error,
+    });
+    return fallbackUrl;
+  }
+};
+
+const LOCKED_FEE_RATE_PERCENT = 1;
+const DEFAULT_MONTHLY_SUBSCRIPTION = 45;
+
+const SUPABASE_STORAGE_BUCKET = "receipts";
+
+const SUPABASE_TABLES = {
+  profile: "sas_profile",
+  clients: "sas_clients",
+  invoices: "sas_invoices",
+  quotes: "sas_quotes",
+  expenses: "sas_expenses",
+  incomeSources: "sas_income_sources",
+  services: "sas_services",
+  documents: "sas_documents",
+  suppliers: "sas_suppliers",
+};
+
+const SUPABASE_SCHEMA_SQL = `-- Run this once in Supabase SQL Editor
+create table if not exists sas_profile (
+  id bigint primary key,
+  user_id text not null,
+  data jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default timezone('utc', now())
+);
+create index if not exists sas_profile_user_id_idx on sas_profile (user_id);
+
+create table if not exists sas_clients (
+  id bigint primary key,
+  user_id text not null,
+  data jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default timezone('utc', now())
+);
+create index if not exists sas_clients_user_id_idx on sas_clients (user_id);
+
+create table if not exists sas_invoices (
+  id bigint primary key,
+  user_id text not null,
+  data jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default timezone('utc', now())
+);
+create index if not exists sas_invoices_user_id_idx on sas_invoices (user_id);
+
+create table if not exists sas_quotes (
+  id bigint primary key,
+  user_id text not null,
+  data jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default timezone('utc', now())
+);
+create index if not exists sas_quotes_user_id_idx on sas_quotes (user_id);
+
+create table if not exists sas_expenses (
+  id bigint primary key,
+  user_id text not null,
+  data jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default timezone('utc', now())
+);
+create index if not exists sas_expenses_user_id_idx on sas_expenses (user_id);
+
+create table if not exists sas_income_sources (
+  id bigint primary key,
+  user_id text not null,
+  data jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default timezone('utc', now())
+);
+create index if not exists sas_income_sources_user_id_idx on sas_income_sources (user_id);
+
+create table if not exists sas_services (
+  id bigint primary key,
+  user_id text not null,
+  data jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default timezone('utc', now())
+);
+create index if not exists sas_services_user_id_idx on sas_services (user_id);
+
+create table if not exists sas_documents (
+  id bigint primary key,
+  user_id text not null,
+  data jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default timezone('utc', now())
+);
+create index if not exists sas_documents_user_id_idx on sas_documents (user_id);
+
+create table if not exists sas_suppliers (
+  id bigint primary key,
+  user_id text not null,
+  data jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default timezone('utc', now())
+);
+create index if not exists sas_suppliers_user_id_idx on sas_suppliers (user_id);`;
+
+const GST_TYPE_OPTIONS = [
+  { value: "GST on Income (10%)", label: "GST on Income (10%)" },
+  { value: "GST Free", label: "GST Free" },
+  { value: "Input taxed / No GST", label: "Input taxed / No GST" },
+];
+
+const expenseCategories = [
+  "Advertising",
+  "Bank Fees",
+  "Cost of goods sold",
+  "Depreciation",
+  "Insurance",
+  "Motor vehicle expenses",
+  "Office Supplies",
+  "Printing",
+  "Rent",
+  "Repairs and maintenance",
+  "Software",
+  "Stationery",
+  "Subscriptions",
+  "Telephone and internet",
+  "Travel",
+  "Utilities",
+  "Wages",
+  "Other",
+];
+
+const incomeTypeOptions = [
+  "Casual employment",
+  "Salary",
+  "Centrelink/Australian government payments",
+  "Rental income",
+  "Australian interest",
+  "Australian dividends",
+  "Income earned outside Australia",
+  "Cryptocurrency gain/loss",
+  "Capital gain/loss from sale of shares",
+  "Managed funds distribution",
+  "Partnership income",
+  "Taxed government pension",
+  "Superannuation lump sum payment",
+  "Estate or trust income",
+  "Capital gain/loss from property sale",
+];
+
+const incomeFrequencyOptions = [
+  "Weekly",
+  "Fortnightly",
+  "Monthly",
+  "Quarterly",
+  "Annually",
+  "One-off",
+];
+
+const inputStyle = {
+  width: "100%",
+  border: `1px solid ${colours.border}`,
+  borderRadius: 10,
+  padding: "10px 12px",
+  fontSize: 14,
+  boxSizing: "border-box",
+  background: colours.white,
+};
+
+const labelStyle = {
+  display: "block",
+  fontSize: 13,
+  fontWeight: 600,
+  color: colours.text,
+  marginBottom: 6,
+};
+
+const cardStyle = {
+  background: colours.white,
+  border: `1px solid ${colours.border}`,
+  borderRadius: 18,
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+};
+
+const buttonPrimary = {
+  background: colours.purple,
+  color: "#fff",
+  border: "none",
+  borderRadius: 10,
+  padding: "10px 14px",
+  fontWeight: 700,
+  cursor: "pointer",
+};
+
+const buttonSecondary = {
+  background: colours.white,
+  color: colours.text,
+  border: `1px solid ${colours.border}`,
+  borderRadius: 10,
+  padding: "10px 14px",
+  fontWeight: 700,
+  cursor: "pointer",
+};
+
+const currency = (value) =>
+  new Intl.NumberFormat("en-AU", {
+    style: "currency",
+    currency: "AUD",
+    minimumFractionDigits: 2,
+  }).format(Number(value || 0));
+
+const safeNumber = (value) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const escapeHtml = (value) =>
+  String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+
+const nl2br = (value) => escapeHtml(value).replace(/\n/g, "<br/>");
+
+// Parse YYYY-MM-DD as LOCAL date (not UTC) — prevents day-shift in AU timezones
+const parseLocalDate = (dateString) => {
+  if (!dateString) return new Date();
+  const parts = String(dateString).slice(0, 10).split("-");
+  if (parts.length !== 3) return new Date(dateString);
+  return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+};
+
+// Get today in YYYY-MM-DD local time (not UTC)
+const todayLocal = () => {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+};
+
+const formatDateAU = (date) => {
+  if (!date) return "";
+  const d = parseLocalDate(date);
+  if (Number.isNaN(d.getTime())) return "";
+  const day = String(d.getDate()).padStart(2, "0");
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const year = d.getFullYear();
+  return `${day}/${month}/${year}`;
+};
+
+const addDays = (dateString, days) => {
+  const base = parseLocalDate(dateString);
+  base.setDate(base.getDate() + safeNumber(days));
+  const y = base.getFullYear();
+  const m = String(base.getMonth() + 1).padStart(2, "0");
+  const d = String(base.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+};
+
+// End of month + 30 days: go to last day of the bill's month, then add 30 days
+const addDaysEOM = (dateString) => {
+  const base = parseLocalDate(dateString);
+  const eom = new Date(base.getFullYear(), base.getMonth() + 1, 0);
+  eom.setDate(eom.getDate() + 30);
+  const y = eom.getFullYear();
+  const m = String(eom.getMonth() + 1).padStart(2, "0");
+  const d = String(eom.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+};
+
+const nextNumber = (prefix, items, key) => {
+  const nums = items
+    .map((item) => String(item[key] || ""))
+    .map((v) => Number((v.split("-")[1] || "0").replace(/\D/g, "")))
+    .filter((v) => Number.isFinite(v));
+  const next = (nums.length ? Math.max(...nums) : 0) + 1;
+  return `${prefix}-${String(next).padStart(4, "0")}`;
+};
+
+const makePaymentReference = (invoiceNumber) => `SAS-${invoiceNumber}`;
+
+const currencyCodeFromLabel = (label) => {
+  const value = String(label || "").toUpperCase();
+  if (value.includes("USD")) return "USD";
+  if (value.includes("NZD")) return "NZD";
+  if (value.includes("GBP")) return "GBP";
+  if (value.includes("EUR")) return "EUR";
+  return "AUD";
+};
+
+const formatCurrencyByCode = (value, currencyCode = "AUD") =>
+  new Intl.NumberFormat("en-AU", {
+    style: "currency",
+    currency: currencyCode,
+    minimumFractionDigits: 2,
+  }).format(Number(value || 0));
+
+const getClientCurrencyCode = (client) => currencyCodeFromLabel(client?.defaultCurrency || "AUD $");
+
+const calculateAdjustmentValues = ({ subtotal = 0, total = 0, client, profile }) => {
+  const feeAmount = client?.feesDeducted ?
+    total * (LOCKED_FEE_RATE_PERCENT / 100) : 0;
+  const taxWithheld = client?.deductsTaxPrior ? subtotal * (safeNumber(profile?.taxRate) / 100) : 0;
+  const netExpected = total - feeAmount - taxWithheld;
+  return {
+    feeAmount,
+    taxWithheld,
+    netExpected,
+  };
+};
+
+const fileToDataUrl = (file) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+
+const blobToBase64 = (blob) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const result = String(reader.result || "");
+      const parts = result.split(",");
+      resolve(parts[1] || "");
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+
+const generatePdfBase64FromHtml = async (html, filename = "document.pdf") => {
+  const markup = String(html || "").trim();
+  if (!markup) return "";
+
+  const container = document.createElement("div");
+  container.style.position = "fixed";
+  container.style.left = "-100000px";
+  container.style.top = "0";
+  container.style.width = "794px";
+  container.style.background = "#ffffff";
+  container.style.zIndex = "-1";
+  container.innerHTML = markup;
+  document.body.appendChild(container);
+
+  try {
+    const worker = html2pdf()
+      .set({
+        margin: 10,
+        filename,
+        image: { type: "jpeg", quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, logging: false },
+        jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+      })
+      .from(container);
+
+    const pdfBlob = await worker.outputPdf("blob");
+    return await blobToBase64(pdfBlob);
+  } finally {
+    container.remove();
+  }
+};
+
+const blankClient = {
+  name: "",
+  email: "",
+  phone: "",
+  address: "",
+  contactPerson: "",
+  workType: "Financial / Management Accountant",
+  recruiterUsed: false,
+  sendToClient: true,
+  sendToMe: false,
+  autoReminders: true,
+  attachPdf: false,
+  includeAddressDetails: true,
+  addressDetails: "",
+  sendReceipts: true,
+  outsideAustraliaOrGstExempt: false,
+  defaultCurrency: "AUD $",
+  feesDeducted: false,
+  deductsTaxPrior: false,
+  shortTermRentalIncome: false,
+  hasPurchaseOrder: false,
+};
+
+const initialProfile = {
+  businessName: "",
+  abn: "",
+  email: "",
+  phone: "",
+  address: "",
+  invoicePrefix: "INV",
+  quotePrefix: "QUO",
+  paymentTermsDays: 14,
+  taxRate: 30,
+  feeRate: LOCKED_FEE_RATE_PERCENT,
+  gstRegistered: true,
+
+  bankName: "",
+  bsb: "",
+  accountNumber: "",
+  payId: "",
+  stripePaymentLink: "",
+  paypalPaymentLink: "",
+  stripeServerUrl: DEFAULT_API_BASE_URL,
+
+  firstName: "",
+  middleNames: "",
+  lastName: "",
+  preferredName: "",
+  dateOfBirth: "",
+  personalAddress: "",
+  workType: "Financial / Management Accountant",
+
+  tfn: "",
+  studentLoan: false,
+  gstFreeSales: false,
+  homeOfficePercent: "",
+
+  logoFileName: "",
+  logoDataUrl: "",
+
+  legalBusinessName: "",
+  hideLegalNameOnDocs: false,
+  hideAddressOnDocs: false,
+  hidePhoneOnDocs: true,
+
+  twoFactor: false,
+  setupComplete: false,
+  setupCompletedAt: "",
+  monthlySubscription: DEFAULT_MONTHLY_SUBSCRIPTION,
+  accountStatus: "",
+  trialStartedAt: "",
+  subscriptionStatus: "",
+  subscriptionId: "",
+  stripeCustomerId: "",
+};
+
+const initialClients = [];
+const initialInvoices = [];
+const initialQuotes = [];
+const initialExpenses = [];
+const initialIncomeSources = [];
+const initialDocuments = [];
+
+function SectionCard({ title, children, right }) {
+  return (
+    <div style={{ ...cardStyle, padding: 20 }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          gap: 12,
+          alignItems: "center",
+          marginBottom: 16,
+        }}
+      >
+        <h2
+          style={{
+            margin: 0,
+            fontSize: 18,
+            fontWeight: 800,
+            color: colours.text,
+          }}
+        >
+          {title}
+        </h2>
+        {right}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function SummaryBox({ title, value, subtitle }) {
+  return (
+    <div style={{ ...cardStyle, padding: 18 }}>
+      <div style={{ fontSize: 13, fontWeight: 700, color: colours.muted }}>
+        {title}
+      </div>
+      <div
+        style={{
+          fontSize: 28,
+          fontWeight: 800,
+          color: colours.text,
+          marginTop: 6,
+        }}
+      >
+        {value}
+      </div>
+      {subtitle ? (
+        <div style={{ fontSize: 12, color: colours.muted, marginTop: 6 }}>
+          {subtitle}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+const formatMonthKey = (value) => {
+  if (!value) return "Unknown";
+  const parsed = parseLocalDate(String(value).slice(0, 10));
+  if (Number.isNaN(parsed.getTime())) return "Unknown";
+  return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, "0")}`;
+};
+
+const formatMonthLabel = (value) => {
+  if (!value || value === "Unknown") return "Unknown";
+  const parsed = parseLocalDate(`${value}-01`);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleDateString("en-AU", { month: "short", year: "numeric" });
+};
+
+function DashboardHero({ title, subtitle, highlight, children }) {
+  return (
+    <div
+      style={{
+        background: `linear-gradient(135deg, ${colours.navy} 0%, ${colours.purple} 58%, ${colours.teal} 100%)`,
+        borderRadius: 24,
+        padding: 28,
+        color: "#FFFFFF",
+        display: "grid",
+        gridTemplateColumns: "minmax(0, 1.7fr) minmax(280px, 1fr)",
+        gap: 24,
+        alignItems: "stretch",
+        boxShadow: "0 18px 40px rgba(43, 47, 107, 0.18)",
+      }}
+    >
+      <div>
+        <div
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
+            padding: "8px 12px",
+            borderRadius: 999,
+            background: "rgba(255,255,255,0.14)",
+            fontSize: 12,
+            fontWeight: 700,
+            letterSpacing: 0.2,
+          }}
+        >
+          Live financial reporting
+        </div>
+        <div style={{ fontSize: 34, fontWeight: 900, lineHeight: 1.1, marginTop: 16 }}>{title}</div>
+        <div style={{ fontSize: 15, lineHeight: 1.6, opacity: 0.92, marginTop: 12, maxWidth: 780 }}>{subtitle}</div>
+      </div>
+      <div
+        style={{
+          background: "rgba(255,255,255,0.14)",
+          border: "1px solid rgba(255,255,255,0.16)",
+          borderRadius: 22,
+          padding: 22,
+          display: "grid",
+          gap: 16,
+          alignContent: "space-between",
+          minHeight: 200,
+        }}
+      >
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.6, opacity: 0.82 }}>
+            Current focus
+          </div>
+          <div style={{ fontSize: 30, fontWeight: 900, marginTop: 10 }}>{highlight}</div>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function InsightChip({ label, value }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        gap: 12,
+        borderRadius: 14,
+        padding: "12px 14px",
+        background: "rgba(255,255,255,0.14)",
+      }}
+    >
+      <div style={{ fontSize: 12, opacity: 0.84 }}>{label}</div>
+      <div style={{ fontSize: 14, fontWeight: 800 }}>{value}</div>
+    </div>
+  );
+}
+
+function MetricCard({ title, value, subtitle, accent = colours.purple }) {
+  return (
+    <div
+      style={{
+        ...cardStyle,
+        padding: 18,
+        position: "relative",
+        overflow: "hidden",
+        minHeight: 132,
+      }}
+    >
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          background: `linear-gradient(180deg, ${accent}12 0%, rgba(255,255,255,0) 76%)`,
+          pointerEvents: "none",
+        }}
+      />
+      <div style={{ position: "relative" }}>
+        <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 0.2, color: colours.muted, textTransform: "uppercase" }}>{title}</div>
+        <div style={{ fontSize: 30, fontWeight: 900, color: colours.text, marginTop: 10 }}>{value}</div>
+        <div style={{ fontSize: 12, color: colours.muted, marginTop: 10, lineHeight: 1.5 }}>{subtitle}</div>
+      </div>
+    </div>
+  );
+}
+
+function ActionHubCard({ icon, title, description, buttonLabel, onClick, tone = colours.purple }) {
+  return (
+    <div
+      style={{
+        ...cardStyle,
+        padding: 20,
+        display: "grid",
+        gap: 12,
+        border: `1px solid ${colours.border}`,
+        minHeight: 196,
+      }}
+    >
+      <div
+        style={{
+          width: 48,
+          height: 48,
+          borderRadius: 14,
+          background: `${tone}18`,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: 24,
+        }}
+      >
+        {icon}
+      </div>
+      <div>
+        <div style={{ fontSize: 17, fontWeight: 800, color: colours.text }}>{title}</div>
+        <div style={{ fontSize: 13, color: colours.muted, lineHeight: 1.6, marginTop: 6 }}>{description}</div>
+      </div>
+      <div style={{ marginTop: "auto" }}>
+        <button onClick={onClick} style={{ ...buttonPrimary, background: tone, width: "100%" }}>
+          {buttonLabel}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function MiniBarChart({ data, valueKey = "value", labelKey = "label", height = 80, accent = colours.teal }) {
+  const max = Math.max(...(data || []).map((d) => safeNumber(d?.[valueKey])), 1);
+  if (!data || !data.length) return <div style={{ fontSize: 12, color: colours.muted }}>No data yet.</div>;
+  return (
+    <div style={{ display: "flex", alignItems: "flex-end", gap: 4, height, paddingTop: 4 }}>
+      {data.map((d, i) => {
+        const val = safeNumber(d?.[valueKey]);
+        const barH = max > 0 ? Math.max(4, (val / max) * (height - 20)) : 4;
+        return (
+          <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+            <div style={{ fontSize: 9, color: colours.muted, fontWeight: 700, textAlign: "center", whiteSpace: "nowrap", overflow: "hidden", maxWidth: "100%", textOverflow: "ellipsis" }}>
+              {currency ? currency(val) : val}
+            </div>
+            <div style={{ width: "100%", height: barH, borderRadius: "4px 4px 0 0", background: `linear-gradient(180deg, ${accent} 0%, ${colours.navy} 100%)`, minHeight: 4 }} />
+            <div style={{ fontSize: 9, color: colours.muted, textAlign: "center", whiteSpace: "nowrap", overflow: "hidden", maxWidth: "100%", textOverflow: "ellipsis" }}>
+              {d?.[labelKey]}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+
+function TrendBarsCard({ title, subtitle, data, valueKey, labelKey = "label", formatValue = (value) => value, accent = colours.teal, emptyText = "No data yet." }) {
+  const max = Math.max(...(data || []).map((item) => safeNumber(item?.[valueKey])), 0);
+  return (
+    <SectionCard title={title} right={<div style={{ fontSize: 12, color: colours.muted }}>{subtitle}</div>}>
+      {data && data.length ? (
+        <div style={{ display: "grid", gap: 14 }}>
+          {data.map((item) => {
+            const value = safeNumber(item?.[valueKey]);
+            const width = max > 0 ? Math.max(10, (value / max) * 100) : 0;
+            return (
+              <div key={`${item?.[labelKey]}-${value}`} style={{ display: "grid", gap: 8 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "center" }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: colours.text }}>{item?.[labelKey]}</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: colours.text }}>{formatValue(value, item)}</div>
+                </div>
+                <div style={{ height: 12, borderRadius: 999, background: colours.bg, overflow: "hidden" }}>
+                  <div style={{ width: `${width}%`, height: "100%", borderRadius: 999, background: `linear-gradient(90deg, ${accent} 0%, ${colours.purple} 100%)` }} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div style={{ fontSize: 14, color: colours.muted }}>{emptyText}</div>
+      )}
+    </SectionCard>
+  );
+}
+
+function WaterfallCard({ title, rows }) {
+  const max = Math.max(...(rows || []).map((row) => Math.abs(safeNumber(row?.value))), 0);
+  return (
+    <SectionCard title={title}>
+      <div style={{ display: "grid", gap: 14 }}>
+        {(rows || []).map((row) => {
+          const value = safeNumber(row?.value);
+          const width = max > 0 ? Math.max(8, (Math.abs(value) / max) * 100) : 0;
+          const background = value >= 0 ? `linear-gradient(90deg, ${colours.teal} 0%, ${colours.navy} 100%)` : `linear-gradient(90deg, #F59E0B 0%, ${colours.purple} 100%)`;
+          return (
+            <div key={row.label} style={{ display: "grid", gap: 8 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 14 }}>
+                <div style={{ fontWeight: 700, color: colours.text }}>{row.label}</div>
+                <div style={{ fontWeight: 800, color: colours.text }}>{currency(value)}</div>
+              </div>
+              <div style={{ display: "flex", justifyContent: value >= 0 ? "flex-start" : "flex-end" }}>
+                <div style={{ width: `${width}%`, minWidth: width ? 54 : 0, height: 12, borderRadius: 999, background }} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </SectionCard>
+  );
+}
+
+function ActivityListCard({ title, rows, emptyText = "No recent activity yet." }) {
+  return (
+    <SectionCard title={title}>
+      {rows && rows.length ? (
+        <div style={{ display: "grid", gap: 12 }}>
+          {rows.map((row) => (
+            <div
+              key={`${row.type}-${row.label}-${row.date}`}
+              style={{
+                display: "grid",
+                gridTemplateColumns: "auto 1fr auto",
+                gap: 12,
+                alignItems: "center",
+                padding: 14,
+                borderRadius: 16,
+                background: colours.bg,
+                border: `1px solid ${colours.border}`,
+              }}
+            >
+              <div
+                style={{
+                  width: 12,
+                  height: 12,
+                  borderRadius: 999,
+                  background: row.type === "Expense" ? colours.purple : colours.teal,
+                }}
+              />
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: colours.text }}>{row.label}</div>
+                <div style={{ fontSize: 12, color: colours.muted, marginTop: 2 }}>{row.caption}</div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontSize: 14, fontWeight: 800, color: colours.text }}>{row.value}</div>
+                <div style={{ fontSize: 12, color: colours.muted, marginTop: 2 }}>{row.date}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div style={{ fontSize: 14, color: colours.muted }}>{emptyText}</div>
+      )}
+    </SectionCard>
+  );
+}
+
+function EmptyState({ icon, title, message, action }) {
+  return (
+    <div style={{
+      display: "flex", flexDirection: "column", alignItems: "center",
+      justifyContent: "center", padding: "56px 24px", textAlign: "center",
+    }}>
+      <div style={{ fontSize: 48, marginBottom: 16 }}>{icon}</div>
+      <div style={{ fontSize: 18, fontWeight: 700, color: colours.text, marginBottom: 8 }}>{title}</div>
+      <div style={{ fontSize: 14, color: colours.muted, lineHeight: 1.7, maxWidth: 360, marginBottom: action ? 24 : 0 }}>{message}</div>
+      {action && (
+        <button onClick={action.onClick} style={{
+          background: colours.purple, color: "#fff", border: "none",
+          borderRadius: 12, padding: "12px 24px", fontSize: 14,
+          fontWeight: 700, cursor: "pointer",
+        }}>
+          {action.label}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function DataTable({ columns, rows, emptyState }) {
+  if (!rows.length && emptyState) {
+    return <EmptyState {...emptyState} />;
+  }
+  return (
+    <div style={{ overflowX: "auto" }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 780 }}>
+        <thead>
+          <tr style={{ background: "#F8FAFC" }}>
+            {columns.map((col) => (
+              <th
+                key={col.key}
+                style={{
+                  textAlign: "left",
+                  padding: 12,
+                  fontSize: 13,
+                  color: colours.muted,
+                  borderBottom: `1px solid ${colours.border}`,
+                }}
+              >
+                {col.label}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, idx) => (
+            <tr key={row.id || idx}>
+              {columns.map((col) => (
+                <td
+                  key={col.key}
+                  style={{
+                    padding: 12,
+                    borderBottom: `1px solid ${colours.border}`,
+                    fontSize: 14,
+                    color: colours.text,
+                    verticalAlign: "top",
+                  }}
+                >
+                  {col.render ?
+                    col.render(row[col.key], row) : row[col.key]}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function ExpenseTypeModal({
+  isOpen,
+  onClose,
+  expenseTypeStep,
+  setExpenseTypeStep,
+  expenseTypeSelection,
+  setExpenseTypeSelection,
+  expenseWorkType,
+  setExpenseWorkType,
+  expenseCategorySelection,
+  setExpenseCategorySelection,
+  expenseWorkTypes,
+  setExpenseWorkTypes,
+  searchExpenseCategory,
+  setSearchExpenseCategory,
+  expenseForm,
+  setExpenseForm,
+  receiptFile,
+  setReceiptFile,
+  onNext,
+  toast = { warning: () => {} },
+}) {
+  if (!isOpen) return null;
+  const filteredCategories = expenseCategories.filter((item) =>
+    item.toLowerCase().includes(searchExpenseCategory.toLowerCase())
+  );
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.28)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 2000,
+        padding: 16,
+      }}
+    >
+      <div
+        style={{
+          width: "100%",
+          maxWidth: 500,
+          background: colours.white,
+          borderRadius: 8,
+          boxShadow: "0 20px 40px rgba(0,0,0,0.2)",
+          overflow: "hidden",
+        }}
+      >
+        <div
+          style={{
+            background: colours.navy,
+            color: "#fff",
+            padding: "16px 18px",
+            fontWeight: 700,
+            fontSize: 20,
+          }}
+        >
+          Select Expense type
+        </div>
+
+        <div style={{ padding: 16 }}>
+          {expenseTypeStep === 1 && (
+            <div style={{ display: "grid", gap: 16 }}>
+              <div>
+                <label style={labelStyle}>What kind of Expense is this? *</label>
+                <select
+                  style={inputStyle}
+                  value={expenseTypeSelection}
+                  onChange={(e) => setExpenseTypeSelection(e.target.value)}
+                >
+                  <option value="">Select...</option>
+                  <option value="Business Expense">Business Expense</option>
+                  <option value="Client Reimbursement">Client Reimbursement</option>
+                </select>
+              </div>
+            </div>
+          )}
+
+          {expenseTypeStep === 2 && (
+            <div style={{ display: "grid", gap: 16 }}>
+              <div>
+                <label style={labelStyle}>What kind of Expense is this? *</label>
+                <select
+                  style={inputStyle}
+                  value={expenseTypeSelection}
+                  onChange={(e) => setExpenseTypeSelection(e.target.value)}
+                >
+                  <option value="Business Expense">Business Expense</option>
+                  <option value="Client Reimbursement">Client Reimbursement</option>
+                </select>
+              </div>
+
+              <div>
+                <label style={labelStyle}>Work type for this expense? *</label>
+                <select
+                  style={inputStyle}
+                  value={expenseWorkType}
+                  onChange={(e) => setExpenseWorkType(e.target.value)}
+                >
+                  {expenseWorkTypes.map((item) => (
+                    <option key={item} value={item}>
+                      {item}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                <button
+                  style={{ ...buttonSecondary, padding: "8px 12px" }}
+                  onClick={() => {
+                    const newType = window.prompt("Add new work type");
+                    if (newType && newType.trim()) {
+                      const clean = newType.trim();
+                      if (!expenseWorkTypes.includes(clean)) {
+                        setExpenseWorkTypes((prev) => [...prev, clean]);
+                      }
+                      setExpenseWorkType(clean);
+                    }
+                  }}
+                >
+                  Add new work type +
+                </button>
+              </div>
+
+              <div>
+                <label style={labelStyle}>Expense category *</label>
+                <input
+                  style={inputStyle}
+                  placeholder="Search category"
+                  value={searchExpenseCategory}
+                  onChange={(e) => setSearchExpenseCategory(e.target.value)}
+                />
+                <div
+                  style={{
+                    border: `1px solid ${colours.border}`,
+                    borderTop: "none",
+                    maxHeight: 180,
+                    overflowY: "auto",
+                    borderBottomLeftRadius: 10,
+                    borderBottomRightRadius: 10,
+                  }}
+                >
+                  {filteredCategories.map((item) => (
+                    <div
+                      key={item}
+                      onClick={() => setExpenseCategorySelection(item)}
+                      style={{
+                        padding: 12,
+                        cursor: "pointer",
+                        background:
+                          expenseCategorySelection === item ?
+                            colours.lightTeal : colours.white,
+                        borderBottom: `1px solid ${colours.border}`,
+                      }}
+                    >
+                      {item}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {expenseTypeStep === 3 && (
+            <div style={{ display: "grid", gap: 16 }}>
+              <div>
+                <label style={labelStyle}>Upload receipt</label>
+                <input
+                  type="file"
+                  accept="image/*,.pdf"
+                  style={inputStyle}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    setReceiptFile(file);
+                    setExpenseForm((prev) => ({ ...prev,
+                      receiptFileName: file.name,
+                    }));
+                  }}
+                />
+              </div>
+
+              {expenseForm.receiptFileName ? (
+                <div style={{ fontSize: 14, color: colours.muted }}>
+                  Uploaded: {expenseForm.receiptFileName}
+                </div>
+              ) : <EmptyState icon="📁" title="No documents yet" message="Upload receipts, contracts and generated PDFs here. All documents are stored securely against your account." />}
+
+              {receiptFile ? (
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    style={buttonSecondary}
+                    onClick={() => {
+                      const previewUrl = URL.createObjectURL(receiptFile);
+                      const previewWindow = window.open(previewUrl, "_blank");
+                      setTimeout(() => URL.revokeObjectURL(previewUrl), 60000);
+                      if (!previewWindow) {
+                        toast.warning("Preview popup was blocked by your browser.");
+                      }
+                    }}
+                  >
+                    Preview Receipt
+                  </button>
+
+                  <button
+                    type="button"
+                    style={buttonSecondary}
+                    onClick={() => {
+                      setReceiptFile(null);
+                      setExpenseForm((prev) => ({ ...prev,
+                        receiptFileName: "",
+                        receiptUrl: "",
+                      }));
+                    }}
+                  >
+                    Remove
+                  </button>
+                </div>
+              ) : <EmptyState icon="📁" title="No documents yet" message="Upload receipts, contracts and generated PDFs here. All documents are stored securely against your account." />}
+            </div>
+          )}
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            gap: 12,
+            padding: 16,
+            borderTop: `1px solid ${colours.border}`,
+          }}
+        >
+          <button
+            style={{ ...buttonSecondary, flex: 1 }}
+            onClick={() => {
+              if (expenseTypeStep === 3) {
+                setExpenseTypeStep(2);
+              } else if (expenseTypeStep === 2) {
+                setExpenseTypeStep(1);
+              } else {
+                onClose();
+              }
+            }}
+          >
+            Cancel
+          </button>
+
+          <button style={{ ...buttonPrimary, flex: 1 }} onClick={onNext}>
+            Next
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function IncomeSourceModal({
+  isOpen,
+  onClose,
+  incomeSourceForm,
+  setIncomeSourceForm,
+  onSave,
+}) {
+  if (!isOpen) return null;
+  const selectedType = incomeSourceForm.incomeType;
+  const showHelp = selectedType === "Casual employment";
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.28)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 2000,
+        padding: 16,
+      }}
+    >
+      <div
+        style={{
+          width: "100%",
+          maxWidth: 520,
+          background: colours.white,
+          borderRadius: 8,
+          boxShadow: "0 20px 40px rgba(0,0,0,0.2)",
+          overflow: "hidden",
+        }}
+      >
+        <div style={{ padding: 18 }}>
+          <div
+            style={{
+              fontWeight: 800,
+              fontSize: 18,
+              color: colours.text,
+              marginBottom: 16,
+            }}
+          >
+            Create new Income Source
+          </div>
+
+          <div style={{ display: "grid", gap: 16 }}>
+            <div>
+              <label style={labelStyle}>Income Source *</label>
+              <input
+                style={inputStyle}
+                value={incomeSourceForm.name}
+                onChange={(e) =>
+                  setIncomeSourceForm((prev) => ({ ...prev, name: e.target.value }))
+                }
+              />
+            </div>
+
+            <div>
+              <label style={labelStyle}>Income type *</label>
+              <select
+                style={inputStyle}
+                value={incomeSourceForm.incomeType}
+                onChange={(e) =>
+                  setIncomeSourceForm((prev) => ({ ...prev, incomeType: e.target.value }))
+                }
+              >
+                <option value="">Select...</option>
+                {incomeTypeOptions.map((item) => (
+                  <option key={item} value={item}>
+                    {item}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {showHelp && (
+              <div
+                style={{
+                  background: "#EEF4FF",
+                  color: "#224C9A",
+                  borderRadius: 8,
+                  padding: 14,
+                  fontSize: 14,
+                  lineHeight: 1.45,
+                }}
+              >
+                Casual income should not include any salary, self-employed or sole trader income.
+                Your casual employment income tax rate will impact the tax you need to pay on your
+                self-employed income.
+              </div>
+            )}
+
+            <div>
+              <label style={labelStyle}>Before tax I will earn *</label>
+              <input
+                style={inputStyle}
+                placeholder="$ 0.00"
+                value={incomeSourceForm.beforeTax}
+                onChange={(e) =>
+                  setIncomeSourceForm((prev) => ({ ...prev,
+                    beforeTax: e.target.value.replace(/[^0-9.]/g, ""),
+                  }))
+                }
+              />
+            </div>
+
+            <div>
+              <label style={labelStyle}>Every *</label>
+              <select
+                style={inputStyle}
+                value={incomeSourceForm.frequency}
+                onChange={(e) =>
+                  setIncomeSourceForm((prev) => ({ ...prev, frequency: e.target.value }))
+                }
+              >
+                <option value="">Select...</option>
+                {incomeFrequencyOptions.map((item) => (
+                  <option key={item} value={item}>
+                    {item}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14 }}>
+              <input
+                type="checkbox"
+                checked={incomeSourceForm.startedAfterDate}
+                onChange={(e) =>
+                  setIncomeSourceForm((prev) => ({ ...prev,
+                    startedAfterDate: e.target.checked,
+                  }))
+                }
+              />
+              I started earning this income after 1 Jul 2025
+            </label>
+
+            <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14 }}>
+              <input
+                type="checkbox"
+                checked={incomeSourceForm.hasEndDate}
+                onChange={(e) =>
+                  setIncomeSourceForm((prev) => ({ ...prev,
+                    hasEndDate: e.target.checked,
+                  }))
+                }
+              />
+              This Income Source has a fixed end date
+            </label>
+          </div>
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            gap: 12,
+            padding: 16,
+            borderTop: `1px solid ${colours.border}`,
+          }}
+        >
+          <button style={{ ...buttonSecondary, flex: 1 }} onClick={onClose}>
+            Cancel
+          </button>
+          <button style={{ ...buttonPrimary, flex: 1 }} onClick={onSave}>
+            Save
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+// ── Document builder functions (top-level for correct scope access) ──────────
+
+function buildQuoteHtml(quote, options = {}, ctx = {}) {
+  const { profile, clients } = ctx;
+  const getClientById = (id) => clients.find((c) => c.id === safeNumber(id));
+  const clientIsGstExempt = (id) => Boolean(getClientById(id)?.outsideAustraliaOrGstExempt);
+  const gstAppliesToClient = (id) => Boolean(profile.gstRegistered) && !clientIsGstExempt(id);
+  const getDocumentBusinessName = () => profile.hideLegalNameOnDocs || !profile.legalBusinessName ? profile.businessName : profile.legalBusinessName;
+  const getDocumentAddress = () => profile.hideAddressOnDocs ? "" : profile.address || "";
+const { allowEmail = false } = options;
+const qClient = getClientById(quote.clientId);
+const currencyCode = quote.currencyCode || getClientCurrencyCode(qClient);
+const money = (value) => formatCurrencyByCode(value, currencyCode);
+const adjustments = calculateAdjustmentValues({
+  subtotal: safeNumber(quote.subtotal),
+  total: safeNumber(quote.total),
+  client: qClient,
+  profile,
+});
+const gstStatus =
+  quote.gstStatus ||
+  (clientIsGstExempt(quote.clientId)
+    ? "GST not applicable"
+    : safeNumber(quote.gst) > 0
+      ? "GST applies"
+      : "GST free");
+const businessName = escapeHtml(getDocumentBusinessName());
+const businessAddress = escapeHtml(getDocumentAddress());
+const clientName = escapeHtml(qClient?.name || "");
+const businessEmail = escapeHtml(profile.email || "");
+const businessPhone = escapeHtml(profile.phone || "");
+const businessAbn = escapeHtml(profile.abn || "");
+const clientDetails =
+  qClient?.includeAddressDetails && qClient?.addressDetails
+    ? `<div style="margin-top:6px; color:#555;">${nl2br(qClient.addressDetails)}</div>`
+    : "";
+
+return `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Quote Preview</title>
+<style>
+body { font-family: Arial; padding:40px; color:#14202B; }
+.header { display:flex; justify-content:space-between; border-bottom:1px solid #ddd; padding-bottom:20px; }
+.title { font-size:32px; font-weight:900; color:#6A1B9A; }
+.right { text-align:right; font-size:14px; }
+table { width:100%; border-collapse:collapse; margin-top:24px; }
+th, td { padding:10px; border-bottom:1px solid #eee; }
+th { text-align:left; color:#667085; }
+.totals { width:360px; margin-left:auto; margin-top:20px; }
+.totals div { display:flex; justify-content:space-between; padding:6px 0; }
+.total { font-weight:800; font-size:18px; color:#006D6D; }
+.footer { margin-top:30px; display:flex; justify-content:space-between; font-size:12px; color:#666; }
+.print-toolbar { margin-bottom: 24px; display:flex !important; justify-content:space-between; align-items:center; gap:16px; }
+.toolbar-actions { display:flex; gap:10px; flex-wrap:wrap; }
+.preview-status { font-size:13px; color:#64748B; }
+.print-button { background:#6A1B9A; color:#fff; border:none; border-radius:10px; padding:10px 16px; font-weight:700; cursor:pointer; text-decoration:none; display:inline-block; }
+.email-button { background:#006D6D; color:#fff; border:none; border-radius:10px; padding:10px 16px; font-weight:700; cursor:pointer; }
+@media print {
+  .print-toolbar { display:none !important; }
+  body { padding: 0; }
+}
+</style>
+</head>
+<body>
+
+<div class="print-toolbar">
+<div id="preview-email-status" class="preview-status"></div>
+<div class="toolbar-actions">
+  ${allowEmail ? `<button id="preview-email-button" class="email-button" onclick="window.opener && window.opener.sendQuoteFromPreview && window.opener.sendQuoteFromPreview(${JSON.stringify(quote.id)}, window)">Email Quote</button>` : ""}
+  <a href="javascript:void(0)" class="print-button" onclick="window.print()">Print / Download PDF</a>
+</div>
+</div>
+
+<div class="header">
+<div>
+  ${profile.logoDataUrl
+    ? `<div style="margin-bottom:12px;"><img src="${profile.logoDataUrl}" alt="Logo" style="max-height:${LOGO_DOCUMENT_MAX_HEIGHT}px; max-width:${LOGO_DOCUMENT_MAX_WIDTH}px; object-fit:contain;" /></div>`
+    : ""
+  }
+  <div class="title">QUOTE</div>
+  <div style="margin-top:8px; font-weight:700;">${businessName}</div>
+  <div style="font-size:13px; color:#555;">${businessAddress || ""}</div>
+  <div style="font-size:13px; color:#555;">${businessEmail}${quote.hidePhoneNumber ? "" : ` | ${businessPhone}`}</div>
+  <div style="font-size:13px; color:#555;">ABN: ${businessAbn}</div>
+</div>
+
+<div class="right">
+  <div><strong>Quote ref:</strong> ${quote.quoteNumber || ""}</div>
+  <div><strong>Quote date:</strong> ${formatDateAU(quote.quoteDate)}</div>
+  <div><strong>Expiry date:</strong> ${formatDateAU(quote.expiryDate)}</div>
+</div>
+</div>
+
+<div style="margin-top:20px; font-weight:700;">${clientName}</div>
+${clientDetails}
+
+<table>
+<thead>
+  <tr>
+    <th>Description</th>
+    <th>Qty</th>
+    <th style="text-align:right">Unit Price</th>
+    <th style="text-align:right">GST</th>
+    <th style="text-align:right">Total (excl. GST)</th>
+  </tr>
+</thead>
+<tbody>
+  ${(quote.lineItems && quote.lineItems.length > 0
+    ? quote.lineItems
+    : [{ description: quote.description || "Professional services", quantity: quote.quantity || 1, unitPrice: safeNumber(quote.subtotal) / Math.max(1, safeNumber(quote.quantity || 1)), rowGst: quote.gst, rowTotal: quote.total }]
+  ).map((item) => {
+    const qty = safeNumber(item.quantity || item.qty || 1);
+    const unit = safeNumber(item.unitPrice || item.unit || 0);
+    const rowSub = unit * qty;
+    const rowGst = safeNumber(item.rowGst != null ? item.rowGst : ((item.gstType || "GST on Income (10%)") === "GST on Income (10%)" ? rowSub * 0.1 : 0));
+    return `<tr>
+    <td>${escapeHtml(item.description || "Service")}</td>
+    <td>${qty}</td>
+    <td style="text-align:right">${money(unit)}</td>
+    <td style="text-align:right">${money(rowGst)}</td>
+    <td style="text-align:right">${money(rowSub)}</td>
+  </tr>`;
+  }).join("")}
+</tbody>
+</table>
+
+<div class="totals">
+<div><span>Subtotal (excl GST):</span><span>${money(quote.subtotal)}</span></div>
+<div><span>Total GST:</span><span>${money(quote.gst)}</span></div>
+<div><span>GST status:</span><span>${gstStatus}</span></div>
+<div><span>Less fees:</span><span>${money(adjustments.feeAmount)}</span></div>
+<div><span>Less tax withheld:</span><span>${money(adjustments.taxWithheld)}</span></div>
+<div class="total"><span>Total estimate:</span><span>${money(quote.total)}</span></div>
+<div class="total"><span>Net expected:</span><span>${money(adjustments.netExpected)}</span></div>
+</div>
+
+<div class="footer">
+<div>For any queries relating to this quote please contact ${profile.businessName}</div>
+<div>Private & Confidential</div>
+</div>
+
+</body>
+</html>`;
+}
+
+function buildQuoteEmailHtml(quote, ctx = {}) {
+  const { profile, clients } = ctx;
+  const getClientById = (id) => clients.find((c) => c.id === safeNumber(id));
+  const clientIsGstExempt = (id) => Boolean(getClientById(id)?.outsideAustraliaOrGstExempt);
+  const gstAppliesToClient = (id) => Boolean(profile.gstRegistered) && !clientIsGstExempt(id);
+  const getDocumentBusinessName = () => profile.hideLegalNameOnDocs || !profile.legalBusinessName ? profile.businessName : profile.legalBusinessName;
+  const getDocumentAddress = () => profile.hideAddressOnDocs ? "" : profile.address || "";
+const qClient = getClientById(quote.clientId);
+const currencyCode = quote.currencyCode || getClientCurrencyCode(qClient);
+const money = (value) => formatCurrencyByCode(value, currencyCode);
+const businessName = escapeHtml(getDocumentBusinessName());
+const businessAddress = escapeHtml(getDocumentAddress());
+const clientName = escapeHtml(qClient?.name || "");
+const businessEmail = escapeHtml(profile.email || "");
+const businessPhone = escapeHtml(profile.phone || "");
+const businessAbn = escapeHtml(profile.abn || "");
+const clientDetails =
+  qClient?.includeAddressDetails && qClient?.addressDetails
+    ? `<div style="margin-top:6px; color:#475569;">${nl2br(qClient.addressDetails)}</div>`
+    : "";
+const notesHtml = quote.comments
+  ? `<div style="margin-top:20px; padding:16px; background:#F8FAFC; border:1px solid #E2E8F0; border-radius:12px;">${nl2br(quote.comments)}</div>`
+  : "";
+const quoteLineItems = (quote.lineItems && quote.lineItems.length > 0)
+  ? quote.lineItems
+  : [{ description: quote.description || "Professional services", quantity: quote.quantity || 1, unitPrice: safeNumber(quote.subtotal) / Math.max(1, safeNumber(quote.quantity || 1)), rowGst: quote.gst, rowTotal: quote.total }];
+
+return `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Quote ${quote.quoteNumber || ""}</title>
+</head>
+<body style="margin:0; padding:24px; background:#F8FAFC; font-family:Arial, sans-serif; color:#14202B;">
+  <div style="max-width:760px; margin:0 auto; background:#FFFFFF; border:1px solid #E2E8F0; border-radius:18px; padding:28px;">
+    ${profile.logoDataUrl
+      ? `<div style="margin-bottom:16px;"><img src="${profile.logoDataUrl}" alt="Logo" style="max-height:${LOGO_PREVIEW_MAX_HEIGHT}px; max-width:${LOGO_PREVIEW_MAX_WIDTH}px; object-fit:contain;" /></div>`
+      : ""
+    }
+    <div style="display:flex; justify-content:space-between; gap:16px; flex-wrap:wrap; border-bottom:1px solid #E2E8F0; padding-bottom:18px;">
+      <div>
+        <div style="font-size:30px; font-weight:900; color:#6A1B9A;">QUOTE</div>
+        <div style="margin-top:8px; font-weight:700;">${businessName}</div>
+        <div style="font-size:13px; color:#475569; margin-top:4px;">${businessAddress || ""}</div>
+        <div style="font-size:13px; color:#475569; margin-top:4px;">${businessEmail}${quote.hidePhoneNumber ? "" : ` | ${businessPhone}`}</div>
+        <div style="font-size:13px; color:#475569; margin-top:4px;">ABN: ${businessAbn}</div>
+      </div>
+      <div style="text-align:right; font-size:14px; color:#14202B;">
+        <div><strong>Quote ref:</strong> ${quote.quoteNumber || ""}</div>
+        <div style="margin-top:6px;"><strong>Quote date:</strong> ${formatDateAU(quote.quoteDate)}</div>
+        <div style="margin-top:6px;"><strong>Expiry date:</strong> ${formatDateAU(quote.expiryDate)}</div>
+      </div>
+    </div>
+
+    <div style="margin-top:20px;">
+      <div style="font-weight:700;">${clientName}</div>
+      ${clientDetails}
+    </div>
+
+    <table style="width:100%; border-collapse:collapse; margin-top:24px;">
+      <thead>
+        <tr>
+          <th style="text-align:left; padding:10px; border-bottom:1px solid #E2E8F0; color:#64748B;">Description</th>
+          <th style="text-align:left; padding:10px; border-bottom:1px solid #E2E8F0; color:#64748B;">Qty</th>
+          <th style="text-align:right; padding:10px; border-bottom:1px solid #E2E8F0; color:#64748B;">Unit Price</th>
+          <th style="text-align:right; padding:10px; border-bottom:1px solid #E2E8F0; color:#64748B;">GST</th>
+          <th style="text-align:right; padding:10px; border-bottom:1px solid #E2E8F0; color:#64748B;">Total (excl. GST)</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${quoteLineItems.map((item) => {
+          const qty = safeNumber(item.quantity || item.qty || 1);
+          const unit = safeNumber(item.unitPrice || item.unit || 0);
+          const rowSub = unit * qty;
+          const rowGst = safeNumber(item.rowGst != null ? item.rowGst : ((item.gstType || "GST on Income (10%)") === "GST on Income (10%)" ? rowSub * 0.1 : 0));
+          return `<tr>
+          <td style="padding:10px; border-bottom:1px solid #E2E8F0;">${escapeHtml(item.description || "Professional services")}</td>
+          <td style="padding:10px; border-bottom:1px solid #E2E8F0;">${qty}</td>
+          <td style="padding:10px; border-bottom:1px solid #E2E8F0; text-align:right;">${money(unit)}</td>
+          <td style="padding:10px; border-bottom:1px solid #E2E8F0; text-align:right;">${money(rowGst)}</td>
+          <td style="padding:10px; border-bottom:1px solid #E2E8F0; text-align:right;">${money(rowSub)}</td>
+        </tr>`;
+        }).join("")}
+      </tbody>
+    </table>
+
+    <div style="max-width:360px; margin:24px 0 0 auto;">
+      <div style="display:flex; justify-content:space-between; padding:6px 0;"><span>Subtotal (excl GST):</span><span>${money(quote.subtotal)}</span></div>
+      <div style="display:flex; justify-content:space-between; padding:6px 0;"><span>Total GST:</span><span>${money(quote.gst)}</span></div>
+      <div style="display:flex; justify-content:space-between; padding:6px 0; font-weight:800; color:#006D6D;"><span>Total estimate:</span><span>${money(quote.total)}</span></div>
+    </div>
+
+    ${notesHtml}
+
+    <div style="margin-top:24px; font-size:12px; color:#64748B; line-height:1.6;">
+      This is a quote only and not a tax invoice.
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
+function buildInvoiceHtml(invoice, stripeCheckoutUrl = "", options = {}, ctx = {}) {
+  const { profile, clients } = ctx;
+  const getClientById = (id) => clients.find((c) => c.id === safeNumber(id));
+  const clientIsGstExempt = (id) => Boolean(getClientById(id)?.outsideAustraliaOrGstExempt);
+  const gstAppliesToClient = (id) => Boolean(profile.gstRegistered) && !clientIsGstExempt(id);
+  const getDocumentBusinessName = () => profile.hideLegalNameOnDocs || !profile.legalBusinessName ? profile.businessName : profile.legalBusinessName;
+  const getDocumentAddress = () => profile.hideAddressOnDocs ? "" : profile.address || "";
+const { allowEmail = false } = options;
+const previewClient = getClientById(invoice.clientId);
+const currencyCode = invoice.currencyCode || getClientCurrencyCode(previewClient);
+const money = (value) => formatCurrencyByCode(value, currencyCode);
+const feeAmount =
+  invoice.feeAmount != null
+    ? safeNumber(invoice.feeAmount)
+    : calculateAdjustmentValues({
+      subtotal: safeNumber(invoice.subtotal),
+      total: safeNumber(invoice.total),
+      client: previewClient,
+      profile,
+    }).feeAmount;
+const taxWithheld =
+  invoice.taxWithheld != null
+    ? safeNumber(invoice.taxWithheld)
+    : calculateAdjustmentValues({
+      subtotal: safeNumber(invoice.subtotal),
+      total: safeNumber(invoice.total),
+      client: previewClient,
+      profile,
+    }).taxWithheld;
+const netExpected =
+  invoice.netExpected != null
+    ? safeNumber(invoice.netExpected)
+    : calculateAdjustmentValues({
+      subtotal: safeNumber(invoice.subtotal),
+      total: safeNumber(invoice.total),
+      client: previewClient,
+      profile,
+    }).netExpected;
+const gstStatus =
+  invoice.gstStatus ||
+  (clientIsGstExempt(invoice.clientId)
+    ? "GST not applicable"
+    : safeNumber(invoice.gst) > 0
+      ? "GST applies"
+      : "GST free");
+const purchaseOrderReference = escapeHtml(invoice.purchaseOrderReference || "");
+const purchaseOrderBlock =
+  previewClient?.hasPurchaseOrder && purchaseOrderReference
+    ? `<div style="margin-top:10px; font-size:14px; color:#555;"><strong>PO / Reference:</strong> ${purchaseOrderReference}</div>`
+    : "";
+const businessName = escapeHtml(getDocumentBusinessName());
+const businessAddress = escapeHtml(getDocumentAddress());
+const clientName = escapeHtml(previewClient?.name || "");
+const clientEmail = escapeHtml(previewClient?.email || "");
+const businessEmail = escapeHtml(profile.email || "");
+const businessPhone = escapeHtml(profile.phone || "");
+const businessAbn = escapeHtml(profile.abn || "");
+const paymentReference = escapeHtml(invoice.paymentReference || invoice.invoiceNumber || "");
+
+const clientDetails =
+  previewClient?.includeAddressDetails && previewClient?.addressDetails
+    ? `<div style="margin-top:6px; color:#555;">
+          ${nl2br(previewClient.addressDetails)}
+        </div>`
+    : "";
+return `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Invoice Preview</title>
+<style>
+body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
+.header { display:flex; justify-content:space-between; border-bottom:2px solid #eee; padding-bottom:20px; }
+.title { font-size:34px; font-weight:900; color:#6A1B9A; }
+.right { text-align:right; }
+.section { margin-top:24px; }
+table { width:100%; border-collapse: collapse; margin-top:20px; }
+th, td { padding:12px; border-bottom:1px solid #ddd; font-size:14px; }
+th { text-align:left; color:#64748B; }
+.totals { margin-top:20px; width:360px; margin-left:auto; }
+.totals div { display:flex; justify-content:space-between; padding:6px 0; }
+.total { font-size:20px; font-weight:800; color:#006D6D; }
+.payment { margin-top:30px; padding-top:20px; border-top:1px solid #ddd; }
+.footer { margin-top:40px; font-size:12px; color:#666; display:flex; justify-content:space-between; }
+.print-toolbar { margin-bottom: 24px; display:flex !important; justify-content:space-between; align-items:center; gap:16px; }
+.toolbar-actions { display:flex; gap:10px; flex-wrap:wrap; }
+.preview-status { font-size:13px; color:#64748B; }
+.print-button { background:#6A1B9A; color:#fff; border:none; border-radius:10px; padding:10px 16px; font-weight:700; cursor:pointer; text-decoration:none; display:inline-block; }
+.email-button { background:#006D6D; color:#fff; border:none; border-radius:10px; padding:10px 16px; font-weight:700; cursor:pointer; }
+@media print {
+  .print-toolbar { display:none !important; }
+  body { padding: 0; }
+}
+</style>
+</head>
+<body>
+
+<div class="print-toolbar">
+<div id="preview-email-status" class="preview-status"></div>
+<div class="toolbar-actions">
+  ${allowEmail ? `<button id="preview-email-button" class="email-button" onclick="window.opener && window.opener.sendInvoiceFromPreview && window.opener.sendInvoiceFromPreview(${JSON.stringify(invoice.id)}, window)">Email Invoice</button>` : ""}
+  <a href="javascript:void(0)" class="print-button" onclick="window.print()">Print / Download PDF</a>
+</div>
+</div>
+
+<div class="header">
+<div>
+  ${profile.logoDataUrl
+    ? `<div style="margin-bottom:12px;"><img src="${profile.logoDataUrl}" alt="Logo" style="max-height:${LOGO_DOCUMENT_MAX_HEIGHT}px; max-width:${LOGO_DOCUMENT_MAX_WIDTH}px; object-fit:contain;" /></div>`
+    : ""
+  }
+  <div class="title">TAX INVOICE</div>
+  <div style="margin-top:10px; font-weight:700;">${businessName}</div>
+  <div style="font-size:14px; color:#555;">${businessAddress || ""}</div>
+  <div style="font-size:14px; color:#555;">${businessEmail}${invoice.hidePhoneNumber ? "" : ` | ${businessPhone}`}</div>
+  <div style="font-size:14px; color:#555;">ABN: ${businessAbn}</div>
+</div>
+
+<div class="right">
+  <div><strong>Invoice #:</strong> ${invoice.invoiceNumber || ""}</div>
+  <div><strong>Date:</strong> ${formatDateAU(invoice.invoiceDate)}</div>
+  <div><strong>Due:</strong> ${formatDateAU(invoice.dueDate)}</div>
+</div>
+</div>
+
+<div class="section">
+<strong>Billed To:</strong><br/>
+${clientName}<br/>
+${clientEmail}
+${clientDetails}
+${purchaseOrderBlock}
+</div>
+
+<table>
+<thead>
+  <tr>
+    <th>Description</th>
+    <th>Qty</th>
+    <th class="right">Unit Price</th>
+    <th class="right">GST</th>
+    <th class="right">Total</th>
+  </tr>
+</thead>
+<tbody>
+  ${(invoice.lineItems && invoice.lineItems.length > 0
+    ? invoice.lineItems
+    : [{ description: invoice.description || "Professional services", quantity: invoice.quantity || 1, unitPrice: safeNumber(invoice.subtotal) / Math.max(1, safeNumber(invoice.quantity || 1)), rowGst: invoice.gst, rowTotal: invoice.total }]
+  ).map((item) => {
+    const qty = safeNumber(item.quantity || item.qty || 1);
+    const unit = safeNumber(item.unitPrice || item.unit || 0);
+    const rowSub = unit * qty;
+    const rowGst = safeNumber(item.rowGst != null ? item.rowGst : ((item.gstType || "GST on Income (10%)") === "GST on Income (10%)" ? rowSub * 0.1 : 0));
+    const rowTotal = rowSub + rowGst;
+    return `<tr>
+    <td>${escapeHtml(item.description || "Service")}</td>
+    <td>${qty}</td>
+    <td class="right">${money(unit)}</td>
+    <td class="right">${money(rowGst)}</td>
+    <td class="right">${money(rowTotal)}</td>
+  </tr>`;
+  }).join("")}
+</tbody>
+</table>
+
+<div class="totals">
+<div><span>Subtotal (ex GST)</span><span>${money(invoice.subtotal)}</span></div>
+<div><span>GST</span><span>${money(invoice.gst)}</span></div>
+<div><span>GST status</span><span>${gstStatus}</span></div>
+<div><span>Less fees</span><span>${money(feeAmount)}</span></div>
+<div><span>Less tax withheld</span><span>${money(taxWithheld)}</span></div>
+<div class="total"><span>Amount Due</span><span>${money(invoice.total)}</span></div>
+<div class="total"><span>Net expected</span><span>${money(netExpected)}</span></div>
+</div>
+
+<div class="payment">
+<strong>Please make payment to:</strong>
+<div style="margin-top:10px; font-size:14px;">
+  ${profile.bankName ? `<div><strong>Account Name:</strong> ${profile.bankName}</div>` : ""}
+  ${profile.bsb ? `<div><strong>BSB:</strong> ${profile.bsb}</div>` : ""}
+  ${profile.accountNumber ? `<div><strong>Account Number:</strong> ${profile.accountNumber}</div>` : ""}
+  ${profile.payId ? `<div><strong>PayID:</strong> ${profile.payId}</div>` : ""}
+</div>
+<div style="margin-top:10px; font-size:13px; color:#555;">
+  Please use reference: ${paymentReference}
+</div>
+${stripeCheckoutUrl || profile.paypalPaymentLink
+    ? `<div style="margin-top:16px; padding:14px; border:1px solid #E2E8F0; border-radius:12px; background:#F7F6F5;">
+        <div style="font-weight:700; color:#14202B; margin-bottom:8px;">Pay Online</div>
+        <div style="font-size:13px; color:#555; margin-bottom:10px;">Choose your preferred payment method below.</div>
+        ${stripeCheckoutUrl
+      ? `<a href="${stripeCheckoutUrl}" target="_blank" rel="noreferrer" style="display:inline-block; margin-right:10px; background:#6A1B9A; color:#FFFFFF; text-decoration:none; padding:10px 16px; border-radius:10px; font-weight:700;">Pay with Card</a>`
+      : ""
+    }
+        ${profile.paypalPaymentLink
+      ? `<a href="${profile.paypalPaymentLink}" target="_blank" rel="noreferrer" style="display:inline-block; background:#0070BA; color:#FFFFFF; text-decoration:none; padding:10px 16px; border-radius:10px; font-weight:700;">Pay with PayPal</a>`
+      : ""
+    }
+      </div>`
+    : ""
+  }
+</div>
+
+<div class="footer">
+<div>For any queries please contact ${profile.businessName || "Your business"}</div>
+<div>Private & Confidential</div>
+</div>
+
+<script>
+  document.getElementById('print-btn') && document.getElementById('print-btn').addEventListener('click', function() { window.print(); });
+</script>
+</body>
+</html>`;
+}
+
+function openBlobUrlInWindow(w, blob) {
+const url = URL.createObjectURL(blob);
+try {
+  if (w.location.origin === "null") {
+    try {
+      URL.revokeObjectURL(w.location.href);
+    } catch (error) {
+      console.warn("Could not revoke previous preview URL", error);
+    }
+  }
+} catch (error) {
+  console.warn("Could not inspect previous preview URL", error);
+}
+w.location.href = url;
+const revoke = () => {
+  try {
+    URL.revokeObjectURL(url);
+  } catch (error) {
+    console.warn("Could not revoke preview URL", error);
+  }
+};
+try {
+  w.addEventListener("beforeunload", revoke, { once: true });
+} catch (error) {
+  console.warn("Preview cleanup listener failed", error);
+}
+setTimeout(revoke, 60000);
+try {
+  w.focus();
+} catch (error) {
+  console.warn("Preview window focus failed", error);
+}
+}
+
+function writeInvoicePreviewToWindow(w, invoice, stripeCheckoutUrl = "", options = {}, ctx = {}) {
+const html = buildInvoiceHtml(invoice, stripeCheckoutUrl, options, ctx);
+const blob = new Blob([html], { type: "text/html" });
+openBlobUrlInWindow(w, blob);
+}
+
 
 export default function AccountingPortalPrototype() {
   const { toasts, toast, removeToast } = useToast();
@@ -87,7 +2090,6 @@ export default function AccountingPortalPrototype() {
   const [savingClientEdits, setSavingClientEdits] = useState(false);
   const [savingInvoice, setSavingInvoice] = useState(false);
   const [savingInvoiceEdits, setSavingInvoiceEdits] = useState(false);
-  const [emailingRowId, setEmailingRowId] = useState(null);
   const [savingQuote, setSavingQuote] = useState(false);
   const [savingQuoteEdits, setSavingQuoteEdits] = useState(false);
   const [savingExpense, setSavingExpense] = useState(false);
@@ -126,8 +2128,6 @@ export default function AccountingPortalPrototype() {
   const [recurringSelected, setRecurringSelected] = useState([]);
   const recurringShownRef = useRef(false);
   const [quoteWizardStep, setQuoteWizardStep] = useState(1);
-  const [isMobileViewport, setIsMobileViewport] = useState(() => (typeof window !== "undefined" ? window.innerWidth <= 768 : false));
-  const [showMobileWizard, setShowMobileWizard] = useState(false);
   const [activePage, setActivePage] = useState("dashboard");
   const [activeSettingsTab, setActiveSettingsTab] = useState("Profile");
   const [authUser, setAuthUser] = useState(null);
@@ -309,14 +2309,6 @@ export default function AccountingPortalPrototype() {
 
   const [quoteEditorOpen, setQuoteEditorOpen] = useState(false);
   const [quoteEditorForm, setQuoteEditorForm] = useState(null);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return undefined;
-    const onResize = () => setIsMobileViewport(window.innerWidth <= 768);
-    onResize();
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, []);
 
   const [clientEditorOpen, setClientEditorOpen] = useState(false);
   const [clientEditorForm, setClientEditorForm] = useState(null);
@@ -1664,18 +3656,10 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     }
   }
 
-  // Use Gmail-safe fully-inlined HTML builders for the email body.
-  // These use table layouts and inline styles only — no <style> blocks that Gmail strips.
   const emailBodyHtml =
     documentType === "invoice"
-      ? buildInvoiceEmailHtml(emailDocumentRecord, stripeCheckoutUrl || emailDocumentRecord?.stripeCheckoutUrl || "", { profile, clients })
-      : buildQuoteEmailHtmlInline(emailDocumentRecord, { profile, clients });
-
-  // Send only one copy of the HTML to keep payload well under the server's 10 MB limit.
-  // logoDataUrl is already embedded inside the HTML so we don't send it separately.
-  // documentHtml / quoteHtml / invoiceHtml were all duplicates of the same string —
-  // we now send just `html` which is what the server actually uses for the email body.
-  const primaryHtml = emailBodyHtml;
+      ? invoiceHtml
+      : buildQuoteEmailHtml(emailDocumentRecord, { profile, clients });
 
   const payload = {
     to: recipientList,
@@ -1691,13 +3675,15 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     businessEmail: profile?.email || "",
     businessPhone: profile?.phone || "",
     abn: profile?.abn || "",
-    // logoDataUrl intentionally omitted — already embedded in the HTML
+    logoDataUrl: profile?.logoDataUrl || "",
     documentType,
-    html: primaryHtml,
-    // Single canonical copy — avoids tripling payload size
-    documentHtml: primaryHtml,
-    quoteHtml: documentType === "quote" ? primaryHtml : "",
-    invoiceHtml: documentType === "invoice" ? primaryHtml : "",
+    html: emailBodyHtml,
+    documentHtml:
+      documentType === "quote"
+        ? (quoteHtml || emailBodyHtml)
+        : (invoiceHtml || emailBodyHtml),
+    quoteHtml: documentType === "quote" ? (quoteHtml || emailBodyHtml) : "",
+    invoiceHtml: documentType === "invoice" ? (invoiceHtml || emailBodyHtml) : "",
     text: `Please find your ${documentType} attached.`,
     filename: `${documentType}-${emailDocumentRecord?.invoiceNumber || emailDocumentRecord?.quoteNumber || "document"}.pdf`,
     replyTo: profile?.email || "",
@@ -2215,40 +4201,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     try {
       const savedInvoice = await upsertRecordInDatabase(SUPABASE_TABLES.invoices, payload);
       let nextInvoice = savedInvoice;
-      let saveMessage = "Invoice saved to Supabase database. Use Preview to print or download the PDF.";
-
-      const invoiceClient = getClientById(nextInvoice.clientId);
-      const shouldAutoEmailClient = Boolean(
-        invoiceClient?.sendToClient && isValidEmail(invoiceClient?.email)
-      );
-
-      if (shouldAutoEmailClient) {
-        try {
-          const emailResult = await sendSavedDocumentEmail({
-            documentType: "invoice",
-            documentRecord: nextInvoice,
-          });
-
-          if (emailResult?.ok) {
-            const emailedInvoice = {
-              ...nextInvoice,
-              emailedAt: new Date().toISOString(),
-              emailRecipients: emailResult.recipients || [],
-            };
-            nextInvoice = await upsertRecordInDatabase(SUPABASE_TABLES.invoices, emailedInvoice);
-            saveMessage = emailResult.message || "Invoice saved and emailed to client.";
-          } else if (!emailResult?.skipped) {
-            const emailErrorMessage = emailResult?.message || "Invoice email failed after save.";
-            toast.warning(emailErrorMessage);
-            saveMessage = `Invoice saved, but email failed: ${emailErrorMessage}`;
-          }
-        } catch (emailError) {
-          console.error("INVOICE AUTO EMAIL ERROR:", emailError);
-          const emailErrorMessage = emailError?.message || "Invoice email failed after save.";
-          toast.warning(emailErrorMessage);
-          saveMessage = `Invoice saved, but email failed: ${emailErrorMessage}`;
-        }
-      }
+      const saveMessage = "Invoice saved to Supabase database. Use Preview to print or download the PDF.";
 
       setInvoices((prev) => [...prev, nextInvoice]);
       setInvoiceForm((prev) => ({
@@ -2645,16 +4598,6 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     if (!w) return;
     writeQuotePreviewToWindow(w, quote, { allowEmail: true });
     };
-
-    // Expose preview-email handlers on window so the popup can call them via window.opener
-    useEffect(() => {
-      window.sendInvoiceFromPreview = sendInvoiceFromPreview;
-      window.sendQuoteFromPreview = sendQuoteFromPreview;
-      return () => {
-        delete window.sendInvoiceFromPreview;
-        delete window.sendQuoteFromPreview;
-      };
-    }, [invoices, quotes, profile, clients]);
 
     const saveExpense = async () => {
     try {
@@ -3464,7 +5407,6 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       </div>
 
       <div
-        className="sas-stack-mobile"
         style={{
           display: "grid",
           gridTemplateColumns: "minmax(0, 1.4fr) minmax(320px, 0.9fr)",
@@ -3514,6 +5456,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
             { label: "Paid income", value: totals.paidIncome },
             { label: "Less GST payable", value: -totals.gstPayable },
             { label: "Less estimated tax", value: -totals.estimatedTax },
+            { label: "Less tax withheld", value: -totals.totalTaxWithheld },
             { label: "Less platform fees", value: -totals.totalFees },
             { label: "Less expenses", value: -totals.totalExpenses },
             { label: `Less subscription (${currency(totals.monthlySubscriptionCost)}/mo)`, value: -totals.monthlySubscriptionCost },
@@ -3535,7 +5478,6 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       </div>
 
       <div
-        className="sas-stack-mobile"
         style={{
           display: "grid",
           gridTemplateColumns: "minmax(0, 1.2fr) minmax(320px, 0.8fr)",
@@ -3681,7 +5623,10 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
             { label: "Paid income", value: totals.paidIncome },
             { label: "Less GST payable", value: -totals.gstPayable },
             { label: "Less tax reserve", value: -totals.estimatedTax },
+            { label: "Less tax withheld", value: -totals.totalTaxWithheld },
+            { label: "Less platform fees", value: -totals.totalFees },
             { label: "Less expenses", value: -totals.totalExpenses },
+            { label: `Less subscription (${currency(totals.monthlySubscriptionCost)}/mo)`, value: -totals.monthlySubscriptionCost },
             { label: "Safe to spend", value: totals.safeToSpend },
           ]}
         />
@@ -4099,7 +6044,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
         </div>
         <SectionCard title="Create Invoice">
           {/* ── Wizard progress bar ── */}
-          <div style={{ overflowX: isMobileViewport ? "auto" : "visible", paddingBottom: isMobileViewport ? 6 : 0 }}><div style={{ display: "flex", alignItems: "center", marginBottom: 28, minWidth: isMobileViewport ? 620 : 0 }}>
+          <div style={{ display: "flex", alignItems: "center", marginBottom: 28 }}>
             {["Client", "Details", "Line Items", "Review & Save"].map((label, i) => {
               const step = i + 1;
               const active = invoiceWizardStep === step;
@@ -4119,7 +6064,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
                 </React.Fragment>
               );
             })}
-          </div></div>
+          </div>
 
           {/* ── Step 1: Client ── */}
           {invoiceWizardStep === 1 && (
@@ -4448,32 +6393,6 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
                     </button>
                     <button style={buttonSecondary} onClick={() => openSavedInvoicePreview(row)}>
                       Preview
-                    </button>
-                    <button
-                      disabled={emailingRowId === row.id}
-                      style={{ ...buttonSecondary, color: colours.teal, borderColor: colours.teal, opacity: emailingRowId === row.id ? 0.6 : 1 }}
-                      onClick={async () => {
-                        setEmailingRowId(row.id);
-                        try {
-                          const result = await sendSavedDocumentEmail({ documentType: "invoice", documentRecord: row });
-                          if (result?.ok) {
-                            const updated = { ...row, emailedAt: new Date().toISOString(), emailRecipients: result.recipients || [] };
-                            const saved = await upsertRecordInDatabase(SUPABASE_TABLES.invoices, updated);
-                            setInvoices((prev) => prev.map((inv) => inv.id === row.id ? saved : inv));
-                            toast.success(result.message || "Invoice emailed!");
-                          } else if (result?.skipped) {
-                            toast.warning(result.message || "No email recipients configured for this client.");
-                          } else {
-                            toast.error(result?.message || "Email failed");
-                          }
-                        } catch (err) {
-                          toast.error(err.message || "Email failed");
-                        } finally {
-                          setEmailingRowId(null);
-                        }
-                      }}
-                    >
-                      {emailingRowId === row.id ? "Sending…" : "📧 Email"}
                     </button>
 
                     {row.status !== "Paid" ? (
@@ -4872,7 +6791,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
         </div>
         <SectionCard title="Create Quote">
           {/* ── Wizard progress bar ── */}
-          <div style={{ overflowX: isMobileViewport ? "auto" : "visible", paddingBottom: isMobileViewport ? 6 : 0 }}><div style={{ display: "flex", alignItems: "center", marginBottom: 28, minWidth: isMobileViewport ? 620 : 0 }}>
+          <div style={{ display: "flex", alignItems: "center", marginBottom: 28 }}>
             {["Client", "Details", "Line Items", "Review & Save"].map((label, i) => {
               const step = i + 1;
               const active = quoteWizardStep === step;
@@ -4892,7 +6811,6 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
                 </React.Fragment>
               );
             })}
-          </div>
           </div>
 
           {/* ── Step 1: Client ── */}
@@ -5205,32 +7123,6 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
                     </button>
                     <button style={buttonSecondary} onClick={() => openSavedQuotePreview(row)}>
                       Preview
-                    </button>
-                    <button
-                      disabled={emailingRowId === row.id}
-                      style={{ ...buttonSecondary, color: colours.teal, borderColor: colours.teal, opacity: emailingRowId === row.id ? 0.6 : 1 }}
-                      onClick={async () => {
-                        setEmailingRowId(row.id);
-                        try {
-                          const result = await sendSavedDocumentEmail({ documentType: "quote", documentRecord: row });
-                          if (result?.ok) {
-                            const updated = { ...row, emailedAt: new Date().toISOString(), emailRecipients: result.recipients || [] };
-                            const saved = await upsertRecordInDatabase(SUPABASE_TABLES.quotes, updated);
-                            setQuotes((prev) => prev.map((q) => q.id === row.id ? saved : q));
-                            toast.success(result.message || "Quote emailed!");
-                          } else if (result?.skipped) {
-                            toast.warning(result.message || "No email recipients configured for this client.");
-                          } else {
-                            toast.error(result?.message || "Email failed");
-                          }
-                        } catch (err) {
-                          toast.error(err.message || "Email failed");
-                        } finally {
-                          setEmailingRowId(null);
-                        }
-                      }}
-                    >
-                      {emailingRowId === row.id ? "Sending…" : "📧 Email"}
                     </button>
                     {row.status !== "Declined" && row.status !== "Expired" && (
                       <button
@@ -6149,7 +8041,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
         </div>
       </div>
       <SectionCard
-        title={isMobileViewport ? "Expense Wizard" : "Expense Details"}
+        title="Expense Details"
         right={
           <button
             style={buttonPrimary}
@@ -6158,34 +8050,10 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
               setExpenseTypeStep(1);
             }}
           >
-            {isMobileViewport ? "Start Wizard" : "Add Expense"}
+            Add Expense
           </button>
         }
       >
-        {isMobileViewport && (
-          <div style={{ display: "grid", gap: 12, marginBottom: 18 }}>
-            <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
-              {[
-                { step: 1, label: "Type & receipt", done: Boolean(expenseTypeSelection || expenseForm.receiptFileName) },
-                { step: 2, label: "Details", done: Boolean(expenseForm.date && expenseForm.supplier && expenseForm.amount) },
-                { step: 3, label: "Save", done: false },
-              ].map((item, index) => (
-                <div key={item.step} style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 120 }}>
-                  <div style={{ width: 30, height: 30, borderRadius: 999, background: item.done ? colours.teal : index === 0 ? colours.purple : colours.border, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 800, flexShrink: 0 }}>
-                    {item.done ? "✓" : item.step}
-                  </div>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: item.done ? colours.teal : colours.text }}>{item.label}</div>
-                </div>
-              ))}
-            </div>
-            <div style={{ ...cardStyle, padding: 14, background: colours.lightPurple }}>
-              <div style={{ fontSize: 13, fontWeight: 800, color: colours.purple, marginBottom: 6 }}>Mobile wizard</div>
-              <div style={{ fontSize: 13, color: colours.text, lineHeight: 1.6 }}>
-                Use <strong>Start Wizard</strong> first to choose the expense type, work type, category and receipt. Then complete the details below and save.
-              </div>
-            </div>
-          </div>
-        )}
         <div
           style={{
             display: "grid",
@@ -6304,14 +8172,9 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
           </div>
         ) : <EmptyState icon="📁" title="No documents yet" message="Upload receipts, contracts and generated PDFs here. All documents are stored securely against your account." />}
 
-        <div style={{ marginTop: 18, display: "flex", gap: 10, flexWrap: "wrap" }}>
-          {isMobileViewport && (
-            <button style={buttonSecondary} onClick={() => { setExpenseModalOpen(true); setExpenseTypeStep(1); }}>
-              Edit Wizard Steps
-            </button>
-          )}
+        <div style={{ marginTop: 18 }}>
           <button style={buttonPrimary} onClick={saveExpense}>
-            {isMobileViewport ? "Save Expense ✓" : "Save Expense"}
+            Save Expense
           </button>
         </div>
       </SectionCard>
@@ -6563,7 +8426,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
         </div>
 
         <div
-          className="sas-auth-landing sas-stack-mobile"
+          className="sas-auth-landing"
           style={{
             display: "grid",
             gridTemplateColumns: "minmax(0, 1.2fr) minmax(320px, 460px)",
@@ -6588,7 +8451,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
               <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "rgba(255,255,255,0.14)", padding: "8px 12px", borderRadius: 999, fontSize: 12, fontWeight: 800, letterSpacing: 0.3, width: "fit-content" }}>
                 Client portal access
               </div>
-              <div className="sas-auth-hero-title" style={{ fontSize: 44, lineHeight: 1.05, fontWeight: 900, maxWidth: 560 }}>
+              <div style={{ fontSize: 44, lineHeight: 1.05, fontWeight: 900, maxWidth: 560 }}>
                 Login to your portal from the landing page
               </div>
               <div style={{ fontSize: 16, lineHeight: 1.7, opacity: 0.92, maxWidth: 620 }}>
@@ -6612,7 +8475,6 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
 
           <div
             id="portal-login"
-            className="sas-auth-login-card"
             style={{
               ...cardStyle,
               padding: 28,
@@ -7115,25 +8977,6 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       );
     };
 
-
-    const renderATOTaxForm = () => (
-      <ATOTaxFormPage
-        profile={profile}
-        invoices={invoices}
-        expenses={expenses}
-        incomeSources={incomeSources}
-        colours={colours}
-        cardStyle={cardStyle}
-        labelStyle={labelStyle}
-        inputStyle={inputStyle}
-        buttonSecondary={buttonSecondary}
-        safeNumber={safeNumber}
-        todayLocal={todayLocal}
-        getClientById={getClientById}
-        currency={currency}
-      />
-    );
-
     const renderSettings = () => (
     <div style={{ display: "grid", gap: 20 }}>
       <DashboardHero title="Settings" subtitle="Configure your business profile, financial settings, branding and security. Changes save to your Supabase database automatically." highlight={activeSettingsTab}>
@@ -7614,27 +9457,11 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       }}
     >
       <style>{`
-        * { box-sizing: border-box; }
         .sas-layout { display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; }
         .sas-sidebar { background: #fff; border-right: 1px solid #E2E8F0; padding: 20px; position: relative; z-index: 100; }
         .sas-overlay { display: none; }
         .sas-hamburger { display: none; }
-                .sas-main { padding: 24px; overflow-x: auto; overflow-y: visible; -webkit-overflow-scrolling: touch; }
-        .sas-page-scroll { width: 100%; overflow-x: auto; overflow-y: visible; -webkit-overflow-scrolling: touch; }
-        .sas-page-inner { max-width: 1400px; min-width: 1100px; margin: 0 auto; }
-        .sas-toasts { width: min(380px, calc(100vw - 24px)); }
-        .sas-section-card, .sas-summary-box, .sas-metric-card, .sas-action-card, .sas-auth-login-card { width: 100%; }
-        .sas-table-wrap { width: 100%; -webkit-overflow-scrolling: touch; }
-        .sas-data-table th, .sas-data-table td { white-space: nowrap; }
-        .sas-dashboard-hero { width: 100%; }
-        .sas-stack-mobile { align-items: stretch; }
-        .sas-main input, .sas-main select, .sas-main textarea, .sas-main button { font: inherit; }
-        .sas-main img { max-width: 100%; height: auto; }
-        @media (max-width: 1024px) {
-          .sas-dashboard-hero { grid-template-columns: 1fr !important; padding: 22px !important; }
-          .sas-dashboard-hero .sas-hero-focus-card { min-height: auto !important; }
-          .sas-auth-landing { grid-template-columns: 1fr !important; }
-        }
+        .sas-main { padding: 24px; overflow-x: hidden; }
         @media (max-width: 768px) {
           .sas-layout { grid-template-columns: 1fr; }
           .sas-sidebar { position: fixed; top: 0; left: -260px; width: 240px; height: 100vh; overflow-y: auto; transition: left 0.25s ease; z-index: 200; box-shadow: 4px 0 20px rgba(0,0,0,0.12); }
@@ -7643,23 +9470,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
           .sas-hamburger { display: flex; align-items: center; gap: 12px; background: #fff; border-bottom: 1px solid #E2E8F0; padding: 14px 16px; position: sticky; top: 0; z-index: 100; }
           .sas-hamburger-btn { background: none; border: none; cursor: pointer; padding: 4px; display: flex; flex-direction: column; gap: 5px; }
           .sas-hamburger-btn span { display: block; width: 22px; height: 2px; background: #6A1B9A; border-radius: 2px; }
-          .sas-main { padding: 14px; }
-          .sas-toasts { left: 12px; right: 12px; bottom: 12px; max-width: none !important; width: auto; }
-          .sas-confirm-card { padding: 20px !important; border-radius: 16px !important; }
-          .sas-section-card, .sas-summary-box, .sas-metric-card, .sas-action-card { padding: 16px !important; border-radius: 16px !important; }
-          .sas-dashboard-hero { border-radius: 18px !important; gap: 16px !important; padding: 20px !important; }
-          .sas-dashboard-hero .sas-hero-content { min-width: 0 !important; }
-          .sas-dashboard-hero .sas-hero-title { font-size: 26px !important; line-height: 1.14 !important; overflow-wrap: anywhere !important; word-break: break-word !important; }
-          .sas-dashboard-hero .sas-hero-subtitle { font-size: 15px !important; line-height: 1.55 !important; }
-          .sas-dashboard-hero .sas-hero-focus-card { padding: 16px !important; min-height: auto !important; }
-          .sas-dashboard-hero .sas-hero-focus-value { font-size: 24px !important; line-height: 1.1 !important; }
-          .sas-insight-chip { padding: 10px 12px !important; }
-          .sas-insight-chip > div:first-child { min-width: 0; flex: 1; }
-          .sas-insight-chip > div:last-child { flex-shrink: 0; }
-          .sas-stack-mobile { grid-template-columns: 1fr !important; }
-          .sas-data-table { min-width: 640px !important; }
-          .sas-auth-hero-title { font-size: 32px !important; }
-          .sas-auth-login-card { padding: 20px !important; border-radius: 20px !important; }
+          .sas-main { padding: 16px; }
         }
       `}</style>
 
@@ -7668,11 +9479,6 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
           <span /><span /><span />
         </button>
         <span style={{ fontSize: 16, fontWeight: 900, color: colours.purple }}>{profile.businessName || "My Portal"}</span>
-        <button
-          onClick={() => setShowMobileWizard(true)}
-          style={{ marginLeft: "auto", background: colours.purple, color: "#fff", border: "none", borderRadius: "50%", width: 38, height: 38, fontSize: 22, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, boxShadow: "0 2px 8px rgba(106,27,154,0.35)" }}
-          title="Quick create"
-        >+</button>
       </div>
 
       {sidebarOpen && <div className="sas-overlay" onClick={() => setSidebarOpen(false)} />}
@@ -7726,8 +9532,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
         </aside>
 
         <main className="sas-main">
-          <div className="sas-page-scroll">
-            <div className="sas-page-inner">
+          <div style={{ maxWidth: 1400, margin: "0 auto" }}>
             {activePage === "dashboard" && renderDashboard()}
             {activePage === "financial insights" && renderFinancialInsights()}
             {activePage === "invoices" && renderInvoices()}
@@ -7738,9 +9543,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
             {activePage === "income sources" && renderIncomeSources()}
             {activePage === "documents" && renderDocuments()}
             {activePage === "bas report" && renderBASReport()}
-            {activePage === "ato tax form" && renderATOTaxForm()}
             {activePage === "settings" && renderSettings()}
-            </div>
           </div>
         </main>
       </div>
@@ -7777,26 +9580,6 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       />
       <ToastContainer toasts={toasts} onRemove={removeToast} />
       {confirmModal}
-
-      {/* ── Mobile Wizard ── */}
-      {showMobileWizard && (
-        <MobileWizard
-          profile={profile}
-          clients={clients}
-          invoices={invoices}
-          quotes={quotes}
-          expenses={expenses}
-          services={services}
-          onSaveInvoice={(inv) => setInvoices((prev) => [...prev, inv])}
-          onSaveQuote={(q) => setQuotes((prev) => [...prev, q])}
-          onSaveExpense={(e) => setExpenses((prev) => [...prev, e])}
-          onEmailDocument={sendSavedDocumentEmail}
-          upsertRecord={upsertRecordInDatabase}
-          uploadReceipt={uploadReceiptToSupabase}
-          toast={toast}
-          onClose={() => setShowMobileWizard(false)}
-        />
-      )}
 
       {/* ── Password Reset Sent Modal ── */}
       {showResetSentModal && (

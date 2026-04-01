@@ -24,8 +24,6 @@ import {
   initialProfile,
   makePaymentReference,
   nextNumber,
-  formatMonthKey,
-  formatMonthLabel,
   getApiBaseUrl,
   DEFAULT_API_BASE_URL,
   DEFAULT_MONTHLY_SUBSCRIPTION,
