@@ -89,10 +89,27 @@ export default function ATOTaxFormPage({ profile, invoices, expenses, incomeSour
     if(r.includes("dividend")) return "Dividends";
     return "Other";
   };
-  const portalInc = [
-    ...invoices.filter(i=>i.status==="Paid").map(i=>{ const c=getClientById(i.clientId); return {date:i.paidAt?i.paidAt.slice(0,10):(i.invoiceDate||""),type:"Business (sole trader)",payer:c?.name||c?.businessName||"",gross:safeNumber(i.total),withheld:safeNumber(i.taxWithheld||0),franked:0,franking:0,abn:c?.abn||""}; }),
-    ...incomeSources.filter(s=>safeNumber(s.beforeTax)>0).map(s=>{ const t=classifyType(s); return {date:todayLocal(),type:t,payer:s.name||"",gross:safeNumber(s.beforeTax),withheld:safeNumber(s.taxWithheld||0),franked:t==="Dividends"?safeNumber(s.beforeTax):0,franking:safeNumber(s.frankingCredit||0),abn:""}; }),
-  ];
+  // Group portal invoices by type and sum — avoids one row per invoice
+  const portalInc = (() => {
+    const groups = {};
+    invoices.filter(i=>i.status==="Paid").forEach(i=>{
+      const key = "Business (sole trader)";
+      if(!groups[key]) groups[key] = {type:key, payer:"Business income (portal invoices)", gross:0, withheld:0, franked:0, franking:0, abn:"", date:""};
+      groups[key].gross    += safeNumber(i.total);
+      groups[key].withheld += safeNumber(i.taxWithheld||0);
+      if(!groups[key].date || i.paidAt?.slice(0,10) > groups[key].date) groups[key].date = i.paidAt?i.paidAt.slice(0,10):(i.invoiceDate||"");
+    });
+    // Group income sources by type
+    incomeSources.filter(s=>safeNumber(s.beforeTax)>0).forEach(s=>{
+      const t = classifyType(s);
+      if(!groups[t]) groups[t] = {type:t, payer:`${t} (portal income sources)`, gross:0, withheld:0, franked:0, franking:0, abn:"", date:todayLocal()};
+      groups[t].gross    += safeNumber(s.beforeTax);
+      groups[t].withheld += safeNumber(s.taxWithheld||0);
+      groups[t].franked  += t==="Dividends"?safeNumber(s.beforeTax):0;
+      groups[t].franking += safeNumber(s.frankingCredit||0);
+    });
+    return Object.values(groups);
+  })();
   const portalExp = expenses.map(e=>({date:e.date||"",type:e.category||e.expenseType||"Other",supplier:e.supplier||e.description||"",amount:safeNumber(e.amount),gstIncl:e.gstIncluded!==false?"yes":"no"}));
 
   // Manually added records
