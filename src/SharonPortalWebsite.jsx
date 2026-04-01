@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import html2pdf from "html2pdf.js";
 import { supabase } from "./client";
 import MobileWizard from "./MobileWizard";
+import ATOTaxFormPage from "./ATOTaxFormPage";
 import { buildQuoteHtml, buildQuoteEmailHtml, buildInvoiceHtml, openBlobUrlInWindow, writeInvoicePreviewToWindow } from "./PortalDocumentBuilders";
 
 
@@ -200,6 +201,7 @@ const navItems = [
   "income sources",
   "documents",
   "bas report",
+  "ato tax form",
   "settings",
 ];
 
@@ -214,7 +216,7 @@ const navSections = [
   },
   {
     title: "Admin",
-    items: ["bas report", "settings"],
+    items: ["bas report", "ato tax form", "settings"],
   },
 ];
 
@@ -229,6 +231,7 @@ const navLabels = {
   "income sources": "Income Sources",
   documents: "Documents",
   "bas report": "BAS Report",
+  "ato tax form": "ATO Tax Form",
   settings: "Settings",
 };
 
@@ -8401,6 +8404,19 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       </div>
     </div>
     );
+
+    const renderATOTaxForm = () => {
+      return (
+        <ATOTaxFormPage
+          profile={profile}
+          invoices={invoices}
+          expenses={expenses}
+          incomeSources={incomeSources}
+          getClientById={getClientById}
+        />
+      );
+    };
+
     const renderBASReport = () => {
       // ── GST registration check ──────────────────────────────────
       if (!profile.gstRegistered) {
@@ -9406,6 +9422,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
             {activePage === "income sources" && renderIncomeSources()}
             {activePage === "documents" && renderDocuments()}
             {activePage === "bas report" && renderBASReport()}
+            {activePage === "ato tax form" && renderATOTaxForm()}
             {activePage === "settings" && renderSettings()}
             </div>
           </div>
