@@ -70,6 +70,8 @@ import {
 import {
   buildQuoteHtml,
   buildQuoteEmailHtml,
+  buildInvoiceEmailHtml,
+  buildQuoteEmailHtmlInline,
   buildInvoiceHtml,
   openBlobUrlInWindow,
   writeInvoicePreviewToWindow,
@@ -86,6 +88,7 @@ export default function AccountingPortalPrototype() {
   const [savingClientEdits, setSavingClientEdits] = useState(false);
   const [savingInvoice, setSavingInvoice] = useState(false);
   const [savingInvoiceEdits, setSavingInvoiceEdits] = useState(false);
+  const [emailingRowId, setEmailingRowId] = useState(null);
   const [savingQuote, setSavingQuote] = useState(false);
   const [savingQuoteEdits, setSavingQuoteEdits] = useState(false);
   const [savingExpense, setSavingExpense] = useState(false);
@@ -1595,134 +1598,32 @@ export default function AccountingPortalPrototype() {
     }
   }
 
-  const resolvedTotal = safeNumber(
-    emailDocumentRecord?.total ??
-    emailDocumentRecord?.grandTotal ??
-    emailDocumentRecord?.invoiceTotal ??
-    emailDocumentRecord?.amount ??
-    emailDocumentRecord?.totalAmount
-  );
-
-  let invoiceHtml = "";
-  let quoteHtml = "";
-
-  if (documentType === "invoice") {
-    invoiceHtml = buildInvoiceHtml(
-      emailDocumentRecord,
-      stripeCheckoutUrl || emailDocumentRecord?.stripeCheckoutUrl || "",
-      { allowEmail: false },
-      { profile, clients }
-    );
-  }
-
-  if (documentType === "quote") {
-    try {
-      quoteHtml = buildQuoteHtml(
-        emailDocumentRecord,
-        { allowEmail: false },
-        { profile, clients }
-      );
-    } catch (error) {
-      console.error("buildQuoteHtml crashed:", error);
-      quoteHtml = "";
-    }
-
-    if (!String(quoteHtml || "").trim()) {
-      console.warn("Using fallback quote HTML for PDF generation", {
-        quoteId: emailDocumentRecord?.id,
-        quoteNumber: emailDocumentRecord?.quoteNumber,
-        clientId: emailDocumentRecord?.clientId,
-      });
-
-      quoteHtml = `<!doctype html>
-<html>
-<head>
-<meta charset="utf-8" />
-<title>Quote ${emailDocumentRecord?.quoteNumber || ""}</title>
-<style>
-body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
-.card { border: 1px solid #E2E8F0; border-radius: 16px; padding: 24px; }
-.title { font-size: 32px; font-weight: 900; color: #6A1B9A; margin-bottom: 18px; }
-.row { margin: 8px 0; }
-.label { font-weight: 700; }
-.total { margin-top: 20px; font-size: 20px; font-weight: 800; color: #006D6D; }
-</style>
-</head>
-<body>
-  <div class="card">
-    <div class="title">QUOTE</div>
-    <div class="row"><span class="label">Business:</span> ${profile?.businessName || "Your Business"}</div>
-    <div class="row"><span class="label">Quote Number:</span> ${emailDocumentRecord?.quoteNumber || ""}</div>
-    <div class="row"><span class="label">Quote Date:</span> ${formatDateAU(emailDocumentRecord?.quoteDate)}</div>
-    <div class="row"><span class="label">Expiry Date:</span> ${formatDateAU(emailDocumentRecord?.expiryDate)}</div>
-    <div class="row"><span class="label">Client:</span> ${getClientName(emailDocumentRecord?.clientId)}</div>
-    <div class="row"><span class="label">Description:</span> ${emailDocumentRecord?.description || "Professional services"}</div>
-    <div class="row"><span class="label">Quantity:</span> ${safeNumber(emailDocumentRecord?.quantity || 1)}</div>
-    <div class="row"><span class="label">Subtotal:</span> ${formatCurrencyByCode(safeNumber(emailDocumentRecord?.subtotal), emailDocumentRecord?.currencyCode || "AUD")}</div>
-    <div class="row"><span class="label">GST:</span> ${formatCurrencyByCode(safeNumber(emailDocumentRecord?.gst), emailDocumentRecord?.currencyCode || "AUD")}</div>
-    <div class="total">Total Estimate: ${formatCurrencyByCode(resolvedTotal, emailDocumentRecord?.currencyCode || "AUD")}</div>
-  </div>
-</body>
-</html>`;
-    }
-  }
-
+  // Build Gmail-safe email body — no logoDataUrl, no duplicate HTML copies
   const emailBodyHtml =
     documentType === "invoice"
-      ? invoiceHtml
-      : buildQuoteEmailHtml(emailDocumentRecord, { profile, clients });
+      ? buildInvoiceEmailHtml(emailDocumentRecord, stripeCheckoutUrl || emailDocumentRecord?.stripeCheckoutUrl || "", { profile, clients })
+      : buildQuoteEmailHtmlInline(emailDocumentRecord, { profile, clients });
 
+  // Minimal payload — keeps request well under server body size limit
   const payload = {
     to: recipientList,
     subject:
       documentType === "invoice"
         ? `Invoice ${emailDocumentRecord?.invoiceNumber || ""} from ${profile.businessName || "Your Business"}`
         : `Quote ${emailDocumentRecord?.quoteNumber || ""} from ${profile.businessName || "Your Business"}`,
-    customerName: getClientName(emailDocumentRecord?.clientId),
-    clientName: getClientById(emailDocumentRecord?.clientId)?.name || "",
-    clientEmail: getClientById(emailDocumentRecord?.clientId)?.email || "",
-    businessName: profile?.businessName || "",
-    businessAddress: profile?.address || "",
-    businessEmail: profile?.email || "",
-    businessPhone: profile?.phone || "",
-    abn: profile?.abn || "",
-    logoDataUrl: profile?.logoDataUrl || "",
+    replyTo: profile?.email || "",
     documentType,
     html: emailBodyHtml,
-    documentHtml:
-      documentType === "quote"
-        ? (quoteHtml || emailBodyHtml)
-        : (invoiceHtml || emailBodyHtml),
-    quoteHtml: documentType === "quote" ? (quoteHtml || emailBodyHtml) : "",
-    invoiceHtml: documentType === "invoice" ? (invoiceHtml || emailBodyHtml) : "",
-    text: `Please find your ${documentType} attached.`,
-    filename: `${documentType}-${emailDocumentRecord?.invoiceNumber || emailDocumentRecord?.quoteNumber || "document"}.pdf`,
-    replyTo: profile?.email || "",
+    text: `Please view your ${documentType} in the email body above.`,
     number:
       documentType === "invoice"
         ? emailDocumentRecord?.invoiceNumber || ""
         : emailDocumentRecord?.quoteNumber || "",
     invoiceNumber: emailDocumentRecord?.invoiceNumber || "",
     quoteNumber: emailDocumentRecord?.quoteNumber || "",
-    invoiceDate: emailDocumentRecord?.invoiceDate || "",
-    dueDate: emailDocumentRecord?.dueDate || "",
-    quoteDate: emailDocumentRecord?.quoteDate || "",
-    expiryDate: emailDocumentRecord?.expiryDate || "",
-    description: emailDocumentRecord?.description || "",
-    comments: emailDocumentRecord?.comments || "",
-    quantity: safeNumber(emailDocumentRecord?.quantity || 1),
-    subtotal: safeNumber(emailDocumentRecord?.subtotal),
-    gst: safeNumber(emailDocumentRecord?.gst),
-    total: resolvedTotal,
-    currencyCode: emailDocumentRecord?.currencyCode || "AUD",
-    hidePhoneNumber: Boolean(emailDocumentRecord?.hidePhoneNumber),
-    stripeCheckoutUrl: stripeCheckoutUrl || emailDocumentRecord?.stripeCheckoutUrl || "",
   };
 
-   const endpoint =
-    documentType === "invoice"
-      ? `${serverBaseUrl}/api/send-invoice-attachment-email`
-      : `${serverBaseUrl}/api/send-document-email`;
+    const endpoint = `${serverBaseUrl}/api/send-document-email`;
 
   let response;
 
@@ -2081,6 +1982,33 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     } catch (error) {
       console.error("MARK BILL UNPAID ERROR:", error);
       toast.error(error.message || "Could not mark bill unpaid");
+    }
+    };
+
+    const sendExpenseDirect = async (expense) => {
+    try {
+      const recipient = String(profile?.email || "").trim();
+      if (!recipient) {
+        toast.warning("Add your email in Settings first to email this expense.");
+        return;
+      }
+
+      const subject = encodeURIComponent(`Expense ${expense?.supplier || expense?.description || expense?.id || ""}`);
+      const lines = [
+        `Expense details`,
+        `Supplier: ${expense?.supplier || ""}`,
+        `Date: ${formatDateAU(expense?.date)}`,
+        `Category: ${expense?.category || ""}`,
+        `Amount: ${currency(expense?.amount)}`,
+        expense?.description ? `Description: ${expense.description}` : "",
+        expense?.receiptUrl ? `Receipt: ${expense.receiptUrl}` : "",
+      ].filter(Boolean);
+      const body = encodeURIComponent(lines.join("\n"));
+      window.location.href = `mailto:${recipient}?subject=${subject}&body=${body}`;
+      toast.success("Expense email opened.");
+    } catch (error) {
+      console.error("EXPENSE EMAIL ERROR:", error);
+      toast.error(error.message || "Expense email failed");
     }
     };
 
@@ -4401,6 +4329,32 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
                     <button style={buttonSecondary} onClick={() => openSavedInvoicePreview(row)}>
                       Preview
                     </button>
+                    <button
+                      disabled={emailingRowId === row.id}
+                      style={{ ...buttonSecondary, color: colours.teal, borderColor: colours.teal, opacity: emailingRowId === row.id ? 0.6 : 1 }}
+                      onClick={async () => {
+                        setEmailingRowId(row.id);
+                        try {
+                          const result = await sendSavedDocumentEmail({ documentType: "invoice", documentRecord: row });
+                          if (result?.ok) {
+                            const updated = { ...row, emailedAt: new Date().toISOString(), emailRecipients: result.recipients || [] };
+                            const saved = await upsertRecordInDatabase(SUPABASE_TABLES.invoices, updated);
+                            setInvoices((prev) => prev.map((inv) => inv.id === row.id ? saved : inv));
+                            toast.success(result.message || "Invoice emailed!");
+                          } else if (result?.skipped) {
+                            toast.warning(result.message || "No email recipients configured for this client.");
+                          } else {
+                            toast.error(result?.message || "Email failed");
+                          }
+                        } catch (err) {
+                          toast.error(err.message || "Email failed");
+                        } finally {
+                          setEmailingRowId(null);
+                        }
+                      }}
+                    >
+                      {emailingRowId === row.id ? "Sending…" : "📧 Email"}
+                    </button>
 
                     {row.status !== "Paid" ? (
                       <>
@@ -4417,23 +4371,23 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
                       </span>
                     )}
 
-                  <button
-                    style={{
-                      ...buttonSecondary,
-                      ...(row.status === "Paid" ? { opacity: 0.4, cursor: "not-allowed" } : {}),
-                    }}
-                    onClick={() => row.status !== "Paid" && deleteInvoice(row.id)}
-                    title={row.status === "Paid" ? "Cannot delete a paid invoice" : "Delete invoice"}
-                    disabled={row.status === "Paid"}
-                  >
-                    Delete
-                  </button>
-                  {row.type !== "credit_note" && (
-                    <button style={{ ...buttonSecondary, color: colours.purple, borderColor: colours.purple }}
-                      onClick={() => { setCreditNoteSource(row); setCreditNoteForm({ amount: "", reason: "", date: todayLocal() }); setShowARCreditNoteModal(true); }}>
-                      Credit Note
+                    <button
+                      style={{
+                        ...buttonSecondary,
+                        ...(row.status === "Paid" ? { opacity: 0.4, cursor: "not-allowed" } : {}),
+                      }}
+                      onClick={() => row.status !== "Paid" && deleteInvoice(row.id)}
+                      title={row.status === "Paid" ? "Cannot delete a paid invoice" : "Delete invoice"}
+                      disabled={row.status === "Paid"}
+                    >
+                      Delete
                     </button>
-                  )}
+                    {row.type !== "credit_note" && (
+                      <button style={{ ...buttonSecondary, color: colours.purple, borderColor: colours.purple }}
+                        onClick={() => { setCreditNoteSource(row); setCreditNoteForm({ amount: "", reason: "", date: todayLocal() }); setShowARCreditNoteModal(true); }}>
+                        Credit Note
+                      </button>
+                    )}
                   </div>
                 ),
               },
@@ -5130,6 +5084,32 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
                     </button>
                     <button style={buttonSecondary} onClick={() => openSavedQuotePreview(row)}>
                       Preview
+                    </button>
+                    <button
+                      disabled={emailingRowId === row.id}
+                      style={{ ...buttonSecondary, color: colours.teal, borderColor: colours.teal, opacity: emailingRowId === row.id ? 0.6 : 1 }}
+                      onClick={async () => {
+                        setEmailingRowId(row.id);
+                        try {
+                          const result = await sendSavedDocumentEmail({ documentType: "quote", documentRecord: row });
+                          if (result?.ok) {
+                            const updated = { ...row, emailedAt: new Date().toISOString(), emailRecipients: result.recipients || [] };
+                            const saved = await upsertRecordInDatabase(SUPABASE_TABLES.quotes, updated);
+                            setQuotes((prev) => prev.map((q) => q.id === row.id ? saved : q));
+                            toast.success(result.message || "Quote emailed!");
+                          } else if (result?.skipped) {
+                            toast.warning(result.message || "No email recipients configured for this client.");
+                          } else {
+                            toast.error(result?.message || "Email failed");
+                          }
+                        } catch (err) {
+                          toast.error(err.message || "Email failed");
+                        } finally {
+                          setEmailingRowId(null);
+                        }
+                      }}
+                    >
+                      {emailingRowId === row.id ? "Sending…" : "📧 Email"}
                     </button>
                     {row.status !== "Declined" && row.status !== "Expired" && (
                       <button
@@ -6006,6 +5986,12 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
                       <button style={buttonPrimary} onClick={() => markBillPaid(row)}>Mark Paid</button>
                     )}
                     <button style={buttonSecondary} onClick={() => openExpenseEditor(row)}>View / Edit</button>
+                    <button
+                      style={{ ...buttonSecondary, color: colours.teal, borderColor: colours.teal }}
+                      onClick={() => sendExpenseDirect(row)}
+                    >
+                      Email
+                    </button>
                     {row.type !== "credit_note" && (
                       <button style={{ ...buttonSecondary, color: colours.purple, borderColor: colours.purple }}
                         onClick={() => { setCreditNoteSource(row); setCreditNoteForm({ amount: "", reason: "", date: todayLocal() }); setShowAPCreditNoteModal(true); }}>
@@ -6214,6 +6200,13 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
                   ) : (
                     <span style={{ color: colours.muted }}>No receipt</span>
                   )}
+
+                  <button
+                    style={{ ...buttonSecondary, color: colours.teal, borderColor: colours.teal }}
+                    onClick={() => sendExpenseDirect(row)}
+                  >
+                    Email
+                  </button>
 
                   <button style={buttonSecondary} onClick={() => deleteExpense(row.id)}>
                     Delete

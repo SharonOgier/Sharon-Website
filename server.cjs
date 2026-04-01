@@ -69,6 +69,13 @@ const stripe = stripeSecretKey ? new Stripe(stripeSecretKey) : null;
 const resend = resendApiKey ? new Resend(resendApiKey) : null;
 app.use("/api/stripe-webhook", express.raw({ type: "application/json" }));
 app.use(express.json({ limit: "10mb" }));
+app.use((err, req, res, next) => {
+  if (err.type === "entity.parse.failed") {
+    console.error("[JSON PARSE ERROR]", err.message);
+    return res.status(400).json({ ok: false, error: "Invalid JSON in request body." });
+  }
+  next(err);
+});
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
 if (fs.existsSync(distPath)) {
@@ -472,6 +479,59 @@ function normaliseBase64Attachment(value) {
   return (match ? match[1] : raw).replace(/\s+/g, "");
 }
 
+async function sendEmailHtml({
+  to,
+  subject,
+  emailHtml,
+  emailText,
+  replyTo,
+}) {
+  if (!resend) throw new Error("RESEND_API_KEY is missing in environment variables.");
+
+  const recipients = normaliseRecipients(to);
+  if (!recipients.length) throw new Error("Recipient email is required.");
+
+  const resolvedHtml = String(emailHtml || "<p>Please see your document below.</p>").trim();
+  if (!resolvedHtml) throw new Error("Email HTML is required.");
+
+  const payload = {
+    from: EMAIL_FROM,
+    to: recipients,
+    subject: String(subject || "Your document").trim() || "Your document",
+    html: resolvedHtml,
+  };
+
+  const resolvedReplyTo = String(replyTo || EMAIL_REPLY_TO || "").trim();
+  if (resolvedReplyTo) {
+    payload.replyTo = resolvedReplyTo;
+    payload.reply_to = resolvedReplyTo;
+  }
+  if (emailText) payload.text = String(emailText).trim();
+
+  console.log("sendEmailHtml payload summary:", {
+    to: recipients,
+    subject: payload.subject,
+    hasHtml: Boolean(payload.html),
+    htmlLength: payload.html.length,
+    hasText: Boolean(payload.text),
+    hasReplyTo: Boolean(resolvedReplyTo),
+  });
+
+  const sendResult = await resend.emails.send(payload);
+  if (sendResult?.error) {
+    console.error("Resend API error:", JSON.stringify(sendResult.error, null, 2));
+    throw new Error(sendResult.error.message || sendResult.error.name || "Resend email send failed.");
+  }
+  console.log("Resend send result:", JSON.stringify({ id: sendResult?.data?.id, error: sendResult?.error }, null, 2));
+
+  return {
+    ...(sendResult || {}),
+    attachmentIncluded: false,
+    attachmentSource: "none",
+    pdfError: null,
+  };
+}
+
 async function sendEmailWithPdf({
   to,
   subject,
@@ -778,6 +838,7 @@ app.post("/api/create-checkout-session", async (req, res) => {
 });
 
 app.post("/api/send-document-email", async (req, res) => {
+  console.log("[EMAIL] Route hit, body size:", JSON.stringify(req.body || {}).length, "keys:", Object.keys(req.body || {}));
   try {
     const payload = req.body || {};
     const {
@@ -787,40 +848,12 @@ app.post("/api/send-document-email", async (req, res) => {
       quoteHtml,
       invoiceHtml,
       text,
-      filename,
-      customerName,
-      clientName,
-      clientEmail,
-      clientPhone,
-      clientAddress,
-      clientContactPerson,
       documentType,
       replyTo,
-      stripeCheckoutUrl,
       invoiceNumber,
       quoteNumber,
-      invoiceDate,
-      dueDate,
-      quoteDate,
-      expiryDate,
       number,
-      businessName,
-      businessAddress,
-      businessEmail,
-      businessPhone,
-      abn,
-      logoDataUrl,
-      description,
-      comments,
-      quantity,
-      subtotal,
-      gst,
-      total,
-      currencyCode,
-      hidePhoneNumber,
-      message,
       documentHtml,
-      attachmentBase64,
     } = payload;
 
     const recipients = normaliseRecipients(to || payload.recipients);
@@ -829,103 +862,60 @@ app.post("/api/send-document-email", async (req, res) => {
     }
 
     const safeDocumentType = String(documentType || "document").toLowerCase().trim() || "document";
+    const primaryHtml = String(
+      safeDocumentType === "quote"
+        ? (quoteHtml || documentHtml || html || "")
+        : safeDocumentType === "invoice"
+          ? (invoiceHtml || documentHtml || html || "")
+          : (documentHtml || html || "")
+    ).trim();
 
-    let htmlForPdf = "";
-    if (safeDocumentType === "quote") {
-      htmlForPdf = String(quoteHtml || documentHtml || html || "").trim();
-    } else if (safeDocumentType === "invoice") {
-      htmlForPdf = String(invoiceHtml || documentHtml || html || "").trim();
-    } else {
-      htmlForPdf = String(documentHtml || html || "").trim();
-    }
-
-    if (!htmlForPdf) {
+    if (!primaryHtml) {
       return res.status(400).json({
         ok: false,
-        error: `Missing ${safeDocumentType} HTML for PDF generation.`,
+        error: `Missing ${safeDocumentType} HTML for email body.`,
       });
     }
 
-    const emailHtml = String(html || htmlForPdf).trim();
-    const resolvedNumber = number || (safeDocumentType === "quote" ? quoteNumber : invoiceNumber) || "";
-    const safeFilename = String(
-      filename || `${safeDocumentType}-${resolvedNumber || customerName || clientName || "client"}.pdf`
-    )
-      .replace(/\s+/g, "-")
-      .toLowerCase();
+    const resolvedNumber = String(number || (safeDocumentType === "quote" ? quoteNumber : invoiceNumber) || "").trim();
+    const resolvedSubject = String(subject || `${safeDocumentType === "invoice" ? "Invoice" : safeDocumentType === "quote" ? "Quote" : "Document"}${resolvedNumber ? ` ${resolvedNumber}` : ""}`).trim();
 
     console.log("send-document-email payload summary:", {
       documentType: safeDocumentType,
       recipients,
-      subject: subject || `Your ${safeDocumentType}`,
-      hasHtml: Boolean(htmlForPdf),
-      htmlLength: htmlForPdf.length,
-      filename: safeFilename,
+      subject: resolvedSubject,
+      hasHtml: Boolean(primaryHtml),
+      htmlLength: primaryHtml.length,
       number: resolvedNumber,
     });
 
-    const emailResult = await sendEmailWithPdf({
+    const emailResult = await sendEmailHtml({
       to: recipients,
-      subject: subject || `Your ${safeDocumentType}`,
-      htmlForPdf,
-      emailHtml: emailHtml || `<p>Hello${customerName || clientName ? ` ${escapeHtml(customerName || clientName)}` : ""},</p>
-<p>Please find your ${escapeHtml(safeDocumentType)} attached.</p>
-<p>Kind regards,<br />${escapeHtml(businessName || "Your Business")}</p>`,
+      subject: resolvedSubject,
+      emailHtml: primaryHtml,
       emailText: text || undefined,
-      filename: safeFilename,
       replyTo,
-      attachmentBase64,
-      fallbackPdfPayload: {
-        documentType: safeDocumentType,
-        businessName,
-        businessAddress,
-        businessEmail,
-        businessPhone,
-        abn,
-        logoDataUrl,
-        clientName: customerName || clientName,
-        customerName: customerName || clientName,
-        clientEmail,
-        clientPhone,
-        clientAddress,
-        clientContactPerson,
-        number: resolvedNumber,
-        invoiceNumber: invoiceNumber || "",
-        quoteNumber: quoteNumber || "",
-        invoiceDate: invoiceDate || "",
-        dueDate: dueDate || "",
-        quoteDate: quoteDate || "",
-        expiryDate: expiryDate || "",
-        description: description || "",
-        comments: comments || "",
-        quantity: quantity ?? 1,
-        subtotal: subtotal ?? 0,
-        gst: gst ?? 0,
-        total: total ?? 0,
-        currencyCode: currencyCode || "AUD",
-        hidePhoneNumber: Boolean(hidePhoneNumber),
-        message: message || `Please find your ${safeDocumentType} attached.`,
-        stripeCheckoutUrl,
-      },
     });
 
     console.log("send-document-email success:", {
       documentType: safeDocumentType,
       recipients,
       number: resolvedNumber,
-      attachmentIncluded: emailResult?.attachmentIncluded,
-      attachmentSource: emailResult?.attachmentSource,
-      pdfError: emailResult?.pdfError || null,
+      id: emailResult?.data?.id || emailResult?.id || null,
     });
 
-    const deliveryMessage = emailResult?.attachmentIncluded
-      ? `${safeDocumentType} email sent successfully.`
-      : `${safeDocumentType} email sent without PDF attachment.`;
-
-    return res.json({ ok: true, message: deliveryMessage, result: emailResult });
+    return res.json({
+      ok: true,
+      message: `${safeDocumentType} email sent successfully.`,
+      result: emailResult,
+    });
   } catch (error) {
     console.error("Send document email failed:", error);
-    return res.status(500).json({ ok: false, error: "Failed to send document email.", details: error.message });
+    return res.status(500).json({
+      ok: false,
+      error: error?.message || "Failed to send document email.",
+      details: error?.stack || null,
+    });
   }
 });
 
@@ -944,64 +934,25 @@ app.post("/api/send-invoice-attachment-email", async (req, res) => {
 
     const invoiceHtml = String(payload.invoiceHtml || payload.documentHtml || payload.html || "").trim();
     if (!invoiceHtml) {
-      return res.status(400).json({ ok: false, error: "Preview HTML is required for PDF generation." });
+      return res.status(400).json({ ok: false, error: "Invoice HTML is required for email body." });
     }
 
-    const emailResult = await sendEmailWithPdf({
+    const emailResult = await sendEmailHtml({
       to: recipients,
       subject: payload.subject || `Invoice ${invoiceNumber}`,
-      htmlForPdf: invoiceHtml,
-      emailHtml:
-        String(payload.emailHtml || payload.html || "").trim() ||
-        `<p>Hello ${escapeHtml(clientName)},</p><p>Please find your invoice attached.</p><p>Kind regards,<br />${escapeHtml(payload.businessName || "Your Business")}</p>`,
+      emailHtml: invoiceHtml,
       emailText: payload.text || undefined,
-      filename: String(payload.filename || `invoice-${invoiceNumber}.pdf`).replace(/\s+/g, "-").toLowerCase(),
       replyTo: payload.replyTo,
-      attachmentBase64: payload.attachmentBase64,
-      fallbackPdfPayload: {
-        documentType: "invoice",
-        businessName: payload.businessName,
-        businessAddress: payload.businessAddress,
-        businessEmail: payload.businessEmail,
-        businessPhone: payload.businessPhone,
-        abn: payload.abn,
-        logoDataUrl: payload.logoDataUrl,
-        clientName,
-        customerName: clientName,
-        clientEmail: payload.clientEmail,
-        clientPhone: payload.clientPhone,
-        clientAddress: payload.clientAddress,
-        clientContactPerson: payload.clientContactPerson,
-        number: invoiceNumber,
-        invoiceNumber,
-        invoiceDate: payload.invoiceDate || "",
-        dueDate: payload.dueDate || "",
-        description: payload.description || "",
-        comments: payload.comments || "",
-        quantity: payload.quantity ?? 1,
-        subtotal: payload.subtotal ?? 0,
-        gst: payload.gst ?? 0,
-        total: payload.total ?? 0,
-        currencyCode: payload.currencyCode || "AUD",
-        hidePhoneNumber: Boolean(payload.hidePhoneNumber),
-        message: payload.message || "Please find your invoice attached.",
-        stripeCheckoutUrl: payload.stripeCheckoutUrl,
-      },
     });
 
     console.log("send-invoice-attachment-email success:", {
       recipients,
       invoiceNumber,
-      attachmentIncluded: emailResult?.attachmentIncluded,
-      attachmentSource: emailResult?.attachmentSource,
-      pdfError: emailResult?.pdfError || null,
     });
 
     return res.json({
       ok: true,
-      message: emailResult?.attachmentIncluded
-        ? `Invoice emailed to ${recipients.join(", ")}`
-        : `Invoice email sent to ${recipients.join(", ")} without PDF attachment`,
+      message: `Invoice emailed to ${recipients.join(", ")}`,
       result: emailResult,
     });
   } catch (error) {
@@ -1188,8 +1139,17 @@ app.get("*", (req, res, next) => {
 });
 
 app.use((error, _req, res, _next) => {
-  console.error("Unhandled server error:", error);
-  res.status(500).json({ ok: false, error: "An unexpected server error occurred." });
+  console.error("[GLOBAL ERROR HANDLER]", error?.message, error?.stack);
+  console.error("Unhandled server error:", {
+    message: error?.message,
+    name: error?.name,
+    stack: error?.stack,
+  });
+  res.status(500).json({
+    ok: false,
+    error: error?.message || "An unexpected server error occurred.",
+    details: error?.stack || null,
+  });
 });
 
 // ── Overdue Invoice Reminder Cron ─────────────────────────────
