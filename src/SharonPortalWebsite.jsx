@@ -2,7 +2,13 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import html2pdf from "html2pdf.js";
 import { supabase } from "./client";
 import MobileWizard from "./MobileWizard";
-
+import {
+  buildQuoteHtml,
+  buildQuoteEmailHtml,
+  buildInvoiceHtml,
+  openBlobUrlInWindow,
+  writeInvoicePreviewToWindow,
+} from "./PortalDocumentBuilders";
 
 
 // ── Toast notification system ──────────────────────────────
@@ -199,6 +205,7 @@ const navItems = [
   "income sources",
   "documents",
   "bas report",
+  "ato tax form",
   "settings",
 ];
 
@@ -213,7 +220,7 @@ const navSections = [
   },
   {
     title: "Admin",
-    items: ["bas report", "settings"],
+    items: ["bas report", "ato tax form", "settings"],
   },
 ];
 
@@ -228,6 +235,7 @@ const navLabels = {
   "income sources": "Income Sources",
   documents: "Documents",
   "bas report": "BAS Report",
+  "ato tax form": "ATO Tax Form",
   settings: "Settings",
 };
 
@@ -1582,509 +1590,7 @@ function IncomeSourceModal({
 }
 
 
-// ── Document builder functions (top-level for correct scope access) ──────────
-
-function buildQuoteHtml(quote, options = {}, ctx = {}) {
-  const { profile, clients } = ctx;
-  const getClientById = (id) => clients.find((c) => c.id === safeNumber(id));
-  const clientIsGstExempt = (id) => Boolean(getClientById(id)?.outsideAustraliaOrGstExempt);
-  const gstAppliesToClient = (id) => Boolean(profile.gstRegistered) && !clientIsGstExempt(id);
-  const getDocumentBusinessName = () => profile.hideLegalNameOnDocs || !profile.legalBusinessName ? profile.businessName : profile.legalBusinessName;
-  const getDocumentAddress = () => profile.hideAddressOnDocs ? "" : profile.address || "";
-const { allowEmail = false } = options;
-const qClient = getClientById(quote.clientId);
-const currencyCode = quote.currencyCode || getClientCurrencyCode(qClient);
-const money = (value) => formatCurrencyByCode(value, currencyCode);
-const adjustments = calculateAdjustmentValues({
-  subtotal: safeNumber(quote.subtotal),
-  total: safeNumber(quote.total),
-  client: qClient,
-  profile,
-});
-const gstStatus =
-  quote.gstStatus ||
-  (clientIsGstExempt(quote.clientId)
-    ? "GST not applicable"
-    : safeNumber(quote.gst) > 0
-      ? "GST applies"
-      : "GST free");
-const businessName = escapeHtml(getDocumentBusinessName());
-const businessAddress = escapeHtml(getDocumentAddress());
-const clientName = escapeHtml(qClient?.name || "");
-const businessEmail = escapeHtml(profile.email || "");
-const businessPhone = escapeHtml(profile.phone || "");
-const businessAbn = escapeHtml(profile.abn || "");
-const clientDetails =
-  qClient?.includeAddressDetails && qClient?.addressDetails
-    ? `<div style="margin-top:6px; color:#555;">${nl2br(qClient.addressDetails)}</div>`
-    : "";
-
-return `<!doctype html>
-<html>
-<head>
-<meta charset="utf-8" />
-<title>Quote Preview</title>
-<style>
-body { font-family: Arial; padding:40px; color:#14202B; }
-.header { display:flex; justify-content:space-between; border-bottom:1px solid #ddd; padding-bottom:20px; }
-.title { font-size:32px; font-weight:900; color:#6A1B9A; }
-.right { text-align:right; font-size:14px; }
-table { width:100%; border-collapse:collapse; margin-top:24px; }
-th, td { padding:10px; border-bottom:1px solid #eee; }
-th { text-align:left; color:#667085; }
-.totals { width:360px; margin-left:auto; margin-top:20px; }
-.totals div { display:flex; justify-content:space-between; padding:6px 0; }
-.total { font-weight:800; font-size:18px; color:#006D6D; }
-.footer { margin-top:30px; display:flex; justify-content:space-between; font-size:12px; color:#666; }
-.print-toolbar { margin-bottom: 24px; display:flex !important; justify-content:space-between; align-items:center; gap:16px; }
-.toolbar-actions { display:flex; gap:10px; flex-wrap:wrap; }
-.preview-status { font-size:13px; color:#64748B; }
-.print-button { background:#6A1B9A; color:#fff; border:none; border-radius:10px; padding:10px 16px; font-weight:700; cursor:pointer; text-decoration:none; display:inline-block; }
-.email-button { background:#006D6D; color:#fff; border:none; border-radius:10px; padding:10px 16px; font-weight:700; cursor:pointer; }
-@media print {
-  .print-toolbar { display:none !important; }
-  body { padding: 0; }
-}
-</style>
-</head>
-<body>
-
-<div class="print-toolbar">
-<div id="preview-email-status" class="preview-status"></div>
-<div class="toolbar-actions">
-  ${allowEmail ? `<button id="preview-email-button" class="email-button" onclick="window.opener && window.opener.sendQuoteFromPreview && window.opener.sendQuoteFromPreview(${JSON.stringify(quote.id)}, window)">Email Quote</button>` : ""}
-  <a href="javascript:void(0)" class="print-button" onclick="window.print()">Print / Download PDF</a>
-</div>
-</div>
-
-<div class="header">
-<div>
-  ${profile.logoDataUrl
-    ? `<div style="margin-bottom:12px;"><img src="${profile.logoDataUrl}" alt="Logo" style="max-height:${LOGO_DOCUMENT_MAX_HEIGHT}px; max-width:${LOGO_DOCUMENT_MAX_WIDTH}px; object-fit:contain;" /></div>`
-    : ""
-  }
-  <div class="title">QUOTE</div>
-  <div style="margin-top:8px; font-weight:700;">${businessName}</div>
-  <div style="font-size:13px; color:#555;">${businessAddress || ""}</div>
-  <div style="font-size:13px; color:#555;">${businessEmail}${quote.hidePhoneNumber ? "" : ` | ${businessPhone}`}</div>
-  <div style="font-size:13px; color:#555;">ABN: ${businessAbn}</div>
-</div>
-
-<div class="right">
-  <div><strong>Quote ref:</strong> ${quote.quoteNumber || ""}</div>
-  <div><strong>Quote date:</strong> ${formatDateAU(quote.quoteDate)}</div>
-  <div><strong>Expiry date:</strong> ${formatDateAU(quote.expiryDate)}</div>
-</div>
-</div>
-
-<div style="margin-top:20px; font-weight:700;">${clientName}</div>
-${clientDetails}
-
-<table>
-<thead>
-  <tr>
-    <th>Description</th>
-    <th>Qty</th>
-    <th style="text-align:right">Unit Price</th>
-    <th style="text-align:right">GST</th>
-    <th style="text-align:right">Total (excl. GST)</th>
-  </tr>
-</thead>
-<tbody>
-  ${(quote.lineItems && quote.lineItems.length > 0
-    ? quote.lineItems
-    : [{ description: quote.description || "Professional services", quantity: quote.quantity || 1, unitPrice: safeNumber(quote.subtotal) / Math.max(1, safeNumber(quote.quantity || 1)), rowGst: quote.gst, rowTotal: quote.total }]
-  ).map((item) => {
-    const qty = safeNumber(item.quantity || item.qty || 1);
-    const unit = safeNumber(item.unitPrice || item.unit || 0);
-    const rowSub = unit * qty;
-    const rowGst = safeNumber(item.rowGst != null ? item.rowGst : ((item.gstType || "GST on Income (10%)") === "GST on Income (10%)" ? rowSub * 0.1 : 0));
-    return `<tr>
-    <td>${escapeHtml(item.description || "Service")}</td>
-    <td>${qty}</td>
-    <td style="text-align:right">${money(unit)}</td>
-    <td style="text-align:right">${money(rowGst)}</td>
-    <td style="text-align:right">${money(rowSub)}</td>
-  </tr>`;
-  }).join("")}
-</tbody>
-</table>
-
-<div class="totals">
-<div><span>Subtotal (excl GST):</span><span>${money(quote.subtotal)}</span></div>
-<div><span>Total GST:</span><span>${money(quote.gst)}</span></div>
-<div><span>GST status:</span><span>${gstStatus}</span></div>
-<div><span>Less fees:</span><span>${money(adjustments.feeAmount)}</span></div>
-<div><span>Less tax withheld:</span><span>${money(adjustments.taxWithheld)}</span></div>
-<div class="total"><span>Total estimate:</span><span>${money(quote.total)}</span></div>
-<div class="total"><span>Net expected:</span><span>${money(adjustments.netExpected)}</span></div>
-</div>
-
-<div class="footer">
-<div>For any queries relating to this quote please contact ${profile.businessName}</div>
-<div>Private & Confidential</div>
-</div>
-
-</body>
-</html>`;
-}
-
-function buildQuoteEmailHtml(quote, ctx = {}) {
-  const { profile, clients } = ctx;
-  const getClientById = (id) => clients.find((c) => c.id === safeNumber(id));
-  const clientIsGstExempt = (id) => Boolean(getClientById(id)?.outsideAustraliaOrGstExempt);
-  const gstAppliesToClient = (id) => Boolean(profile.gstRegistered) && !clientIsGstExempt(id);
-  const getDocumentBusinessName = () => profile.hideLegalNameOnDocs || !profile.legalBusinessName ? profile.businessName : profile.legalBusinessName;
-  const getDocumentAddress = () => profile.hideAddressOnDocs ? "" : profile.address || "";
-const qClient = getClientById(quote.clientId);
-const currencyCode = quote.currencyCode || getClientCurrencyCode(qClient);
-const money = (value) => formatCurrencyByCode(value, currencyCode);
-const businessName = escapeHtml(getDocumentBusinessName());
-const businessAddress = escapeHtml(getDocumentAddress());
-const clientName = escapeHtml(qClient?.name || "");
-const businessEmail = escapeHtml(profile.email || "");
-const businessPhone = escapeHtml(profile.phone || "");
-const businessAbn = escapeHtml(profile.abn || "");
-const clientDetails =
-  qClient?.includeAddressDetails && qClient?.addressDetails
-    ? `<div style="margin-top:6px; color:#475569;">${nl2br(qClient.addressDetails)}</div>`
-    : "";
-const notesHtml = quote.comments
-  ? `<div style="margin-top:20px; padding:16px; background:#F8FAFC; border:1px solid #E2E8F0; border-radius:12px;">${nl2br(quote.comments)}</div>`
-  : "";
-const quoteLineItems = (quote.lineItems && quote.lineItems.length > 0)
-  ? quote.lineItems
-  : [{ description: quote.description || "Professional services", quantity: quote.quantity || 1, unitPrice: safeNumber(quote.subtotal) / Math.max(1, safeNumber(quote.quantity || 1)), rowGst: quote.gst, rowTotal: quote.total }];
-
-return `<!doctype html>
-<html>
-<head>
-<meta charset="utf-8" />
-<title>Quote ${quote.quoteNumber || ""}</title>
-</head>
-<body style="margin:0; padding:24px; background:#F8FAFC; font-family:Arial, sans-serif; color:#14202B;">
-  <div style="max-width:760px; margin:0 auto; background:#FFFFFF; border:1px solid #E2E8F0; border-radius:18px; padding:28px;">
-    ${profile.logoDataUrl
-      ? `<div style="margin-bottom:16px;"><img src="${profile.logoDataUrl}" alt="Logo" style="max-height:${LOGO_PREVIEW_MAX_HEIGHT}px; max-width:${LOGO_PREVIEW_MAX_WIDTH}px; object-fit:contain;" /></div>`
-      : ""
-    }
-    <div style="display:flex; justify-content:space-between; gap:16px; flex-wrap:wrap; border-bottom:1px solid #E2E8F0; padding-bottom:18px;">
-      <div>
-        <div style="font-size:30px; font-weight:900; color:#6A1B9A;">QUOTE</div>
-        <div style="margin-top:8px; font-weight:700;">${businessName}</div>
-        <div style="font-size:13px; color:#475569; margin-top:4px;">${businessAddress || ""}</div>
-        <div style="font-size:13px; color:#475569; margin-top:4px;">${businessEmail}${quote.hidePhoneNumber ? "" : ` | ${businessPhone}`}</div>
-        <div style="font-size:13px; color:#475569; margin-top:4px;">ABN: ${businessAbn}</div>
-      </div>
-      <div style="text-align:right; font-size:14px; color:#14202B;">
-        <div><strong>Quote ref:</strong> ${quote.quoteNumber || ""}</div>
-        <div style="margin-top:6px;"><strong>Quote date:</strong> ${formatDateAU(quote.quoteDate)}</div>
-        <div style="margin-top:6px;"><strong>Expiry date:</strong> ${formatDateAU(quote.expiryDate)}</div>
-      </div>
-    </div>
-
-    <div style="margin-top:20px;">
-      <div style="font-weight:700;">${clientName}</div>
-      ${clientDetails}
-    </div>
-
-    <table style="width:100%; border-collapse:collapse; margin-top:24px;">
-      <thead>
-        <tr>
-          <th style="text-align:left; padding:10px; border-bottom:1px solid #E2E8F0; color:#64748B;">Description</th>
-          <th style="text-align:left; padding:10px; border-bottom:1px solid #E2E8F0; color:#64748B;">Qty</th>
-          <th style="text-align:right; padding:10px; border-bottom:1px solid #E2E8F0; color:#64748B;">Unit Price</th>
-          <th style="text-align:right; padding:10px; border-bottom:1px solid #E2E8F0; color:#64748B;">GST</th>
-          <th style="text-align:right; padding:10px; border-bottom:1px solid #E2E8F0; color:#64748B;">Total (excl. GST)</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${quoteLineItems.map((item) => {
-          const qty = safeNumber(item.quantity || item.qty || 1);
-          const unit = safeNumber(item.unitPrice || item.unit || 0);
-          const rowSub = unit * qty;
-          const rowGst = safeNumber(item.rowGst != null ? item.rowGst : ((item.gstType || "GST on Income (10%)") === "GST on Income (10%)" ? rowSub * 0.1 : 0));
-          return `<tr>
-          <td style="padding:10px; border-bottom:1px solid #E2E8F0;">${escapeHtml(item.description || "Professional services")}</td>
-          <td style="padding:10px; border-bottom:1px solid #E2E8F0;">${qty}</td>
-          <td style="padding:10px; border-bottom:1px solid #E2E8F0; text-align:right;">${money(unit)}</td>
-          <td style="padding:10px; border-bottom:1px solid #E2E8F0; text-align:right;">${money(rowGst)}</td>
-          <td style="padding:10px; border-bottom:1px solid #E2E8F0; text-align:right;">${money(rowSub)}</td>
-        </tr>`;
-        }).join("")}
-      </tbody>
-    </table>
-
-    <div style="max-width:360px; margin:24px 0 0 auto;">
-      <div style="display:flex; justify-content:space-between; padding:6px 0;"><span>Subtotal (excl GST):</span><span>${money(quote.subtotal)}</span></div>
-      <div style="display:flex; justify-content:space-between; padding:6px 0;"><span>Total GST:</span><span>${money(quote.gst)}</span></div>
-      <div style="display:flex; justify-content:space-between; padding:6px 0; font-weight:800; color:#006D6D;"><span>Total estimate:</span><span>${money(quote.total)}</span></div>
-    </div>
-
-    ${notesHtml}
-
-    <div style="margin-top:24px; font-size:12px; color:#64748B; line-height:1.6;">
-      This is a quote only and not a tax invoice.
-    </div>
-  </div>
-</body>
-</html>`;
-}
-
-function buildInvoiceHtml(invoice, stripeCheckoutUrl = "", options = {}, ctx = {}) {
-  const { profile, clients } = ctx;
-  const getClientById = (id) => clients.find((c) => c.id === safeNumber(id));
-  const clientIsGstExempt = (id) => Boolean(getClientById(id)?.outsideAustraliaOrGstExempt);
-  const gstAppliesToClient = (id) => Boolean(profile.gstRegistered) && !clientIsGstExempt(id);
-  const getDocumentBusinessName = () => profile.hideLegalNameOnDocs || !profile.legalBusinessName ? profile.businessName : profile.legalBusinessName;
-  const getDocumentAddress = () => profile.hideAddressOnDocs ? "" : profile.address || "";
-const { allowEmail = false } = options;
-const previewClient = getClientById(invoice.clientId);
-const currencyCode = invoice.currencyCode || getClientCurrencyCode(previewClient);
-const money = (value) => formatCurrencyByCode(value, currencyCode);
-const feeAmount =
-  invoice.feeAmount != null
-    ? safeNumber(invoice.feeAmount)
-    : calculateAdjustmentValues({
-      subtotal: safeNumber(invoice.subtotal),
-      total: safeNumber(invoice.total),
-      client: previewClient,
-      profile,
-    }).feeAmount;
-const taxWithheld =
-  invoice.taxWithheld != null
-    ? safeNumber(invoice.taxWithheld)
-    : calculateAdjustmentValues({
-      subtotal: safeNumber(invoice.subtotal),
-      total: safeNumber(invoice.total),
-      client: previewClient,
-      profile,
-    }).taxWithheld;
-const netExpected =
-  invoice.netExpected != null
-    ? safeNumber(invoice.netExpected)
-    : calculateAdjustmentValues({
-      subtotal: safeNumber(invoice.subtotal),
-      total: safeNumber(invoice.total),
-      client: previewClient,
-      profile,
-    }).netExpected;
-const gstStatus =
-  invoice.gstStatus ||
-  (clientIsGstExempt(invoice.clientId)
-    ? "GST not applicable"
-    : safeNumber(invoice.gst) > 0
-      ? "GST applies"
-      : "GST free");
-const purchaseOrderReference = escapeHtml(invoice.purchaseOrderReference || "");
-const purchaseOrderBlock =
-  previewClient?.hasPurchaseOrder && purchaseOrderReference
-    ? `<div style="margin-top:10px; font-size:14px; color:#555;"><strong>PO / Reference:</strong> ${purchaseOrderReference}</div>`
-    : "";
-const businessName = escapeHtml(getDocumentBusinessName());
-const businessAddress = escapeHtml(getDocumentAddress());
-const clientName = escapeHtml(previewClient?.name || "");
-const clientEmail = escapeHtml(previewClient?.email || "");
-const businessEmail = escapeHtml(profile.email || "");
-const businessPhone = escapeHtml(profile.phone || "");
-const businessAbn = escapeHtml(profile.abn || "");
-const paymentReference = escapeHtml(invoice.paymentReference || invoice.invoiceNumber || "");
-
-const clientDetails =
-  previewClient?.includeAddressDetails && previewClient?.addressDetails
-    ? `<div style="margin-top:6px; color:#555;">
-          ${nl2br(previewClient.addressDetails)}
-        </div>`
-    : "";
-return `<!doctype html>
-<html>
-<head>
-<meta charset="utf-8" />
-<title>Invoice Preview</title>
-<style>
-body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
-.header { display:flex; justify-content:space-between; border-bottom:2px solid #eee; padding-bottom:20px; }
-.title { font-size:34px; font-weight:900; color:#6A1B9A; }
-.right { text-align:right; }
-.section { margin-top:24px; }
-table { width:100%; border-collapse: collapse; margin-top:20px; }
-th, td { padding:12px; border-bottom:1px solid #ddd; font-size:14px; }
-th { text-align:left; color:#64748B; }
-.totals { margin-top:20px; width:360px; margin-left:auto; }
-.totals div { display:flex; justify-content:space-between; padding:6px 0; }
-.total { font-size:20px; font-weight:800; color:#006D6D; }
-.payment { margin-top:30px; padding-top:20px; border-top:1px solid #ddd; }
-.footer { margin-top:40px; font-size:12px; color:#666; display:flex; justify-content:space-between; }
-.print-toolbar { margin-bottom: 24px; display:flex !important; justify-content:space-between; align-items:center; gap:16px; }
-.toolbar-actions { display:flex; gap:10px; flex-wrap:wrap; }
-.preview-status { font-size:13px; color:#64748B; }
-.print-button { background:#6A1B9A; color:#fff; border:none; border-radius:10px; padding:10px 16px; font-weight:700; cursor:pointer; text-decoration:none; display:inline-block; }
-.email-button { background:#006D6D; color:#fff; border:none; border-radius:10px; padding:10px 16px; font-weight:700; cursor:pointer; }
-@media print {
-  .print-toolbar { display:none !important; }
-  body { padding: 0; }
-}
-</style>
-</head>
-<body>
-
-<div class="print-toolbar">
-<div id="preview-email-status" class="preview-status"></div>
-<div class="toolbar-actions">
-  ${allowEmail ? `<button id="preview-email-button" class="email-button" onclick="window.opener && window.opener.sendInvoiceFromPreview && window.opener.sendInvoiceFromPreview(${JSON.stringify(invoice.id)}, window)">Email Invoice</button>` : ""}
-  <a href="javascript:void(0)" class="print-button" onclick="window.print()">Print / Download PDF</a>
-</div>
-</div>
-
-<div class="header">
-<div>
-  ${profile.logoDataUrl
-    ? `<div style="margin-bottom:12px;"><img src="${profile.logoDataUrl}" alt="Logo" style="max-height:${LOGO_DOCUMENT_MAX_HEIGHT}px; max-width:${LOGO_DOCUMENT_MAX_WIDTH}px; object-fit:contain;" /></div>`
-    : ""
-  }
-  <div class="title">TAX INVOICE</div>
-  <div style="margin-top:10px; font-weight:700;">${businessName}</div>
-  <div style="font-size:14px; color:#555;">${businessAddress || ""}</div>
-  <div style="font-size:14px; color:#555;">${businessEmail}${invoice.hidePhoneNumber ? "" : ` | ${businessPhone}`}</div>
-  <div style="font-size:14px; color:#555;">ABN: ${businessAbn}</div>
-</div>
-
-<div class="right">
-  <div><strong>Invoice #:</strong> ${invoice.invoiceNumber || ""}</div>
-  <div><strong>Date:</strong> ${formatDateAU(invoice.invoiceDate)}</div>
-  <div><strong>Due:</strong> ${formatDateAU(invoice.dueDate)}</div>
-</div>
-</div>
-
-<div class="section">
-<strong>Billed To:</strong><br/>
-${clientName}<br/>
-${clientEmail}
-${clientDetails}
-${purchaseOrderBlock}
-</div>
-
-<table>
-<thead>
-  <tr>
-    <th>Description</th>
-    <th>Qty</th>
-    <th class="right">Unit Price</th>
-    <th class="right">GST</th>
-    <th class="right">Total</th>
-  </tr>
-</thead>
-<tbody>
-  ${(invoice.lineItems && invoice.lineItems.length > 0
-    ? invoice.lineItems
-    : [{ description: invoice.description || "Professional services", quantity: invoice.quantity || 1, unitPrice: safeNumber(invoice.subtotal) / Math.max(1, safeNumber(invoice.quantity || 1)), rowGst: invoice.gst, rowTotal: invoice.total }]
-  ).map((item) => {
-    const qty = safeNumber(item.quantity || item.qty || 1);
-    const unit = safeNumber(item.unitPrice || item.unit || 0);
-    const rowSub = unit * qty;
-    const rowGst = safeNumber(item.rowGst != null ? item.rowGst : ((item.gstType || "GST on Income (10%)") === "GST on Income (10%)" ? rowSub * 0.1 : 0));
-    const rowTotal = rowSub + rowGst;
-    return `<tr>
-    <td>${escapeHtml(item.description || "Service")}</td>
-    <td>${qty}</td>
-    <td class="right">${money(unit)}</td>
-    <td class="right">${money(rowGst)}</td>
-    <td class="right">${money(rowTotal)}</td>
-  </tr>`;
-  }).join("")}
-</tbody>
-</table>
-
-<div class="totals">
-<div><span>Subtotal (ex GST)</span><span>${money(invoice.subtotal)}</span></div>
-<div><span>GST</span><span>${money(invoice.gst)}</span></div>
-<div><span>GST status</span><span>${gstStatus}</span></div>
-<div><span>Less fees</span><span>${money(feeAmount)}</span></div>
-<div><span>Less tax withheld</span><span>${money(taxWithheld)}</span></div>
-<div class="total"><span>Amount Due</span><span>${money(invoice.total)}</span></div>
-<div class="total"><span>Net expected</span><span>${money(netExpected)}</span></div>
-</div>
-
-<div class="payment">
-<strong>Please make payment to:</strong>
-<div style="margin-top:10px; font-size:14px;">
-  ${profile.bankName ? `<div><strong>Account Name:</strong> ${profile.bankName}</div>` : ""}
-  ${profile.bsb ? `<div><strong>BSB:</strong> ${profile.bsb}</div>` : ""}
-  ${profile.accountNumber ? `<div><strong>Account Number:</strong> ${profile.accountNumber}</div>` : ""}
-  ${profile.payId ? `<div><strong>PayID:</strong> ${profile.payId}</div>` : ""}
-</div>
-<div style="margin-top:10px; font-size:13px; color:#555;">
-  Please use reference: ${paymentReference}
-</div>
-${stripeCheckoutUrl || profile.paypalPaymentLink
-    ? `<div style="margin-top:16px; padding:14px; border:1px solid #E2E8F0; border-radius:12px; background:#F7F6F5;">
-        <div style="font-weight:700; color:#14202B; margin-bottom:8px;">Pay Online</div>
-        <div style="font-size:13px; color:#555; margin-bottom:10px;">Choose your preferred payment method below.</div>
-        ${stripeCheckoutUrl
-      ? `<a href="${stripeCheckoutUrl}" target="_blank" rel="noreferrer" style="display:inline-block; margin-right:10px; background:#6A1B9A; color:#FFFFFF; text-decoration:none; padding:10px 16px; border-radius:10px; font-weight:700;">Pay with Card</a>`
-      : ""
-    }
-        ${profile.paypalPaymentLink
-      ? `<a href="${profile.paypalPaymentLink}" target="_blank" rel="noreferrer" style="display:inline-block; background:#0070BA; color:#FFFFFF; text-decoration:none; padding:10px 16px; border-radius:10px; font-weight:700;">Pay with PayPal</a>`
-      : ""
-    }
-      </div>`
-    : ""
-  }
-</div>
-
-<div class="footer">
-<div>For any queries please contact ${profile.businessName || "Your business"}</div>
-<div>Private & Confidential</div>
-</div>
-
-<script>
-  document.getElementById('print-btn') && document.getElementById('print-btn').addEventListener('click', function() { window.print(); });
-</script>
-</body>
-</html>`;
-}
-
-function openBlobUrlInWindow(w, blob) {
-const url = URL.createObjectURL(blob);
-try {
-  if (w.location.origin === "null") {
-    try {
-      URL.revokeObjectURL(w.location.href);
-    } catch (error) {
-      console.warn("Could not revoke previous preview URL", error);
-    }
-  }
-} catch (error) {
-  console.warn("Could not inspect previous preview URL", error);
-}
-w.location.href = url;
-const revoke = () => {
-  try {
-    URL.revokeObjectURL(url);
-  } catch (error) {
-    console.warn("Could not revoke preview URL", error);
-  }
-};
-try {
-  w.addEventListener("beforeunload", revoke, { once: true });
-} catch (error) {
-  console.warn("Preview cleanup listener failed", error);
-}
-setTimeout(revoke, 60000);
-try {
-  w.focus();
-} catch (error) {
-  console.warn("Preview window focus failed", error);
-}
-}
-
-function writeInvoicePreviewToWindow(w, invoice, stripeCheckoutUrl = "", options = {}, ctx = {}) {
-const html = buildInvoiceHtml(invoice, stripeCheckoutUrl, options, ctx);
-const blob = new Blob([html], { type: "text/html" });
-openBlobUrlInWindow(w, blob);
-}
-
+// ── Document builder functions moved to PortalDocumentBuilders.jsx ──────────
 
 export default function AccountingPortalPrototype() {
   const { toasts, toast, removeToast } = useToast();
@@ -8963,6 +8469,444 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       );
     };
 
+
+    const renderATOTaxForm = () => {
+      const atoState = window.__sasAtoState || {
+        tab: "Income",
+        medicare: "yes",
+        residency: "Resident",
+        help: "No",
+        mlsFamily: "single",
+        mlsChildren: 0,
+        mlsCover: "yes",
+        saptoStatus: "none",
+        periodLabel: "2025–26 full year",
+      };
+      window.__sasAtoState = atoState;
+      const updateAtoState = (patch) => {
+        window.__sasAtoState = { ...window.__sasAtoState, ...patch };
+        setActivePage("ato tax form");
+      };
+
+      const fmt = (value) => currency(value);
+      const rawIncomeRows = [];
+
+      invoices
+        .filter((inv) => inv.type !== "credit_note")
+        .forEach((inv) => {
+          const client = getClientById(inv.clientId);
+          const allocation = invoiceAllocations.find((a) => String(a.id) === String(inv.id));
+          const gross = safeNumber(inv.total);
+          if (!gross) return;
+          rawIncomeRows.push({
+            id: `inv-${inv.id}`,
+            date: inv.paidAt ? String(inv.paidAt).slice(0, 10) : (inv.invoiceDate || ""),
+            type: "Business (sole trader)",
+            payer: client?.name || client?.businessName || inv.clientName || inv.invoiceNumber || "Invoice",
+            gross,
+            withheld: safeNumber(allocation?.taxWithheld || inv.taxWithheld || 0),
+            franked: 0,
+            franking: 0,
+            abn: client?.abn || "",
+            source: "invoice",
+            business: true,
+            gstOnSales: safeNumber(allocation?.gst || inv.gst || 0),
+          });
+        });
+
+      incomeSources.forEach((src, idx) => {
+        const gross = safeNumber(src.beforeTax || src.amount || 0);
+        if (!gross) return;
+        const incomeType = String(src.incomeType || src.type || "Other");
+        const lowered = incomeType.toLowerCase();
+        rawIncomeRows.push({
+          id: `src-${src.id || idx}`,
+          date: src.date || todayLocal(),
+          type: incomeType,
+          payer: src.name || src.payer || incomeType,
+          gross,
+          withheld: safeNumber(src.taxWithheld || src.withheld || 0),
+          franked: safeNumber(src.frankedAmount || src.franked || 0),
+          franking: safeNumber(src.frankingCredit || src.franking || 0),
+          abn: src.abn || "",
+          source: "incomeSource",
+          business: lowered.includes("business") || lowered.includes("sole trader") || lowered.includes("partnership"),
+          gstOnSales: 0,
+        });
+      });
+
+      const expenseRows = expenses.map((exp, idx) => {
+        const amount = safeNumber(exp.amount || 0);
+        const gst = exp.gst != null ? safeNumber(exp.gst) : (String(exp.gstIncl || exp.gstIncluded || "").toLowerCase() === "yes" ? amount / 11 : 0);
+        const category = exp.category || exp.expenseType || exp.type || "Other";
+        const isCapital = String(category).toLowerCase() === "capital item" || amount >= 1000;
+        return {
+          id: exp.id || `exp-${idx}`,
+          date: exp.date || "",
+          type: category,
+          supplier: exp.supplier || exp.description || "Expense",
+          amount,
+          gst,
+          gstIncl: gst > 0 ? "Yes" : "No",
+          deductible: Math.max(0, amount - gst),
+          isCapital,
+        };
+      }).filter((row) => row.amount > 0);
+
+      const totalIncome = rawIncomeRows.reduce((sum, row) => sum + safeNumber(row.gross), 0);
+      const totalWithheld = rawIncomeRows.reduce((sum, row) => sum + safeNumber(row.withheld), 0);
+      const totalFranked = rawIncomeRows.reduce((sum, row) => sum + safeNumber(row.franked), 0);
+      const totalFrankingCredits = rawIncomeRows.reduce((sum, row) => sum + safeNumber(row.franking), 0);
+      const deductibleExpenses = expenseRows.filter((row) => !row.isCapital).reduce((sum, row) => sum + safeNumber(row.deductible), 0);
+      const totalExpensesInclGst = expenseRows.reduce((sum, row) => sum + safeNumber(row.amount), 0);
+      const totalExpenseGst = expenseRows.reduce((sum, row) => sum + safeNumber(row.gst), 0);
+      const taxableIncome = Math.max(0, totalIncome - deductibleExpenses);
+
+      const g1 = rawIncomeRows.filter((row) => row.business).reduce((sum, row) => sum + safeNumber(row.gross), 0);
+      const g10 = expenseRows.filter((row) => row.isCapital).reduce((sum, row) => sum + safeNumber(row.amount), 0);
+      const g11 = expenseRows.filter((row) => !row.isCapital).reduce((sum, row) => sum + safeNumber(row.amount), 0);
+      const b1a = rawIncomeRows.reduce((sum, row) => sum + safeNumber(row.gstOnSales), 0);
+      const b1b = totalExpenseGst;
+      const basNet = b1a - b1b;
+
+      const atoTaxResident = (income) => {
+        const t = safeNumber(income);
+        if (t <= 18200) return 0;
+        if (t <= 45000) return (t - 18200) * 0.16;
+        if (t <= 135000) return 4288 + (t - 45000) * 0.30;
+        if (t <= 190000) return 31288 + (t - 135000) * 0.37;
+        return 51638 + (t - 190000) * 0.45;
+      };
+      const atoTaxNonResident = (income) => {
+        const t = safeNumber(income);
+        if (t <= 135000) return t * 0.30;
+        if (t <= 190000) return 40500 + (t - 135000) * 0.37;
+        return 60850 + (t - 190000) * 0.45;
+      };
+      const lowIncomeTaxOffset = (taxable, isResident) => {
+        if (!isResident) return 0;
+        const t = safeNumber(taxable);
+        if (t <= 37500) return 700;
+        if (t <= 45000) return 700 - 0.05 * (t - 37500);
+        if (t <= 66667) return Math.max(0, 325 - 0.015 * (t - 45000));
+        return 0;
+      };
+      const saptoOffset = (taxable) => {
+        const status = atoState.saptoStatus;
+        if (status === "none") return 0;
+        const t = safeNumber(taxable);
+        let max = 0, threshold = 0, cutoff = 0;
+        if (status === "single") {
+          max = 2230; threshold = 34919; cutoff = 52759;
+        } else if (status === "couple") {
+          max = 1602; threshold = 30994; cutoff = 43810;
+        } else if (status === "illness") {
+          max = 2040; threshold = 33732; cutoff = 50052;
+        }
+        if (t <= threshold) return max;
+        if (t >= cutoff) return 0;
+        return Math.max(0, max - 0.125 * (t - threshold));
+      };
+      const helpRepayment = (repIncome) => {
+        if (atoState.help !== "Yes") return 0;
+        const RI = safeNumber(repIncome);
+        if (RI <= 54435) return 0;
+        if (RI <= 62738) return RI * 0.01;
+        if (RI <= 68152) return RI * 0.02;
+        if (RI <= 72207) return RI * 0.025;
+        if (RI <= 75866) return RI * 0.03;
+        if (RI <= 79768) return RI * 0.035;
+        if (RI <= 83955) return RI * 0.04;
+        if (RI <= 88487) return RI * 0.045;
+        if (RI <= 93308) return RI * 0.05;
+        if (RI <= 98471) return RI * 0.055;
+        if (RI <= 103004) return RI * 0.06;
+        if (RI <= 107978) return RI * 0.065;
+        if (RI <= 113337) return RI * 0.07;
+        if (RI <= 119122) return RI * 0.075;
+        if (RI <= 125370) return RI * 0.08;
+        if (RI <= 132120) return RI * 0.085;
+        if (RI <= 139414) return RI * 0.09;
+        if (RI <= 147296) return RI * 0.095;
+        return RI * 0.10;
+      };
+      const itrLevy = (taxable) => {
+        const levyOn = atoState.medicare === "yes";
+        const isResident = atoState.residency === "Resident";
+        if (!levyOn || !isResident) return 0;
+        return safeNumber(taxable) * 0.02;
+      };
+      const mlsSurcharge = (repIncome) => {
+        const isResident = atoState.residency === "Resident";
+        if (!isResident || atoState.mlsCover === "yes") return 0;
+        const children = Math.max(0, parseInt(atoState.mlsChildren || 0, 10) || 0);
+        let baseThreshold = atoState.mlsFamily === "family" ? 194000 : 97000;
+        if (atoState.mlsFamily === "family" && children > 1) {
+          baseThreshold += (children - 1) * 1500;
+        }
+        const RI = safeNumber(repIncome);
+        if (RI <= baseThreshold) return 0;
+        let rate = 0.01;
+        if (RI > baseThreshold * 1.5) rate = 0.015;
+        else if (RI > baseThreshold * 1.25) rate = 0.0125;
+        return RI * rate;
+      };
+
+      const isResident = atoState.residency === "Resident";
+      const taxGross = isResident ? atoTaxResident(taxableIncome) : atoTaxNonResident(taxableIncome);
+      const repaymentIncome = taxableIncome;
+      const levy = itrLevy(taxableIncome);
+      const mls = mlsSurcharge(repaymentIncome);
+      const help = helpRepayment(repaymentIncome);
+      const lito = lowIncomeTaxOffset(taxableIncome, isResident);
+      const sapto = saptoOffset(taxableIncome);
+      const totalOffsets = totalFrankingCredits + lito + sapto;
+      const taxAfterOffsets = Math.max(0, taxGross - totalOffsets);
+      const netBalance = taxAfterOffsets + levy + mls + help - totalWithheld;
+
+      const itrIncomeBuckets = {
+        salary: rawIncomeRows.filter((row) => {
+          const t = String(row.type || "").toLowerCase();
+          return t.includes("salary") || t.includes("wage") || t.includes("casual employment") || t.includes("casual");
+        }).reduce((sum, row) => sum + safeNumber(row.gross), 0),
+        business: rawIncomeRows.filter((row) => row.business).reduce((sum, row) => sum + safeNumber(row.gross), 0),
+        interest: rawIncomeRows.filter((row) => String(row.type || "").toLowerCase().includes("interest")).reduce((sum, row) => sum + safeNumber(row.gross), 0),
+        dividends: rawIncomeRows.filter((row) => String(row.type || "").toLowerCase().includes("dividend")).reduce((sum, row) => sum + safeNumber(row.gross), 0),
+        foreign: rawIncomeRows.filter((row) => String(row.type || "").toLowerCase().includes("outside australia") || String(row.type || "").toLowerCase().includes("foreign")).reduce((sum, row) => sum + safeNumber(row.gross), 0),
+        other: rawIncomeRows.filter((row) => {
+          const t = String(row.type || "").toLowerCase();
+          return !(t.includes("salary") || t.includes("wage") || t.includes("casual") || row.business || t.includes("interest") || t.includes("dividend") || t.includes("foreign") || t.includes("outside australia"));
+        }).reduce((sum, row) => sum + safeNumber(row.gross), 0),
+      };
+      const itrAssessable = Object.values(itrIncomeBuckets).reduce((sum, value) => sum + safeNumber(value), 0);
+
+      const currentTab = atoState.tab || "Income";
+      const tabButton = (label) => (
+        <button
+          key={label}
+          onClick={() => updateAtoState({ tab: label })}
+          style={{
+            ...buttonSecondary,
+            background: currentTab === label ? colours.purple : colours.white,
+            color: currentTab === label ? "#fff" : colours.text,
+            borderColor: currentTab === label ? colours.purple : colours.border,
+          }}
+        >
+          {label}
+        </button>
+      );
+      const summaryRow = (label, value, tone = "normal") => (
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "10px 12px", borderRadius: 10, background: tone === "highlight" ? colours.lightTeal : colours.bg, fontWeight: tone === "highlight" ? 800 : 500 }}>
+          <span>{label}</span>
+          <span>{typeof value === "string" ? value : fmt(value)}</span>
+        </div>
+      );
+
+      return (
+        <div style={{ display: "grid", gap: 20 }}>
+          <DashboardHero
+            title="ATO Tax Form"
+            subtitle="This worksheet mirrors your Tax & BAS ledger style using live portal data from invoices, income sources and expenses."
+            highlight={atoState.periodLabel || "2025–26"}
+          >
+            <InsightChip label="Total income" value={fmt(totalIncome)} />
+            <InsightChip label="Deductible expenses" value={fmt(deductibleExpenses)} />
+            <InsightChip label="Net balance" value={fmt(netBalance)} />
+          </DashboardHero>
+
+          <SectionCard title="ATO worksheets" right={<div style={{ fontSize: 12, color: colours.muted }}>Portal calculations</div>}>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
+              {["Income", "Expenses", "GST (BAS)", "BAS Summary", "Tax Summary", "ITR 2025–26"].map(tabButton)}
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 12 }}>
+              <div>
+                <label style={labelStyle}>Period label</label>
+                <input style={inputStyle} value={atoState.periodLabel || ""} onChange={(e) => updateAtoState({ periodLabel: e.target.value })} />
+              </div>
+              <div>
+                <label style={labelStyle}>Medicare levy</label>
+                <select style={inputStyle} value={atoState.medicare} onChange={(e) => updateAtoState({ medicare: e.target.value })}>
+                  <option value="yes">Yes (2%)</option>
+                  <option value="no">No</option>
+                </select>
+              </div>
+              <div>
+                <label style={labelStyle}>Residency</label>
+                <select style={inputStyle} value={atoState.residency} onChange={(e) => updateAtoState({ residency: e.target.value })}>
+                  <option value="Resident">Resident</option>
+                  <option value="Non-resident">Non-resident</option>
+                </select>
+              </div>
+              <div>
+                <label style={labelStyle}>HELP / HECS debt</label>
+                <select style={inputStyle} value={atoState.help} onChange={(e) => updateAtoState({ help: e.target.value })}>
+                  <option value="No">No</option>
+                  <option value="Yes">Yes</option>
+                </select>
+              </div>
+            </div>
+          </SectionCard>
+
+          {currentTab === "Income" && (
+            <SectionCard title="Income Ledger">
+              <DataTable
+                columns={[
+                  { key: "date", label: "Date", render: (v) => formatDateAU(v) },
+                  { key: "type", label: "Type" },
+                  { key: "payer", label: "Payer" },
+                  { key: "gross", label: "Gross ($)", render: (v) => fmt(v) },
+                  { key: "withheld", label: "Withheld ($)", render: (v) => fmt(v) },
+                  { key: "franked", label: "Franked ($)", render: (v) => fmt(v) },
+                  { key: "franking", label: "Franking Cr ($)", render: (v) => fmt(v) },
+                  { key: "abn", label: "ABN" },
+                ]}
+                rows={rawIncomeRows}
+                emptyState={{ icon: "💼", title: "No income yet", message: "Paid invoices and income sources will appear here." }}
+              />
+              <div style={{ display: "grid", gap: 8, marginTop: 14 }}>
+                {summaryRow("Total gross income", totalIncome, "highlight")}
+                {summaryRow("Total tax withheld", totalWithheld)}
+                {summaryRow("Total franked dividends", totalFranked)}
+                {summaryRow("Total franking credits", totalFrankingCredits)}
+              </div>
+            </SectionCard>
+          )}
+
+          {currentTab === "Expenses" && (
+            <SectionCard title="Expense Ledger">
+              <DataTable
+                columns={[
+                  { key: "date", label: "Date", render: (v) => formatDateAU(v) },
+                  { key: "type", label: "Type" },
+                  { key: "supplier", label: "Supplier" },
+                  { key: "amount", label: "Amount ($)", render: (v) => fmt(v) },
+                  { key: "gstIncl", label: "GST Incl" },
+                  { key: "gst", label: "GST ($)", render: (v) => fmt(v) },
+                ]}
+                rows={expenseRows}
+                emptyState={{ icon: "🧾", title: "No expenses yet", message: "Portal expenses will appear here." }}
+              />
+              <div style={{ display: "grid", gap: 8, marginTop: 14 }}>
+                {summaryRow("Total expenses (incl GST)", totalExpensesInclGst, "highlight")}
+                {summaryRow("Deductible expenses (net GST)", deductibleExpenses)}
+                {summaryRow("GST credits on expenses", totalExpenseGst)}
+              </div>
+            </SectionCard>
+          )}
+
+          {currentTab === "GST (BAS)" && (
+            <SectionCard title="GST (BAS) Summary">
+              <div style={{ display: "grid", gap: 8 }}>
+                {summaryRow("G1 Total Sales (incl GST) — Business income only", g1)}
+                {summaryRow("G10 Capital Purchases (≥ $1,000)", g10)}
+                {summaryRow("G11 Non-Capital Purchases (< $1,000)", g11)}
+                {summaryRow("1A GST on Sales (Payable)", b1a)}
+                {summaryRow("1B GST on Purchases (Credits)", b1b)}
+                {summaryRow("Net GST payable (1A − 1B)", basNet, "highlight")}
+              </div>
+              <div style={{ marginTop: 12, fontSize: 12, color: colours.muted }}>Only business income contributes to G1. Expense credits use the GST recorded in the portal.</div>
+            </SectionCard>
+          )}
+
+          {currentTab === "BAS Summary" && (
+            <SectionCard title="BAS Summary">
+              <div style={{ display: "grid", gap: 12 }}>
+                <div style={{ ...cardStyle, padding: 16 }}>
+                  <div style={{ fontWeight: 800, color: colours.teal, marginBottom: 8 }}>Period & Entity</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 10 }}>
+                    <div><span style={{ fontSize: 12, color: colours.muted }}>Period</span><div>{atoState.periodLabel || "2025–26 full year"}</div></div>
+                    <div><span style={{ fontSize: 12, color: colours.muted }}>ABN</span><div>{profile.abn || "44869154258"}</div></div>
+                    <div><span style={{ fontSize: 12, color: colours.muted }}>Business name</span><div>{profile.businessName || "Sharon’s Accounting Service"}</div></div>
+                  </div>
+                </div>
+                <div style={{ display: "grid", gap: 8 }}>
+                  {summaryRow("G1 Total sales (incl GST)", g1)}
+                  {summaryRow("G10 Capital purchases (incl GST)", g10)}
+                  {summaryRow("G11 Non-capital purchases (incl GST)", g11)}
+                  {summaryRow("1A GST on sales (payable)", b1a)}
+                  {summaryRow("1B GST on purchases (credits)", b1b)}
+                  {summaryRow("Net GST for this BAS (1A − 1B)", basNet, "highlight")}
+                </div>
+              </div>
+            </SectionCard>
+          )}
+
+          {currentTab === "Tax Summary" && (
+            <SectionCard title="Tax Summary (Indicative — ATO brackets)">
+              <div style={{ display: "grid", gap: 8 }}>
+                {summaryRow("Total Income", totalIncome)}
+                {summaryRow("Less: Deductible Expenses", `−${fmt(deductibleExpenses)}`)}
+                {summaryRow("Taxable Income", taxableIncome)}
+                {summaryRow("Less: Franking credits (tax offset)", `−${fmt(totalFrankingCredits)}`)}
+                {summaryRow("Estimated Income Tax", taxAfterOffsets)}
+                {summaryRow("Medicare Levy", levy)}
+                {summaryRow("Less: PAYG Withheld", `−${fmt(totalWithheld)}`)}
+                {summaryRow("Net Balance (Payable + / Refund −)", netBalance, "highlight")}
+              </div>
+            </SectionCard>
+          )}
+
+          {currentTab === "ITR 2025–26" && (
+            <SectionCard title="Individual Tax Return (ITR) — 2025–26 (Indicative)">
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 12, marginBottom: 14 }}>
+                <div>
+                  <label style={labelStyle}>Family status for MLS</label>
+                  <select style={inputStyle} value={atoState.mlsFamily} onChange={(e) => updateAtoState({ mlsFamily: e.target.value })}>
+                    <option value="single">Single</option>
+                    <option value="family">Family</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={labelStyle}>Dependent children (MLS)</label>
+                  <input type="number" min="0" style={inputStyle} value={atoState.mlsChildren} onChange={(e) => updateAtoState({ mlsChildren: e.target.value })} />
+                </div>
+                <div>
+                  <label style={labelStyle}>Private hospital cover</label>
+                  <select style={inputStyle} value={atoState.mlsCover} onChange={(e) => updateAtoState({ mlsCover: e.target.value })}>
+                    <option value="yes">Yes</option>
+                    <option value="no">No</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={labelStyle}>SAPTO status</label>
+                  <select style={inputStyle} value={atoState.saptoStatus} onChange={(e) => updateAtoState({ saptoStatus: e.target.value })}>
+                    <option value="none">Not eligible / under age</option>
+                    <option value="single">Single</option>
+                    <option value="couple">Couple (each)</option>
+                    <option value="illness">Couple separated due to illness (each)</option>
+                  </select>
+                </div>
+              </div>
+              <div style={{ display: "grid", gap: 8 }}>
+                {summaryRow("Salary / wages", itrIncomeBuckets.salary)}
+                {summaryRow("Business (sole trader) gross", itrIncomeBuckets.business)}
+                {summaryRow("Interest", itrIncomeBuckets.interest)}
+                {summaryRow("Dividends", itrIncomeBuckets.dividends)}
+                {summaryRow("Foreign income", itrIncomeBuckets.foreign)}
+                {summaryRow("Other income", itrIncomeBuckets.other)}
+                {summaryRow("Total assessable income", itrAssessable)}
+                {summaryRow("Less: deductions", `−${fmt(deductibleExpenses)}`)}
+                {summaryRow("Taxable income", taxableIncome)}
+                {summaryRow("HELP / MLS repayment income", repaymentIncome)}
+                {summaryRow("Income tax (ATO brackets)", taxAfterOffsets)}
+                {summaryRow("Medicare levy", levy)}
+                {summaryRow("Medicare levy surcharge", mls)}
+                {summaryRow("HELP / HECS repayment", help)}
+                {summaryRow("Less: Franking credits", `−${fmt(totalFrankingCredits)}`)}
+                {summaryRow("Less: LITO", `−${fmt(lito)}`)}
+                {summaryRow("Less: SAPTO", `−${fmt(sapto)}`)}
+                {summaryRow("Less: PAYG withheld", `−${fmt(totalWithheld)}`)}
+                {summaryRow("Net balance (Payable + / Refund −)", netBalance, "highlight")}
+              </div>
+              <div style={{ marginTop: 12, fontSize: 12, color: colours.muted, lineHeight: 1.6 }}>
+                This page is indicative and mirrors the calculation style of your uploaded Tax & BAS ledger. Review all figures before lodging with the ATO.
+              </div>
+            </SectionCard>
+          )}
+        </div>
+      );
+    };
+
     const renderSettings = () => (
     <div style={{ display: "grid", gap: 20 }}>
       <DashboardHero title="Settings" subtitle="Configure your business profile, financial settings, branding and security. Changes save to your Supabase database automatically." highlight={activeSettingsTab}>
@@ -9433,16 +9377,21 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     }
 
     return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: colours.bg,
-        color: colours.text,
-        fontFamily:
-          '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
-      }}
-    >
-      <style>{`
+  <div
+    style={{
+      minHeight: "100vh",
+      background: colours.bg,
+      color: colours.text,
+      fontFamily:
+        '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+    }}
+  >
+  <style>{`
+    .sas-layout { display: grid; grid-template-columns: 240px minmax(0, 1fr); min-height: 100vh; }
+    /* keep your CSS here */
+  </style>
+
+  /* rest of your JSX */
         .sas-layout { display: grid; grid-template-columns: 240px minmax(0, 1fr); min-height: 100vh; }
         .sas-sidebar { background: #fff; border-right: 1px solid #E2E8F0; padding: 20px; position: relative; z-index: 100; }
         .sas-overlay { display: none; }
@@ -9544,6 +9493,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
             {activePage === "income sources" && renderIncomeSources()}
             {activePage === "documents" && renderDocuments()}
             {activePage === "bas report" && renderBASReport()}
+            {activePage === "ato tax form" && renderATOTaxForm()}
             {activePage === "settings" && renderSettings()}
             </div>
           </div>
