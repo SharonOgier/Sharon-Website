@@ -193,7 +193,7 @@ const s = {
     marginBottom: 16,
   },
   fieldGroup: { marginBottom: 14 },
-  row2: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 },
+  row2: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10 },
   totalRow: {
     display: "flex",
     justifyContent: "space-between",
@@ -237,9 +237,10 @@ const s = {
 
 function StepBar({ steps, current }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6 }}>
-      {steps.map((label, i) => (
-        <React.Fragment key={label}>
+    <div style={{ overflowX: "auto", paddingBottom: 4 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6, minWidth: Math.max(steps.length * 84, 280) }}>
+        {steps.map((label, i) => (
+          <React.Fragment key={label}>
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
             <div style={s.stepDot(i === current, i < current)} />
             <span style={{ fontSize: 10, color: i === current ? colours.purple : colours.muted, fontWeight: i === current ? 700 : 400, whiteSpace: "nowrap" }}>
@@ -250,7 +251,8 @@ function StepBar({ steps, current }) {
             <div style={{ flex: 1, height: 2, background: i < current ? colours.teal : colours.border, marginBottom: 14, borderRadius: 1 }} />
           )}
         </React.Fragment>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }

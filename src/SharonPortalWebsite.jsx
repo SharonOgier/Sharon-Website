@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import html2pdf from "html2pdf.js";
 import { supabase } from "./client";
+import MobileWizard from "./MobileWizard";
 
 
 
@@ -807,13 +808,14 @@ const formatMonthLabel = (value) => {
 function DashboardHero({ title, subtitle, highlight, children }) {
   return (
     <div
+      className="sas-dashboard-hero sas-hero-grid"
       style={{
         background: `linear-gradient(135deg, ${colours.navy} 0%, ${colours.purple} 58%, ${colours.teal} 100%)`,
         borderRadius: 24,
         padding: 28,
         color: "#FFFFFF",
         display: "grid",
-        gridTemplateColumns: "minmax(0, 1.7fr) minmax(280px, 1fr)",
+        gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
         gap: 24,
         alignItems: "stretch",
         boxShadow: "0 18px 40px rgba(43, 47, 107, 0.18)",
@@ -835,10 +837,11 @@ function DashboardHero({ title, subtitle, highlight, children }) {
         >
           Live financial reporting
         </div>
-        <div style={{ fontSize: 34, fontWeight: 900, lineHeight: 1.1, marginTop: 16 }}>{title}</div>
-        <div style={{ fontSize: 15, lineHeight: 1.6, opacity: 0.92, marginTop: 12, maxWidth: 780 }}>{subtitle}</div>
+        <div className="sas-hero-title" style={{ fontSize: 34, fontWeight: 900, lineHeight: 1.1, marginTop: 16 }}>{title}</div>
+        <div className="sas-hero-subtitle" style={{ fontSize: 15, lineHeight: 1.6, opacity: 0.92, marginTop: 12, maxWidth: 780 }}>{subtitle}</div>
       </div>
       <div
+        className="sas-hero-focus-card"
         style={{
           background: "rgba(255,255,255,0.14)",
           border: "1px solid rgba(255,255,255,0.16)",
@@ -854,7 +857,7 @@ function DashboardHero({ title, subtitle, highlight, children }) {
           <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.6, opacity: 0.82 }}>
             Current focus
           </div>
-          <div style={{ fontSize: 30, fontWeight: 900, marginTop: 10 }}>{highlight}</div>
+          <div className="sas-hero-focus-value" style={{ fontSize: 30, fontWeight: 900, marginTop: 10 }}>{highlight}</div>
         </div>
         {children}
       </div>
@@ -2130,6 +2133,8 @@ export default function AccountingPortalPrototype() {
   const [quoteWizardStep, setQuoteWizardStep] = useState(1);
   const [activePage, setActivePage] = useState("dashboard");
   const [showQuickAddMenu, setShowQuickAddMenu] = useState(false);
+  const [showMobileWizard, setShowMobileWizard] = useState(false);
+  const [isMobileViewport, setIsMobileViewport] = useState(() => (typeof window !== "undefined" ? window.innerWidth <= 768 : false));
   const [activeSettingsTab, setActiveSettingsTab] = useState("Profile");
   const [authUser, setAuthUser] = useState(null);
   const [authMode, setAuthMode] = useState("signin");
@@ -2442,15 +2447,23 @@ export default function AccountingPortalPrototype() {
   };
 
   useEffect(() => {
-    setShowQuickAddMenu(false);
-  }, [activePage]);
-
-  useEffect(() => {
     if (!authUser?.email) return;
     setWizardForm((prev) => ({ ...prev,
       email: prev.email || authUser.email || "",
     }));
   }, [authUser]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const handleResize = () => setIsMobileViewport(window.innerWidth <= 768);
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  useEffect(() => {
+    setShowQuickAddMenu(false);
+  }, [activePage]);
 
   useEffect(() => {
     if (!supabase?.auth) {
@@ -5461,7 +5474,6 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
             { label: "Paid income", value: totals.paidIncome },
             { label: "Less GST payable", value: -totals.gstPayable },
             { label: "Less estimated tax", value: -totals.estimatedTax },
-            { label: "Less tax withheld", value: -totals.totalTaxWithheld },
             { label: "Less platform fees", value: -totals.totalFees },
             { label: "Less expenses", value: -totals.totalExpenses },
             { label: `Less subscription (${currency(totals.monthlySubscriptionCost)}/mo)`, value: -totals.monthlySubscriptionCost },
@@ -5628,10 +5640,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
             { label: "Paid income", value: totals.paidIncome },
             { label: "Less GST payable", value: -totals.gstPayable },
             { label: "Less tax reserve", value: -totals.estimatedTax },
-            { label: "Less tax withheld", value: -totals.totalTaxWithheld },
-            { label: "Less platform fees", value: -totals.totalFees },
             { label: "Less expenses", value: -totals.totalExpenses },
-            { label: `Less subscription (${currency(totals.monthlySubscriptionCost)}/mo)`, value: -totals.monthlySubscriptionCost },
             { label: "Safe to spend", value: totals.safeToSpend },
           ]}
         />
@@ -9462,17 +9471,16 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       }}
     >
       <style>{`
-        .sas-layout { display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; }
+        .sas-layout { display: grid; grid-template-columns: 240px minmax(0, 1fr); min-height: 100vh; }
         .sas-sidebar { background: #fff; border-right: 1px solid #E2E8F0; padding: 20px; position: relative; z-index: 100; }
         .sas-overlay { display: none; }
         .sas-hamburger { display: none; }
-        .sas-main { padding: 24px; overflow-x: hidden; }
-        .sas-quick-add-wrap { position: fixed; right: 24px; bottom: 24px; z-index: 350; display: grid; justify-items: end; gap: 12px; }
-        .sas-quick-add-menu { display: grid; gap: 10px; justify-items: end; }
-        .sas-quick-add-item { min-width: 168px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 10px 26px rgba(15, 23, 42, 0.18); }
-        .sas-quick-add-main { width: 56px; height: 56px; border-radius: 999px; box-shadow: 0 14px 34px rgba(106, 27, 154, 0.28); font-size: 30px; line-height: 1; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+        .sas-main { padding: 24px; overflow-x: auto; }
+        .sas-page-wrap { width: 100%; overflow-x: auto; }
+        .sas-page-inner { min-width: 0; }
+        .sas-dashboard-hero .sas-hero-title { word-break: break-word; overflow-wrap: anywhere; }
+        .sas-dashboard-hero .sas-hero-subtitle { word-break: break-word; }
         @media (max-width: 768px) {
-          .sas-quick-add-wrap { display: none; }
           .sas-layout { grid-template-columns: 1fr; }
           .sas-sidebar { position: fixed; top: 0; left: -260px; width: 240px; height: 100vh; overflow-y: auto; transition: left 0.25s ease; z-index: 200; box-shadow: 4px 0 20px rgba(0,0,0,0.12); }
           .sas-sidebar.open { left: 0; }
@@ -9480,7 +9488,17 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
           .sas-hamburger { display: flex; align-items: center; gap: 12px; background: #fff; border-bottom: 1px solid #E2E8F0; padding: 14px 16px; position: sticky; top: 0; z-index: 100; }
           .sas-hamburger-btn { background: none; border: none; cursor: pointer; padding: 4px; display: flex; flex-direction: column; gap: 5px; }
           .sas-hamburger-btn span { display: block; width: 22px; height: 2px; background: #6A1B9A; border-radius: 2px; }
-          .sas-main { padding: 16px; }
+          .sas-main { padding: 16px; overflow-x: auto; }
+          .sas-page-wrap { overflow-x: auto; }
+          .sas-dashboard-hero.sas-hero-grid { grid-template-columns: 1fr !important; gap: 16px !important; padding: 20px !important; border-radius: 18px !important; }
+          .sas-dashboard-hero .sas-hero-title { font-size: 28px !important; line-height: 1.15 !important; }
+          .sas-dashboard-hero .sas-hero-subtitle { font-size: 14px !important; line-height: 1.55 !important; }
+          .sas-dashboard-hero .sas-hero-focus-card { padding: 18px !important; min-height: auto !important; }
+          .sas-dashboard-hero .sas-hero-focus-value { font-size: 24px !important; line-height: 1.1 !important; word-break: break-word; }
+        }
+        @media (max-width: 480px) {
+          .sas-main { padding: 12px; }
+          .sas-dashboard-hero .sas-hero-title { font-size: 24px !important; }
         }
       `}</style>
 
@@ -9542,7 +9560,8 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
         </aside>
 
         <main className="sas-main">
-          <div style={{ maxWidth: 1400, margin: "0 auto" }}>
+          <div className="sas-page-wrap">
+            <div className="sas-page-inner" style={{ maxWidth: 1400, margin: "0 auto" }}>
             {activePage === "dashboard" && renderDashboard()}
             {activePage === "financial insights" && renderFinancialInsights()}
             {activePage === "invoices" && renderInvoices()}
@@ -9554,9 +9573,80 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
             {activePage === "documents" && renderDocuments()}
             {activePage === "bas report" && renderBASReport()}
             {activePage === "settings" && renderSettings()}
+            </div>
           </div>
         </main>
       </div>
+
+      <div style={{ position: "fixed", right: 20, bottom: isMobileViewport ? 20 : 24, zIndex: 1000 }}>
+        {showQuickAddMenu && !isMobileViewport && (
+          <div style={{ ...cardStyle, width: 220, padding: 10, marginBottom: 10, boxShadow: "0 16px 40px rgba(15,23,42,0.18)" }}>
+            {[
+              { label: "New Invoice", action: () => { setActivePage("invoices"); setShowQuickAddMenu(false); } },
+              { label: "New Quote", action: () => { setActivePage("quotes"); setShowQuickAddMenu(false); } },
+              { label: "New Expense", action: () => { setActivePage("expenses"); setShowQuickAddMenu(false); } },
+            ].map((item) => (
+              <button
+                key={item.label}
+                onClick={item.action}
+                style={{ width: "100%", textAlign: "left", background: "transparent", border: "none", borderRadius: 10, padding: "12px 12px", fontWeight: 700, color: colours.text, cursor: "pointer" }}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        <button
+          onClick={() => {
+            if (isMobileViewport) {
+              setShowMobileWizard(true);
+            } else {
+              setShowQuickAddMenu((prev) => !prev);
+            }
+          }}
+          style={{
+            width: 56,
+            height: 56,
+            borderRadius: "50%",
+            border: "none",
+            background: colours.purple,
+            color: "#fff",
+            fontSize: 30,
+            fontWeight: 700,
+            cursor: "pointer",
+            boxShadow: "0 14px 34px rgba(106,27,154,0.32)",
+          }}
+          aria-label="Quick add"
+        >
+          +
+        </button>
+      </div>
+
+      {showMobileWizard && (
+        <MobileWizard
+          profile={profile}
+          clients={clients}
+          invoices={invoices}
+          quotes={quotes}
+          expenses={expenses}
+          services={services}
+          onSaveInvoice={(savedInvoice) => {
+            setInvoices((prev) => [...prev, savedInvoice]);
+          }}
+          onSaveQuote={(savedQuote) => {
+            setQuotes((prev) => [...prev, savedQuote]);
+          }}
+          onSaveExpense={(savedExpense) => {
+            setExpenses((prev) => [...prev, savedExpense]);
+          }}
+          onEmailDocument={sendSavedDocumentEmail}
+          upsertRecord={upsertRecordInDatabase}
+          uploadReceipt={uploadReceiptToSupabase}
+          toast={toast}
+          onClose={() => setShowMobileWizard(false)}
+        />
+      )}
 
       <ExpenseTypeModal
         isOpen={expenseModalOpen}
@@ -9588,56 +9678,6 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
         setIncomeSourceForm={setIncomeSourceForm}
         onSave={saveIncomeSource}
       />
-      <div className="sas-quick-add-wrap">
-        {showQuickAddMenu && (
-          <div className="sas-quick-add-menu">
-            <button
-              style={{ ...buttonPrimary, background: colours.white, color: colours.text, border: `1px solid ${colours.border}` }}
-              className="sas-quick-add-item"
-              onClick={() => {
-                setActivePage("invoices");
-                setShowQuickAddMenu(false);
-                window.scrollTo({ top: 0, behavior: "smooth" });
-              }}
-            >
-              <span>Invoice</span>
-            </button>
-            <button
-              style={{ ...buttonPrimary, background: colours.white, color: colours.text, border: `1px solid ${colours.border}` }}
-              className="sas-quick-add-item"
-              onClick={() => {
-                setActivePage("quotes");
-                setShowQuickAddMenu(false);
-                window.scrollTo({ top: 0, behavior: "smooth" });
-              }}
-            >
-              <span>Quote</span>
-            </button>
-            <button
-              style={{ ...buttonPrimary, background: colours.white, color: colours.text, border: `1px solid ${colours.border}` }}
-              className="sas-quick-add-item"
-              onClick={() => {
-                setActivePage("expenses");
-                setExpenseModalOpen(true);
-                setShowQuickAddMenu(false);
-                window.scrollTo({ top: 0, behavior: "smooth" });
-              }}
-            >
-              <span>Expense</span>
-            </button>
-          </div>
-        )}
-        <button
-          aria-label="Quick add"
-          title="Quick add"
-          style={{ ...buttonPrimary }}
-          className="sas-quick-add-main"
-          onClick={() => setShowQuickAddMenu((prev) => !prev)}
-        >
-          {showQuickAddMenu ? "×" : "+"}
-        </button>
-      </div>
-
       <ToastContainer toasts={toasts} onRemove={removeToast} />
       {confirmModal}
 
