@@ -264,8 +264,8 @@ const DEFAULT_API_BASE_URL =
         window.location.hostname === "127.0.0.1"
       )
         ? "http://localhost:3001"
-        : (typeof window !== "undefined" ? window.location.origin : "")
-    : (typeof window !== "undefined" ? window.location.origin : ""));
+        : window.location.origin
+    : "");
 
 const normaliseApiBaseUrl = (value) => String(value || "").trim().replace(/\/$/, "");
 
