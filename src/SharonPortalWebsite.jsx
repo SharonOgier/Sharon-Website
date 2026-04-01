@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "./client";
 import MobileWizard from "./MobileWizard";
+import ATOTaxFormPage from "./ATOTaxFormPage";
 import {
   ToastContainer,
   useToast,
@@ -6977,6 +6978,16 @@ export default function AccountingPortalPrototype() {
       );
     };
 
+    const renderATOTaxForm = () => (
+      <ATOTaxFormPage
+        profile={profile}
+        invoices={invoices}
+        expenses={expenses}
+        incomeSources={incomeSources}
+        getClientById={getClientById}
+      />
+    );
+
     const renderSettings = () => (
     <div style={{ display: "grid", gap: 20 }}>
       <DashboardHero title="Settings" subtitle="Configure your business profile, financial settings, branding and security. Changes save to your Supabase database automatically." highlight={activeSettingsTab}>
@@ -7559,6 +7570,7 @@ export default function AccountingPortalPrototype() {
             {activePage === "income sources" && renderIncomeSources()}
             {activePage === "documents" && renderDocuments()}
             {activePage === "bas report" && renderBASReport()}
+            {activePage === "ato tax form" && renderATOTaxForm()}
             {activePage === "settings" && renderSettings()}
             </div>
           </div>
