@@ -71,6 +71,29 @@ const blankLine = () => ({
   rowTotal: 0,
 });
 
+const createManualClientDraft = (profile) => ({
+  name: "",
+  email: "",
+  businessName: "",
+  phone: "",
+  address: "",
+  contactPerson: "",
+  workType: profile?.workType || "Financial / Management Accountant",
+  sendToClient: true,
+  sendToMe: false,
+  autoReminders: true,
+  attachPdf: false,
+  includeAddressDetails: true,
+  addressDetails: "",
+  sendReceipts: true,
+  outsideAustraliaOrGstExempt: false,
+  defaultCurrency: "AUD $",
+  feesDeducted: false,
+  deductsTaxPrior: false,
+  shortTermRentalIncome: false,
+  hasPurchaseOrder: false,
+});
+
 // ─── shared styles ───────────────────────────────────────────────────────────
 
 const s = {
@@ -332,35 +355,34 @@ function LineItemsStep({ lineItems, setLineItems, clientIsGstExempt, gstRegister
 
           <div style={s.fieldGroup}>
             <label style={s.label}>Description *</label>
-            {services && services.length > 0 ? (
-              <select style={s.select} value={li.description}
-                onChange={(e) => {
-                  const svc = services.find((sv) => sv.name === e.target.value);
-                  if (svc) {
-                    update(li.id, "description", svc.name);
-                    update(li.id, "unitPrice", svc.rate || svc.price || "");
-                    update(li.id, "gstType", svc.gstType || "GST on Income (10%)");
-                  } else {
-                    update(li.id, "description", e.target.value);
-                  }
-                }}>
-                <option value="">Select service…</option>
-                {services.map((sv) => <option key={sv.id} value={sv.name}>{sv.name}</option>)}
-                <option value="__custom__">Custom description…</option>
-              </select>
-            ) : (
-              <input style={s.input} placeholder="Service or product description" value={li.description}
-                onChange={(e) => update(li.id, "description", e.target.value)} />
-            )}
-            {/* Allow free-text if custom selected */}
-            {li.description === "__custom__" && (
-              <input style={{ ...s.input, marginTop: 8 }} placeholder="Enter description" value={li._customDesc || ""}
-                onChange={(e) => {
-                  setLineItems((prev) => prev.map((l) => l.id === li.id ? { ...l, description: e.target.value, _customDesc: e.target.value } : l));
-                }} />
+            <input
+              list={services && services.length > 0 ? `service-options-${li.id}` : undefined}
+              style={s.input}
+              placeholder="Service or product description"
+              value={li.description}
+              onChange={(e) => {
+                const nextValue = e.target.value;
+                update(li.id, "description", nextValue);
+                const svc = services.find((sv) => String(sv.name || "").trim().toLowerCase() === String(nextValue || "").trim().toLowerCase());
+                if (svc) {
+                  update(li.id, "unitPrice", svc.rate || svc.price || "");
+                  update(li.id, "gstType", svc.gstType || "GST on Income (10%)");
+                }
+              }}
+            />
+            {services && services.length > 0 && (
+              <>
+                <datalist id={`service-options-${li.id}`}>
+                  {services.map((sv) => (
+                    <option key={sv.id} value={sv.name} />
+                  ))}
+                </datalist>
+                <div style={{ fontSize: 12, color: colours.muted, marginTop: 6 }}>
+                  Start typing to use an existing service or enter your own description.
+                </div>
+              </>
             )}
           </div>
-
           <div style={s.row2}>
             <div style={s.fieldGroup}>
               <label style={s.label}>Qty</label>
@@ -450,6 +472,8 @@ function InvoiceWizard({ profile, clients, invoices, services, onClose, onSaved,
   const [emailing, setEmailing] = useState(false);
   const [emailResult, setEmailResult] = useState(null);
   const [done, setDone] = useState(null); // { number }
+  const [clientMode, setClientMode] = useState("existing");
+  const [manualClient, setManualClient] = useState(createManualClientDraft(profile));
 
   const today = todayLocal();
   const defaultDue = addDays(today, safeNumber(profile?.paymentTermsDays) || 14);
@@ -466,7 +490,8 @@ function InvoiceWizard({ profile, clients, invoices, services, onClose, onSaved,
 
   const setF = (key, val) => setForm((p) => ({ ...p, [key]: val }));
 
-  const selectedClient = clients.find((c) => c.id === safeNumber(form.clientId));
+  const selectedExistingClient = clients.find((c) => c.id === safeNumber(form.clientId));
+  const selectedClient = clientMode === "manual" ? manualClient : selectedExistingClient;
   const clientIsGstExempt = Boolean(selectedClient?.outsideAustraliaOrGstExempt);
 
   // Recompute due date when invoice date changes
@@ -497,26 +522,47 @@ function InvoiceWizard({ profile, clients, invoices, services, onClose, onSaved,
   })();
 
   const canNext = () => {
-    if (step === 0) return Boolean(form.clientId);
+    if (step === 0) return clientMode === "manual" ? Boolean(String(manualClient.name || "").trim()) : Boolean(form.clientId);
     if (step === 1) return computeLines().some((l) => l.rowSubtotal > 0 || l.description);
     return true;
   };
 
   const handleSave = async () => {
-    if (!form.clientId) { toast.warning("Please select a client"); return; }
+    if (clientMode === "manual" && !String(manualClient.name || "").trim()) {
+      toast.warning("Please enter a client name");
+      return;
+    }
+    if (clientMode !== "manual" && !form.clientId) { toast.warning("Please select a client"); return; }
     const computedLines = computeLines();
     const hasLines = computedLines.some((l) => l.rowSubtotal > 0 || l.description);
     if (!hasLines) { toast.warning("Add at least one line item"); return; }
 
     const invoiceNumber = nextNumber(profile?.invoicePrefix || "INV", invoices, "invoiceNumber");
+
+    let resolvedClient = selectedClient;
+    let resolvedClientId = safeNumber(form.clientId);
+
+    if (clientMode === "manual") {
+      const manualPayload = {
+        ...createManualClientDraft(profile),
+        ...manualClient,
+        name: String(manualClient.name || "").trim(),
+        email: String(manualClient.email || "").trim(),
+        businessName: String(manualClient.businessName || "").trim(),
+      };
+      const savedClient = await upsertRecord(SUPABASE_TABLES.clients, manualPayload);
+      resolvedClient = savedClient;
+      resolvedClientId = safeNumber(savedClient?.id);
+    }
+
     const payload = {
       invoiceNumber,
-      clientId: safeNumber(form.clientId),
+      clientId: resolvedClientId,
       invoiceDate: form.invoiceDate,
       dueDate: form.dueDate,
       lineItems: computedLines,
       gstType: computedLines[0]?.gstType || "GST on Income (10%)",
-      currencyCode: getClientCurrencyCode(selectedClient),
+      currencyCode: getClientCurrencyCode(resolvedClient),
       gstStatus: clientIsGstExempt ? "GST not applicable" : totals.gst > 0 ? "GST applies" : "GST free",
       description: computedLines.map((l) => l.description).filter(Boolean).join("; "),
       subtotal: totals.subtotal,
@@ -540,7 +586,7 @@ function InvoiceWizard({ profile, clients, invoices, services, onClose, onSaved,
       onSaved("invoice", saved);
 
       // Email — same logic as the website
-      const shouldEmail = Boolean(selectedClient?.sendToClient && isValidEmail(selectedClient?.email));
+      const shouldEmail = Boolean(resolvedClient?.sendToClient && isValidEmail(resolvedClient?.email));
       if (shouldEmail && sendEmail) {
         setEmailing(true);
         setDone({ number: invoiceNumber });
@@ -571,7 +617,7 @@ function InvoiceWizard({ profile, clients, invoices, services, onClose, onSaved,
   if (done) {
     return (
       <SuccessScreen type="invoice" number={done.number} emailing={emailing} emailResult={emailResult}
-        onDone={onClose} onCreateAnother={() => { setDone(null); setStep(0); setForm({ clientId: "", invoiceDate: today, dueDate: defaultDue, lineItems: [blankLine()], comments: "", purchaseOrderReference: "", hidePhoneNumber: Boolean(profile?.hidePhoneOnDocs) }); setEmailResult(null); }} />
+        onDone={onClose} onCreateAnother={() => { setDone(null); setStep(0); setClientMode("existing"); setManualClient(createManualClientDraft(profile)); setForm({ clientId: "", invoiceDate: today, dueDate: defaultDue, lineItems: [blankLine()], comments: "", purchaseOrderReference: "", hidePhoneNumber: Boolean(profile?.hidePhoneOnDocs) }); setEmailResult(null); }} />
     );
   }
 
@@ -591,13 +637,54 @@ function InvoiceWizard({ profile, clients, invoices, services, onClose, onSaved,
         {step === 0 && (
           <div>
             <div style={s.sectionTitle}>Select Client</div>
-            <div style={s.fieldGroup}>
-              <label style={s.label}>Client *</label>
-              <select style={s.select} value={form.clientId} onChange={(e) => setF("clientId", e.target.value)}>
-                <option value="">Choose a client…</option>
-                {clients.map((c) => <option key={c.id} value={c.id}>{c.name}{c.businessName ? ` — ${c.businessName}` : ""}</option>)}
-              </select>
+            <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
+              <button type="button" style={s.pill(clientMode === "existing")} onClick={() => setClientMode("existing")}>Choose existing</button>
+              <button type="button" style={s.pill(clientMode === "manual")} onClick={() => setClientMode("manual")}>Enter manually</button>
             </div>
+
+            {clientMode === "existing" ? (
+              <div style={s.fieldGroup}>
+                <label style={s.label}>Client *</label>
+                <select style={s.select} value={form.clientId} onChange={(e) => setF("clientId", e.target.value)}>
+                  <option value="">Choose a client…</option>
+                  {clients.map((c) => <option key={c.id} value={c.id}>{c.name}{c.businessName ? ` — ${c.businessName}` : ""}</option>)}
+                </select>
+              </div>
+            ) : (
+              <div style={{ display: "grid", gap: 12 }}>
+                <div style={s.fieldGroup}>
+                  <label style={s.label}>Client name *</label>
+                  <input style={s.input} placeholder="Client or business name" value={manualClient.name} onChange={(e) => setManualClient((prev) => ({ ...prev, name: e.target.value }))} />
+                </div>
+                <div style={s.fieldGroup}>
+                  <label style={s.label}>Email</label>
+                  <input style={s.input} placeholder="client@example.com" value={manualClient.email} onChange={(e) => setManualClient((prev) => ({ ...prev, email: e.target.value }))} />
+                </div>
+                <div style={s.fieldGroup}>
+                  <label style={s.label}>Business name</label>
+                  <input style={s.input} placeholder="Business name" value={manualClient.businessName} onChange={(e) => setManualClient((prev) => ({ ...prev, businessName: e.target.value }))} />
+                </div>
+                <div style={s.fieldGroup}>
+                  <label style={s.label}>Currency</label>
+                  <input list="manual-client-currency-options" style={s.input} placeholder="AUD $" value={manualClient.defaultCurrency} onChange={(e) => setManualClient((prev) => ({ ...prev, defaultCurrency: e.target.value }))} />
+                  <datalist id="manual-client-currency-options">
+                    <option value="AUD $" />
+                    <option value="USD $" />
+                    <option value="NZD $" />
+                    <option value="GBP £" />
+                    <option value="EUR €" />
+                  </datalist>
+                </div>
+                <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14, color: colours.text }}>
+                  <input type="checkbox" checked={Boolean(manualClient.outsideAustraliaOrGstExempt)} onChange={(e) => setManualClient((prev) => ({ ...prev, outsideAustraliaOrGstExempt: e.target.checked }))} />
+                  GST exempt / outside Australia
+                </label>
+                <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14, color: colours.text }}>
+                  <input type="checkbox" checked={Boolean(manualClient.sendToClient)} onChange={(e) => setManualClient((prev) => ({ ...prev, sendToClient: e.target.checked }))} />
+                  Email invoice after save
+                </label>
+              </div>
+            )}
             {selectedClient && (
               <div style={{ ...s.card, background: colours.lightPurple, border: `1px solid ${colours.purple}33` }}>
                 <div style={{ fontWeight: 700, fontSize: 14, color: colours.purple, marginBottom: 4 }}>{selectedClient.name}</div>
@@ -723,6 +810,8 @@ function QuoteWizard({ profile, clients, quotes, services, onClose, onSaved, ups
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
   const [done, setDone] = useState(null);
+  const [clientMode, setClientMode] = useState("existing");
+  const [manualClient, setManualClient] = useState(createManualClientDraft(profile));
 
   const today = todayLocal();
   const defaultExpiry = addDays(today, 31);
@@ -737,7 +826,8 @@ function QuoteWizard({ profile, clients, quotes, services, onClose, onSaved, ups
   });
 
   const setF = (key, val) => setForm((p) => ({ ...p, [key]: val }));
-  const selectedClient = clients.find((c) => c.id === safeNumber(form.clientId));
+  const selectedExistingClient = clients.find((c) => c.id === safeNumber(form.clientId));
+  const selectedClient = clientMode === "manual" ? manualClient : selectedExistingClient;
   const clientIsGstExempt = Boolean(selectedClient?.outsideAustraliaOrGstExempt);
 
   const computeLines = useCallback(() => {
@@ -760,26 +850,44 @@ function QuoteWizard({ profile, clients, quotes, services, onClose, onSaved, ups
   })();
 
   const canNext = () => {
-    if (step === 0) return Boolean(form.clientId);
+    if (step === 0) return clientMode === "manual" ? Boolean(String(manualClient.name || "").trim()) : Boolean(form.clientId);
     if (step === 1) return computeLines().some((l) => l.rowSubtotal > 0 || l.description);
     return true;
   };
 
   const handleSave = async () => {
-    if (!form.clientId) { toast.warning("Please select a client"); return; }
+    if (clientMode === "manual" && !String(manualClient.name || "").trim()) { toast.warning("Please enter a client name"); return; }
+    if (clientMode !== "manual" && !form.clientId) { toast.warning("Please select a client"); return; }
     const computedLines = computeLines();
     const hasLines = computedLines.some((l) => l.rowSubtotal > 0 || l.description);
     if (!hasLines) { toast.warning("Add at least one line item"); return; }
 
     const quoteNumber = nextNumber(profile?.quotePrefix || "QTE", quotes, "quoteNumber");
+
+    let resolvedClient = selectedClient;
+    let resolvedClientId = safeNumber(form.clientId);
+
+    if (clientMode === "manual") {
+      const manualPayload = {
+        ...createManualClientDraft(profile),
+        ...manualClient,
+        name: String(manualClient.name || "").trim(),
+        email: String(manualClient.email || "").trim(),
+        businessName: String(manualClient.businessName || "").trim(),
+      };
+      const savedClient = await upsertRecord(SUPABASE_TABLES.clients, manualPayload);
+      resolvedClient = savedClient;
+      resolvedClientId = safeNumber(savedClient?.id);
+    }
+
     const payload = {
       quoteNumber,
-      clientId: safeNumber(form.clientId),
+      clientId: resolvedClientId,
       quoteDate: form.quoteDate,
       expiryDate: form.expiryDate,
       lineItems: computedLines,
       gstType: computedLines[0]?.gstType || "GST on Income (10%)",
-      currencyCode: getClientCurrencyCode(selectedClient),
+      currencyCode: getClientCurrencyCode(resolvedClient),
       gstStatus: clientIsGstExempt ? "GST not applicable" : totals.gst > 0 ? "GST applies" : "GST free",
       description: computedLines.map((l) => l.description).filter(Boolean).join("; "),
       quantity: computedLines.reduce((s, l) => s + l.qty, 0),
@@ -810,7 +918,7 @@ function QuoteWizard({ profile, clients, quotes, services, onClose, onSaved, ups
   if (done) {
     return (
       <SuccessScreen type="quote" number={done.number} emailing={false} emailResult={null}
-        onDone={onClose} onCreateAnother={() => { setDone(null); setStep(0); setForm({ clientId: "", quoteDate: today, expiryDate: defaultExpiry, lineItems: [blankLine()], comments: "", hidePhoneNumber: Boolean(profile?.hidePhoneOnDocs) }); }} />
+        onDone={onClose} onCreateAnother={() => { setDone(null); setStep(0); setClientMode("existing"); setManualClient(createManualClientDraft(profile)); setForm({ clientId: "", quoteDate: today, expiryDate: defaultExpiry, lineItems: [blankLine()], comments: "", hidePhoneNumber: Boolean(profile?.hidePhoneOnDocs) }); }} />
     );
   }
 
@@ -828,17 +936,55 @@ function QuoteWizard({ profile, clients, quotes, services, onClose, onSaved, ups
         {step === 0 && (
           <div>
             <div style={s.sectionTitle}>Select Client</div>
-            <div style={s.fieldGroup}>
-              <label style={s.label}>Client *</label>
-              <select style={s.select} value={form.clientId} onChange={(e) => setF("clientId", e.target.value)}>
-                <option value="">Choose a client…</option>
-                {clients.map((c) => <option key={c.id} value={c.id}>{c.name}{c.businessName ? ` — ${c.businessName}` : ""}</option>)}
-              </select>
+            <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
+              <button type="button" style={s.pill(clientMode === "existing")} onClick={() => setClientMode("existing")}>Choose existing</button>
+              <button type="button" style={s.pill(clientMode === "manual")} onClick={() => setClientMode("manual")}>Enter manually</button>
             </div>
+
+            {clientMode === "existing" ? (
+              <div style={s.fieldGroup}>
+                <label style={s.label}>Client *</label>
+                <select style={s.select} value={form.clientId} onChange={(e) => setF("clientId", e.target.value)}>
+                  <option value="">Choose a client…</option>
+                  {clients.map((c) => <option key={c.id} value={c.id}>{c.name}{c.businessName ? ` — ${c.businessName}` : ""}</option>)}
+                </select>
+              </div>
+            ) : (
+              <div style={{ display: "grid", gap: 12 }}>
+                <div style={s.fieldGroup}>
+                  <label style={s.label}>Client name *</label>
+                  <input style={s.input} placeholder="Client or business name" value={manualClient.name} onChange={(e) => setManualClient((prev) => ({ ...prev, name: e.target.value }))} />
+                </div>
+                <div style={s.fieldGroup}>
+                  <label style={s.label}>Email</label>
+                  <input style={s.input} placeholder="client@example.com" value={manualClient.email} onChange={(e) => setManualClient((prev) => ({ ...prev, email: e.target.value }))} />
+                </div>
+                <div style={s.fieldGroup}>
+                  <label style={s.label}>Business name</label>
+                  <input style={s.input} placeholder="Business name" value={manualClient.businessName} onChange={(e) => setManualClient((prev) => ({ ...prev, businessName: e.target.value }))} />
+                </div>
+                <div style={s.fieldGroup}>
+                  <label style={s.label}>Currency</label>
+                  <input list="manual-quote-client-currency-options" style={s.input} placeholder="AUD $" value={manualClient.defaultCurrency} onChange={(e) => setManualClient((prev) => ({ ...prev, defaultCurrency: e.target.value }))} />
+                  <datalist id="manual-quote-client-currency-options">
+                    <option value="AUD $" />
+                    <option value="USD $" />
+                    <option value="NZD $" />
+                    <option value="GBP £" />
+                    <option value="EUR €" />
+                  </datalist>
+                </div>
+                <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14, color: colours.text }}>
+                  <input type="checkbox" checked={Boolean(manualClient.outsideAustraliaOrGstExempt)} onChange={(e) => setManualClient((prev) => ({ ...prev, outsideAustraliaOrGstExempt: e.target.checked }))} />
+                  GST exempt / outside Australia
+                </label>
+              </div>
+            )}
             {selectedClient && (
               <div style={{ ...s.card, background: "#EEF4FF", border: `1px solid ${colours.navy}33` }}>
                 <div style={{ fontWeight: 700, fontSize: 14, color: colours.navy, marginBottom: 4 }}>{selectedClient.name}</div>
                 {selectedClient.email && <div style={{ fontSize: 13, color: colours.muted }}>{selectedClient.email}</div>}
+                {selectedClient.businessName && <div style={{ fontSize: 13, color: colours.muted }}>{selectedClient.businessName}</div>}
               </div>
             )}
           </div>
@@ -1041,15 +1187,24 @@ function ExpenseWizard({ profile, expenses, onClose, onSaved, upsertRecord, uplo
               </div>
             )}
             <div style={s.fieldGroup}>
-              <label style={s.label}>Category * {form.category && <span style={{ color: colours.teal }}>— {form.category}</span>}</label>
-              <input style={s.input} placeholder="Search categories…" value={categorySearch} onChange={(e) => setCategorySearch(e.target.value)} />
-              <div style={{ border: `1px solid ${colours.border}`, borderTop: "none", borderBottomLeftRadius: 10, borderBottomRightRadius: 10, maxHeight: 200, overflowY: "auto" }}>
-                {filteredCategories.map((cat) => (
-                  <div key={cat} onClick={() => { setF("category", cat); setCategorySearch(""); }}
-                    style={{ padding: "12px 14px", cursor: "pointer", background: form.category === cat ? colours.lightTeal : "#fff", borderBottom: `1px solid ${colours.border}`, fontSize: 14, fontWeight: form.category === cat ? 700 : 400, color: form.category === cat ? colours.teal : colours.text }}>
-                    {cat}
-                  </div>
+              <label style={s.label}>Category *</label>
+              <input
+                list="expense-category-options"
+                style={s.input}
+                placeholder="Choose or type a category"
+                value={form.category || categorySearch}
+                onChange={(e) => {
+                  setCategorySearch(e.target.value);
+                  setF("category", e.target.value);
+                }}
+              />
+              <datalist id="expense-category-options">
+                {expenseCategories.map((cat) => (
+                  <option key={cat} value={cat} />
                 ))}
+              </datalist>
+              <div style={{ fontSize: 12, color: colours.muted, marginTop: 6 }}>
+                Pick an existing category or type your own.
               </div>
             </div>
           </div>
