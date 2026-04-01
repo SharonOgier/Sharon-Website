@@ -2129,6 +2129,7 @@ export default function AccountingPortalPrototype() {
   const recurringShownRef = useRef(false);
   const [quoteWizardStep, setQuoteWizardStep] = useState(1);
   const [activePage, setActivePage] = useState("dashboard");
+  const [showQuickAddMenu, setShowQuickAddMenu] = useState(false);
   const [activeSettingsTab, setActiveSettingsTab] = useState("Profile");
   const [authUser, setAuthUser] = useState(null);
   const [authMode, setAuthMode] = useState("signin");
@@ -2439,6 +2440,10 @@ export default function AccountingPortalPrototype() {
       setWizardSaving(false);
     }
   };
+
+  useEffect(() => {
+    setShowQuickAddMenu(false);
+  }, [activePage]);
 
   useEffect(() => {
     if (!authUser?.email) return;
@@ -9462,7 +9467,12 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
         .sas-overlay { display: none; }
         .sas-hamburger { display: none; }
         .sas-main { padding: 24px; overflow-x: hidden; }
+        .sas-quick-add-wrap { position: fixed; right: 24px; bottom: 24px; z-index: 350; display: grid; justify-items: end; gap: 12px; }
+        .sas-quick-add-menu { display: grid; gap: 10px; justify-items: end; }
+        .sas-quick-add-item { min-width: 168px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 10px 26px rgba(15, 23, 42, 0.18); }
+        .sas-quick-add-main { width: 56px; height: 56px; border-radius: 999px; box-shadow: 0 14px 34px rgba(106, 27, 154, 0.28); font-size: 30px; line-height: 1; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
         @media (max-width: 768px) {
+          .sas-quick-add-wrap { display: none; }
           .sas-layout { grid-template-columns: 1fr; }
           .sas-sidebar { position: fixed; top: 0; left: -260px; width: 240px; height: 100vh; overflow-y: auto; transition: left 0.25s ease; z-index: 200; box-shadow: 4px 0 20px rgba(0,0,0,0.12); }
           .sas-sidebar.open { left: 0; }
@@ -9578,6 +9588,56 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
         setIncomeSourceForm={setIncomeSourceForm}
         onSave={saveIncomeSource}
       />
+      <div className="sas-quick-add-wrap">
+        {showQuickAddMenu && (
+          <div className="sas-quick-add-menu">
+            <button
+              style={{ ...buttonPrimary, background: colours.white, color: colours.text, border: `1px solid ${colours.border}` }}
+              className="sas-quick-add-item"
+              onClick={() => {
+                setActivePage("invoices");
+                setShowQuickAddMenu(false);
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              }}
+            >
+              <span>Invoice</span>
+            </button>
+            <button
+              style={{ ...buttonPrimary, background: colours.white, color: colours.text, border: `1px solid ${colours.border}` }}
+              className="sas-quick-add-item"
+              onClick={() => {
+                setActivePage("quotes");
+                setShowQuickAddMenu(false);
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              }}
+            >
+              <span>Quote</span>
+            </button>
+            <button
+              style={{ ...buttonPrimary, background: colours.white, color: colours.text, border: `1px solid ${colours.border}` }}
+              className="sas-quick-add-item"
+              onClick={() => {
+                setActivePage("expenses");
+                setExpenseModalOpen(true);
+                setShowQuickAddMenu(false);
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              }}
+            >
+              <span>Expense</span>
+            </button>
+          </div>
+        )}
+        <button
+          aria-label="Quick add"
+          title="Quick add"
+          style={{ ...buttonPrimary }}
+          className="sas-quick-add-main"
+          onClick={() => setShowQuickAddMenu((prev) => !prev)}
+        >
+          {showQuickAddMenu ? "×" : "+"}
+        </button>
+      </div>
+
       <ToastContainer toasts={toasts} onRemove={removeToast} />
       {confirmModal}
 
