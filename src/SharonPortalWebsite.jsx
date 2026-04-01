@@ -8,7 +8,7 @@ import { supabase } from "./client";
 function ToastContainer({ toasts, onRemove }) {
   if (!toasts.length) return null;
   return (
-    <div style={{
+    <div className="sas-toasts" style={{
       position: "fixed", bottom: 24, right: 24, zIndex: 99999,
       display: "grid", gap: 10, maxWidth: 380,
     }}>
@@ -70,8 +70,8 @@ function useToast() {
 function ConfirmModal({ isOpen, title, message, confirmLabel = "Delete", onConfirm, onCancel }) {
   if (!isOpen) return null;
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 99998, background: "rgba(15,23,42,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-      <div style={{ background: "#fff", borderRadius: 18, padding: 28, width: "100%", maxWidth: 420, boxShadow: "0 20px 60px rgba(0,0,0,0.2)", fontFamily: 'sans-serif' }}>
+    <div className="sas-confirm-backdrop" style={{ position: "fixed", inset: 0, zIndex: 99998, background: "rgba(15,23,42,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div className="sas-confirm-card" style={{ background: "#fff", borderRadius: 18, padding: 28, width: "100%", maxWidth: 420, boxShadow: "0 20px 60px rgba(0,0,0,0.2)", fontFamily: 'sans-serif' }}>
         <div style={{ fontSize: 18, fontWeight: 800, color: "#14202B", marginBottom: 10 }}>{title}</div>
         <div style={{ fontSize: 14, color: "#64748B", lineHeight: 1.6, marginBottom: 24 }}>{message}</div>
         <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
@@ -738,7 +738,7 @@ const initialDocuments = [];
 
 function SectionCard({ title, children, right }) {
   return (
-    <div style={{ ...cardStyle, padding: 20 }}>
+    <div className="sas-section-card" style={{ ...cardStyle, padding: 20 }}>
       <div
         style={{
           display: "flex",
@@ -767,7 +767,7 @@ function SectionCard({ title, children, right }) {
 
 function SummaryBox({ title, value, subtitle }) {
   return (
-    <div style={{ ...cardStyle, padding: 18 }}>
+    <div className="sas-summary-box" style={{ ...cardStyle, padding: 18 }}>
       <div style={{ fontSize: 13, fontWeight: 700, color: colours.muted }}>
         {title}
       </div>
@@ -807,6 +807,7 @@ const formatMonthLabel = (value) => {
 function DashboardHero({ title, subtitle, highlight, children }) {
   return (
     <div
+      className="sas-dashboard-hero"
       style={{
         background: `linear-gradient(135deg, ${colours.navy} 0%, ${colours.purple} 58%, ${colours.teal} 100%)`,
         borderRadius: 24,
@@ -865,6 +866,7 @@ function DashboardHero({ title, subtitle, highlight, children }) {
 function InsightChip({ label, value }) {
   return (
     <div
+      className="sas-insight-chip"
       style={{
         display: "flex",
         justifyContent: "space-between",
@@ -884,6 +886,7 @@ function InsightChip({ label, value }) {
 function MetricCard({ title, value, subtitle, accent = colours.purple }) {
   return (
     <div
+      className="sas-metric-card"
       style={{
         ...cardStyle,
         padding: 18,
@@ -912,6 +915,7 @@ function MetricCard({ title, value, subtitle, accent = colours.purple }) {
 function ActionHubCard({ icon, title, description, buttonLabel, onClick, tone = colours.purple }) {
   return (
     <div
+      className="sas-action-card"
       style={{
         ...cardStyle,
         padding: 20,
@@ -1100,8 +1104,8 @@ function DataTable({ columns, rows, emptyState }) {
     return <EmptyState {...emptyState} />;
   }
   return (
-    <div style={{ overflowX: "auto" }}>
-      <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 780 }}>
+    <div className="sas-table-wrap" style={{ overflowX: "auto" }}>
+      <table className="sas-data-table" style={{ width: "100%", borderCollapse: "collapse", minWidth: 780 }}>
         <thead>
           <tr style={{ background: "#F8FAFC" }}>
             {columns.map((col) => (
@@ -5407,6 +5411,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       </div>
 
       <div
+        className="sas-stack-mobile"
         style={{
           display: "grid",
           gridTemplateColumns: "minmax(0, 1.4fr) minmax(320px, 0.9fr)",
@@ -5477,6 +5482,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       </div>
 
       <div
+        className="sas-stack-mobile"
         style={{
           display: "grid",
           gridTemplateColumns: "minmax(0, 1.2fr) minmax(320px, 0.8fr)",
@@ -8422,7 +8428,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
         </div>
 
         <div
-          className="sas-auth-landing"
+          className="sas-auth-landing sas-stack-mobile"
           style={{
             display: "grid",
             gridTemplateColumns: "minmax(0, 1.2fr) minmax(320px, 460px)",
@@ -8447,7 +8453,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
               <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "rgba(255,255,255,0.14)", padding: "8px 12px", borderRadius: 999, fontSize: 12, fontWeight: 800, letterSpacing: 0.3, width: "fit-content" }}>
                 Client portal access
               </div>
-              <div style={{ fontSize: 44, lineHeight: 1.05, fontWeight: 900, maxWidth: 560 }}>
+              <div className="sas-auth-hero-title" style={{ fontSize: 44, lineHeight: 1.05, fontWeight: 900, maxWidth: 560 }}>
                 Login to your portal from the landing page
               </div>
               <div style={{ fontSize: 16, lineHeight: 1.7, opacity: 0.92, maxWidth: 620 }}>
@@ -8471,6 +8477,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
 
           <div
             id="portal-login"
+            className="sas-auth-login-card"
             style={{
               ...cardStyle,
               padding: 28,
@@ -9453,11 +9460,24 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       }}
     >
       <style>{`
+        * { box-sizing: border-box; }
         .sas-layout { display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; }
         .sas-sidebar { background: #fff; border-right: 1px solid #E2E8F0; padding: 20px; position: relative; z-index: 100; }
         .sas-overlay { display: none; }
         .sas-hamburger { display: none; }
-        .sas-main { padding: 24px; overflow-x: hidden; }
+                .sas-main { padding: 24px; overflow-x: hidden; }
+        .sas-toasts { width: min(380px, calc(100vw - 24px)); }
+        .sas-section-card, .sas-summary-box, .sas-metric-card, .sas-action-card, .sas-auth-login-card { width: 100%; }
+        .sas-table-wrap { width: 100%; -webkit-overflow-scrolling: touch; }
+        .sas-data-table th, .sas-data-table td { white-space: nowrap; }
+        .sas-dashboard-hero { width: 100%; }
+        .sas-stack-mobile { align-items: stretch; }
+        .sas-main input, .sas-main select, .sas-main textarea, .sas-main button { font: inherit; }
+        .sas-main img { max-width: 100%; height: auto; }
+        @media (max-width: 1024px) {
+          .sas-dashboard-hero { grid-template-columns: 1fr !important; padding: 22px !important; }
+          .sas-auth-landing { grid-template-columns: 1fr !important; }
+        }
         @media (max-width: 768px) {
           .sas-layout { grid-template-columns: 1fr; }
           .sas-sidebar { position: fixed; top: 0; left: -260px; width: 240px; height: 100vh; overflow-y: auto; transition: left 0.25s ease; z-index: 200; box-shadow: 4px 0 20px rgba(0,0,0,0.12); }
@@ -9466,7 +9486,17 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
           .sas-hamburger { display: flex; align-items: center; gap: 12px; background: #fff; border-bottom: 1px solid #E2E8F0; padding: 14px 16px; position: sticky; top: 0; z-index: 100; }
           .sas-hamburger-btn { background: none; border: none; cursor: pointer; padding: 4px; display: flex; flex-direction: column; gap: 5px; }
           .sas-hamburger-btn span { display: block; width: 22px; height: 2px; background: #6A1B9A; border-radius: 2px; }
-          .sas-main { padding: 16px; }
+          .sas-main { padding: 14px; }
+          .sas-toasts { left: 12px; right: 12px; bottom: 12px; max-width: none !important; width: auto; }
+          .sas-confirm-card { padding: 20px !important; border-radius: 16px !important; }
+          .sas-section-card, .sas-summary-box, .sas-metric-card, .sas-action-card { padding: 16px !important; border-radius: 16px !important; }
+          .sas-dashboard-hero { border-radius: 18px !important; gap: 16px !important; }
+          .sas-dashboard-hero > div:first-child div[style*="font-size: 34px"] { font-size: 28px !important; }
+          .sas-insight-chip { padding: 10px 12px !important; }
+          .sas-stack-mobile { grid-template-columns: 1fr !important; }
+          .sas-data-table { min-width: 640px !important; }
+          .sas-auth-hero-title { font-size: 32px !important; }
+          .sas-auth-login-card { padding: 20px !important; border-radius: 20px !important; }
         }
       `}</style>
 

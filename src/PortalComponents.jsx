@@ -29,6 +29,7 @@ import {
   formatMonthLabel,
   getApiBaseUrl,
   DEFAULT_API_BASE_URL,
+  DEFAULT_MONTHLY_SUBSCRIPTION,
   SUPABASE_TABLES,
   isValidEmail,
   collectValidationErrors,
@@ -36,6 +37,20 @@ import {
   LOGO_PREVIEW_MAX_HEIGHT,
   LOGO_PREVIEW_MAX_WIDTH,
 } from './PortalHelpers';
+
+const LOGO_DOCUMENT_MAX_HEIGHT = 140;
+const LOGO_DOCUMENT_MAX_WIDTH = 440;
+
+const escapeHtml = (value) =>
+  String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+
+const nl2br = (value) => escapeHtml(value).replace(/\n/g, "<br/>");
+
 
 export function ToastContainer({ toasts, onRemove }) {
   if (!toasts.length) return null;
@@ -102,8 +117,8 @@ export function useToast() {
 function ConfirmModal({ isOpen, title, message, confirmLabel = "Delete", onConfirm, onCancel }) {
   if (!isOpen) return null;
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 99998, background: "rgba(15,23,42,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-      <div style={{ background: "#fff", borderRadius: 18, padding: 28, width: "100%", maxWidth: 420, boxShadow: "0 20px 60px rgba(0,0,0,0.2)", fontFamily: 'sans-serif' }}>
+    <div className="sas-confirm-backdrop" style={{ position: "fixed", inset: 0, zIndex: 99998, background: "rgba(15,23,42,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div className="sas-confirm-card" style={{ background: "#fff", borderRadius: 18, padding: 28, width: "100%", maxWidth: 420, boxShadow: "0 20px 60px rgba(0,0,0,0.2)", fontFamily: 'sans-serif' }}>
         <div style={{ fontSize: 18, fontWeight: 800, color: "#14202B", marginBottom: 10 }}>{title}</div>
         <div style={{ fontSize: 14, color: "#64748B", lineHeight: 1.6, marginBottom: 24 }}>{message}</div>
         <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
@@ -242,6 +257,7 @@ function SummaryBox({ title, value, subtitle }) {
 export function DashboardHero({ title, subtitle, highlight, children }) {
   return (
     <div
+      className="sas-dashboard-hero sas-hero-grid"
       style={{
         background: `linear-gradient(135deg, ${colours.navy} 0%, ${colours.purple} 58%, ${colours.teal} 100%)`,
         borderRadius: 24,
@@ -253,7 +269,6 @@ export function DashboardHero({ title, subtitle, highlight, children }) {
         alignItems: "stretch",
         boxShadow: "0 18px 40px rgba(43, 47, 107, 0.18)",
       }}
-      className="sas-hero-grid"
     >
       <div>
         <div
@@ -301,6 +316,7 @@ export function DashboardHero({ title, subtitle, highlight, children }) {
 export function InsightChip({ label, value }) {
   return (
     <div
+      className="sas-insight-chip"
       style={{
         display: "flex",
         justifyContent: "space-between",
@@ -320,6 +336,7 @@ export function InsightChip({ label, value }) {
 export function MetricCard({ title, value, subtitle, accent = colours.purple }) {
   return (
     <div
+      className="sas-metric-card"
       style={{
         ...cardStyle,
         padding: 18,

@@ -55,6 +55,11 @@
     }
 
     .nav-links { display: flex; align-items: center; gap: 32px; }
+    .nav-toggle { display: none; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 12px; border: 1px solid var(--border); background: var(--white); color: var(--purple); cursor: pointer; }
+    .nav-toggle span { display: block; width: 18px; height: 2px; background: currentColor; border-radius: 2px; position: relative; }
+    .nav-toggle span::before, .nav-toggle span::after { content: ""; position: absolute; left: 0; width: 18px; height: 2px; background: currentColor; border-radius: 2px; }
+    .nav-toggle span::before { top: -6px; }
+    .nav-toggle span::after { top: 6px; }
     .nav-links a {
       font-size: 14px; font-weight: 500; color: var(--muted);
       text-decoration: none; transition: color 0.2s;
@@ -377,10 +382,14 @@
 
     /* ── MOBILE ── */
     @media (max-width: 768px) {
-      nav { padding: 16px 20px; gap: 12px; }
-      .nav-links { display: none; }
-      .portal-entry { margin-left: auto; }
-      .portal-login-chip { padding: 10px 14px; font-size: 13px; }
+      nav { padding: 16px 20px; gap: 12px; flex-wrap: wrap; }
+      .nav-toggle { display: inline-flex; margin-left: auto; }
+      .nav-links { display: none; width: 100%; flex-direction: column; align-items: stretch; gap: 12px; padding-top: 12px; }
+      nav.nav-open .nav-links { display: flex; }
+      .nav-links a, .nav-links .btn { width: 100%; justify-content: center; }
+      .portal-entry { width: 100%; order: 4; display: none; }
+      nav.nav-open .portal-entry { display: flex; }
+      .portal-login-chip { width: 100%; padding: 12px 14px; font-size: 13px; }
       .hero { padding: 100px 20px 60px; }
       .hero-inner { grid-template-columns: 1fr; gap: 40px; }
       .hero h1 { font-size: 38px; }
@@ -404,6 +413,7 @@
   <!-- NAV -->
   <nav id="navbar">
     <a href="#" class="nav-logo">Sharon's Accounting Service</a>
+    <button class="nav-toggle" id="navToggle" aria-label="Open menu" aria-expanded="false"><span></span></button>
     <div class="nav-links">
       <a href="#features">Features</a>
       <a href="#how-it-works">How it works</a>
@@ -641,6 +651,11 @@
   <script>
     // Sticky nav shadow
     const navbar = document.getElementById('navbar');
+    const navToggle = document.getElementById('navToggle');
+    navToggle?.addEventListener('click', () => {
+      const isOpen = navbar.classList.toggle('nav-open');
+      navToggle.setAttribute('aria-expanded', String(isOpen));
+    });
     window.addEventListener('scroll', () => {
       navbar.classList.toggle('scrolled', window.scrollY > 10);
     });
