@@ -224,7 +224,7 @@ const navLabels = {
   services: "Services",
   expenses: "Expenses",
   "bills / payables": "Bills & Payables",
-  "income sources": "Revenue Streams",
+  "income sources": "Income Sources",
   documents: "Documents",
   "bas report": "BAS Report",
   settings: "Settings",
@@ -1899,7 +1899,7 @@ return `<!doctype html>
 <meta charset="utf-8" />
 <title>Invoice Preview</title>
 <style>
-body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; position: relative; }
+body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
 .header { display:flex; justify-content:space-between; border-bottom:2px solid #eee; padding-bottom:20px; }
 .title { font-size:34px; font-weight:900; color:#6A1B9A; }
 .right { text-align:right; }
@@ -1952,8 +1952,6 @@ th { text-align:left; color:#64748B; }
   <div><strong>Due:</strong> ${formatDateAU(invoice.dueDate)}</div>
 </div>
 </div>
-
-${invoice.status === "Paid" ? `<div style="position:absolute; top:46px; right:54px; transform:rotate(-12deg); border:4px solid #16A34A; color:#16A34A; border-radius:14px; padding:10px 18px; font-size:30px; font-weight:900; letter-spacing:1px; opacity:0.9;">PAID</div>` : ""}
 
 <div class="section">
 <strong>Billed To:</strong><br/>
@@ -2100,7 +2098,6 @@ export default function AccountingPortalPrototype() {
   const [savingIncomeSource, setSavingIncomeSource] = useState(false);
   const [savingDocumentEdits, setSavingDocumentEdits] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [billWizardStep, setBillWizardStep] = useState(1);
   const [invoiceWizardStep, setInvoiceWizardStep] = useState(1);
   const [showARCreditNoteModal, setShowARCreditNoteModal] = useState(false);
@@ -2132,6 +2129,9 @@ export default function AccountingPortalPrototype() {
   const recurringShownRef = useRef(false);
   const [quoteWizardStep, setQuoteWizardStep] = useState(1);
   const [activePage, setActivePage] = useState("dashboard");
+  const [selectedFinancialReport, setSelectedFinancialReport] = useState("");
+  const [financialReportRange, setFinancialReportRange] = useState("all");
+  const financialReportRef = useRef(null);
   const [activeSettingsTab, setActiveSettingsTab] = useState("Profile");
   const [authUser, setAuthUser] = useState(null);
   const [authMode, setAuthMode] = useState("signin");
@@ -2349,110 +2349,6 @@ export default function AccountingPortalPrototype() {
   ]);
   const [expenseCategorySelection, setExpenseCategorySelection] = useState("");
   const [searchExpenseCategory, setSearchExpenseCategory] = useState("");
-
-  const getMostRecentClient = () => {
-    const ids = [...invoices, ...quotes]
-      .map((item) => safeNumber(item?.clientId))
-      .filter(Boolean);
-    if (!ids.length) return clients[0] || null;
-    const lastId = ids[ids.length - 1];
-    return getClientById(lastId) || clients[0] || null;
-  };
-
-  const getLastUsedService = () => services[services.length - 1] || null;
-
-  const applySmartDefaultsToInvoice = (clientId) => {
-    const selectedClient = getClientById(clientId);
-    if (!selectedClient) return;
-    const recentInvoice = [...invoices].reverse().find((item) => String(item.clientId) === String(clientId) && item.lineItems?.length);
-    const preferredLines = recentInvoice?.lineItems?.length
-      ? recentInvoice.lineItems.map((item) => ({
-          id: Date.now() + Math.random() + Math.random(),
-          description: item.description || "",
-          quantity: item.quantity || item.qty || 1,
-          unitPrice: item.unitPrice != null ? String(item.unitPrice) : "",
-          gstType: clientIsGstExempt(clientId) ? "GST Free" : (item.gstType || "GST on Income (10%)"),
-        }))
-      : null;
-    const lastService = getLastUsedService();
-
-    setInvoiceForm((prev) => {
-      const hasMeaningfulLines = (prev.lineItems || []).some((item) => item.description || item.unitPrice);
-      const fallbackLine = lastService ? [{
-        id: Date.now() + Math.random(),
-        description: lastService.name || "",
-        quantity: 1,
-        unitPrice: lastService.price != null ? String(lastService.price) : "",
-        gstType: clientIsGstExempt(clientId) ? "GST Free" : (lastService.gstType || "GST on Income (10%)"),
-      }] : prev.lineItems;
-
-      return {
-        ...prev,
-        clientId: String(clientId),
-        currencyCode: getClientCurrencyCode(selectedClient),
-        gstType: clientIsGstExempt(clientId) ? "GST Free" : prev.gstType,
-        purchaseOrderReference: selectedClient?.hasPurchaseOrder ? prev.purchaseOrderReference : "",
-        lineItems: hasMeaningfulLines ? prev.lineItems : (preferredLines || fallbackLine),
-      };
-    });
-    setInvClientSearch(selectedClient.name || "");
-  };
-
-  const applySmartDefaultsToQuote = (clientId) => {
-    const selectedClient = getClientById(clientId);
-    if (!selectedClient) return;
-    const recentQuote = [...quotes].reverse().find((item) => String(item.clientId) === String(clientId) && item.lineItems?.length);
-    const preferredLines = recentQuote?.lineItems?.length
-      ? recentQuote.lineItems.map((item) => ({
-          id: Date.now() + Math.random() + Math.random(),
-          description: item.description || "",
-          quantity: item.quantity || item.qty || 1,
-          unitPrice: item.unitPrice != null ? String(item.unitPrice) : "",
-          gstType: clientIsGstExempt(clientId) ? "GST Free" : (item.gstType || "GST on Income (10%)"),
-        }))
-      : null;
-    const lastService = getLastUsedService();
-
-    setQuoteForm((prev) => {
-      const hasMeaningfulLines = (prev.lineItems || []).some((item) => item.description || item.unitPrice);
-      const fallbackLine = lastService ? [{
-        id: Date.now() + Math.random(),
-        description: lastService.name || "",
-        quantity: 1,
-        unitPrice: lastService.price != null ? String(lastService.price) : "",
-        gstType: clientIsGstExempt(clientId) ? "GST Free" : (lastService.gstType || "GST on Income (10%)"),
-      }] : prev.lineItems;
-
-      return {
-        ...prev,
-        clientId: String(clientId),
-        currencyCode: getClientCurrencyCode(selectedClient),
-        gstType: clientIsGstExempt(clientId) ? "GST Free" : prev.gstType,
-        lineItems: hasMeaningfulLines ? prev.lineItems : (preferredLines || fallbackLine),
-      };
-    });
-    setQuoteClientSearch(selectedClient.name || "");
-  };
-
-
-
-  useEffect(() => {
-    if (invoiceForm.clientId || !clients.length) return;
-    const recentClient = getMostRecentClient();
-    if (recentClient) {
-      setInvoiceForm((prev) => ({ ...prev, clientId: String(recentClient.id), currencyCode: getClientCurrencyCode(recentClient) }));
-      setInvClientSearch(recentClient.name || "");
-    }
-  }, [clients.length]);
-
-  useEffect(() => {
-    if (quoteForm.clientId || !clients.length) return;
-    const recentClient = getMostRecentClient();
-    if (recentClient) {
-      setQuoteForm((prev) => ({ ...prev, clientId: String(recentClient.id), currencyCode: getClientCurrencyCode(recentClient) }));
-      setQuoteClientSearch(recentClient.name || "");
-    }
-  }, [clients.length]);
 
   const clearPortalForFreshSetup = () => {
     setProfile(initialProfile);
@@ -3736,7 +3632,7 @@ export default function AccountingPortalPrototype() {
 <meta charset="utf-8" />
 <title>Quote ${emailDocumentRecord?.quoteNumber || ""}</title>
 <style>
-body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; position: relative; }
+body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
 .card { border: 1px solid #E2E8F0; border-radius: 16px; padding: 24px; }
 .title { font-size: 32px; font-weight: 900; color: #6A1B9A; margin-bottom: 18px; }
 .row { margin: 8px 0; }
@@ -4141,7 +4037,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; position: 
       setExpenses((prev) => prev.map((item) => (item.id === savedExpense.id ? savedExpense : item)));
       closeExpenseEditor();
       setSupabaseSyncStatus("Expense updated in Supabase database");
-      toast.success(`Expense updated for ${expenseEditorForm?.supplier || expenseEditorForm?.description || "this item"}`);
+      toast.success("Expense updated!");
     } catch (error) {
       console.error("EXPENSE EDIT SAVE ERROR:", error);
       setSupabaseSyncStatus(error.message || "Expense update failed");
@@ -4308,7 +4204,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; position: 
     try {
       const savedInvoice = await upsertRecordInDatabase(SUPABASE_TABLES.invoices, payload);
       let nextInvoice = savedInvoice;
-      const saveMessage = `Invoice ${invoiceNumber} saved successfully. Use Preview to print or download the PDF.`;
+      const saveMessage = "Invoice saved to Supabase database. Use Preview to print or download the PDF.";
 
       setInvoices((prev) => [...prev, nextInvoice]);
       setInvoiceForm((prev) => ({
@@ -4389,8 +4285,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; position: 
       setInvoices((prev) =>
         prev.map((invoice) => (invoice.id === invoiceEditorForm.id ? savedInvoice : invoice))
       );
-      setSupabaseSyncStatus(`Invoice ${savedInvoice.invoiceNumber || invoiceEditorForm.invoiceNumber} updated successfully`);
-      toast.success(`Invoice ${savedInvoice.invoiceNumber || invoiceEditorForm.invoiceNumber} updated successfully`);
+      setSupabaseSyncStatus("Invoice changes saved to Supabase database");
       closeInvoiceEditor();
     } catch (error) {
       console.error("INVOICE UPDATE ERROR:", error);
@@ -4443,7 +4338,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; position: 
     try {
       const savedQuote = await upsertRecordInDatabase(SUPABASE_TABLES.quotes, payload);
       let nextQuote = savedQuote;
-      const saveMessage = `Quote ${quoteNumber} saved successfully. Use Preview to print or download the PDF.`;
+      const saveMessage = "Quote saved to Supabase database. Use Preview to print or download the PDF.";
 
       setQuotes((prev) => [...prev, nextQuote]);
       setQuoteForm((prev) => ({
@@ -4514,8 +4409,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; position: 
       setQuotes((prev) =>
         prev.map((quote) => (quote.id === quoteEditorForm.id ? savedQuote : quote))
       );
-      setSupabaseSyncStatus(`Quote ${savedQuote.quoteNumber || quoteEditorForm.quoteNumber} updated successfully`);
-      toast.success(`Quote ${savedQuote.quoteNumber || quoteEditorForm.quoteNumber} updated successfully`);
+      setSupabaseSyncStatus("Quote changes saved to Supabase database");
       closeQuoteEditor();
     } catch (error) {
       console.error("QUOTE UPDATE ERROR:", error);
@@ -4758,7 +4652,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; position: 
       });
       setSupabaseSyncStatus("Expense saved to Supabase database");
       setReceiptFile(null);
-      toast.success(`Expense saved for ${expenseForm.supplier || expenseForm.description || "this item"}${expenseForm.amount ? ` — ${currency(expenseForm.amount)}` : ""}`);
+      toast.success("Expense saved!");
     } catch (err) {
       console.error("SAVE ERROR:", err);
       setSupabaseSyncStatus(err.message || "Expense save failed");
@@ -5390,6 +5284,174 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; position: 
       };
     }, [clientRevenueRows, totals, invoices, monthlyFinance, expenses, expenseCategoryRows]);
 
+
+    const reportProfitAndLossRows = useMemo(() => {
+      const revenue = totals.paidIncome;
+      const expensesTotal = totals.totalExpenses;
+      const grossProfit = revenue - expensesTotal;
+      const gstReserve = totals.gstPayable;
+      const taxReserve = totals.estimatedTax;
+      const netOperatingPosition = grossProfit - gstReserve - taxReserve;
+      return [
+        { label: "Paid revenue", value: revenue },
+        { label: "Operating expenses", value: -expensesTotal },
+        { label: "Gross operating profit", value: grossProfit },
+        { label: "GST payable reserve", value: -gstReserve },
+        { label: "Estimated tax reserve", value: -taxReserve },
+        { label: "Net operating position", value: netOperatingPosition },
+      ];
+    }, [totals]);
+
+    const receivablesRows = useMemo(() => {
+      const today = parseLocalDate(todayLocal());
+      return invoices
+        .filter((invoice) => (invoice.status || "Draft") !== "Paid")
+        .map((invoice) => {
+          const dueDate = invoice.dueDate || invoice.invoiceDate || "";
+          const due = dueDate ? parseLocalDate(dueDate) : null;
+          const daysPastDue = due ? Math.max(0, Math.floor((today - due) / (1000 * 60 * 60 * 24))) : 0;
+          let agingBucket = "Current";
+          if (daysPastDue > 60) agingBucket = "61+ days";
+          else if (daysPastDue > 30) agingBucket = "31–60 days";
+          else if (daysPastDue > 0) agingBucket = "1–30 days";
+          return {
+            id: invoice.id,
+            invoiceNumber: invoice.invoiceNumber || "Invoice",
+            client: getClientName(invoice.clientId),
+            dueDate: formatDateAU(dueDate),
+            status: invoice.status || "Draft",
+            amount: safeNumber(invoice.total),
+            daysPastDue,
+            agingBucket,
+          };
+        })
+        .sort((a, b) => b.daysPastDue - a.daysPastDue || b.amount - a.amount);
+    }, [invoices]);
+
+    const receivablesSummaryRows = useMemo(() => {
+      const buckets = [
+        { label: "Current", value: 0 },
+        { label: "1–30 days", value: 0 },
+        { label: "31–60 days", value: 0 },
+        { label: "61+ days", value: 0 },
+      ];
+      receivablesRows.forEach((row) => {
+        const bucket = buckets.find((item) => item.label === row.agingBucket);
+        if (bucket) bucket.value += safeNumber(row.amount);
+      });
+      return buckets;
+    }, [receivablesRows]);
+
+    const supplierSpendRows = useMemo(() => {
+      const grouped = new Map();
+      expenses.forEach((expense) => {
+        const label = expense.supplier || expense.description || "Unassigned supplier";
+        grouped.set(label, (grouped.get(label) || 0) + safeNumber(expense.amount));
+      });
+      return [...grouped.entries()]
+        .map(([label, value]) => ({ label, value }))
+        .sort((a, b) => b.value - a.value)
+        .slice(0, 6);
+    }, [expenses]);
+
+    const expenseMonthlyRows = useMemo(() => {
+      const grouped = new Map();
+      expenses.forEach((expense) => {
+        const monthKey = formatMonthKey(expense.date);
+        grouped.set(monthKey, (grouped.get(monthKey) || 0) + safeNumber(expense.amount));
+      });
+      return [...grouped.entries()]
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([monthKey, value]) => ({
+          monthKey,
+          label: formatMonthLabel(monthKey),
+          value,
+        }))
+        .slice(-6);
+    }, [expenses]);
+
+    const clientPerformanceRows = useMemo(() => {
+      const grouped = new Map();
+      invoices.forEach((invoice) => {
+        const key = String(invoice.clientId || "");
+        const clientName = getClientName(invoice.clientId);
+        const current = grouped.get(key) || {
+          id: key,
+          client: clientName,
+          invoiced: 0,
+          paid: 0,
+          fees: 0,
+          taxWithheld: 0,
+          netExpected: 0,
+          invoiceCount: 0,
+        };
+        current.invoiced += safeNumber(invoice.total);
+        if ((invoice.status || "Draft") === "Paid") current.paid += safeNumber(invoice.total);
+        current.fees += safeNumber(invoice.feeAmount);
+        current.taxWithheld += safeNumber(invoice.taxWithheld);
+        current.netExpected += safeNumber(invoice.netExpected != null ? invoice.netExpected : invoice.total);
+        current.invoiceCount += 1;
+        grouped.set(key, current);
+      });
+      return [...grouped.values()].sort((a, b) => b.paid - a.paid || b.invoiced - a.invoiced).slice(0, 8);
+    }, [invoices]);
+
+    const cashFlowReportRows = useMemo(() => {
+      const incomingCurrent = receivablesRows.filter((row) => row.agingBucket === "Current").reduce((sum, row) => sum + safeNumber(row.amount), 0);
+      const incomingOverdue = receivablesRows.filter((row) => row.agingBucket !== "Current").reduce((sum, row) => sum + safeNumber(row.amount), 0);
+      const upcomingBills = expenses
+        .filter((expense) => {
+          if (expense.isPaid || expense.status === "Paid") return false;
+          const due = expense.dueDate || expense.date;
+          if (!due) return false;
+          return parseLocalDate(due) >= parseLocalDate(todayLocal());
+        })
+        .reduce((sum, expense) => sum + safeNumber(expense.amount), 0);
+      const overdueBills = expenses
+        .filter((expense) => {
+          if (expense.isPaid || expense.status === "Paid") return false;
+          const due = expense.dueDate || expense.date;
+          if (!due) return false;
+          return parseLocalDate(due) < parseLocalDate(todayLocal());
+        })
+        .reduce((sum, expense) => sum + safeNumber(expense.amount), 0);
+      return [
+        { label: "Cash received", value: totals.paidIncome },
+        { label: "Current receivables", value: incomingCurrent },
+        { label: "Overdue receivables", value: incomingOverdue },
+        { label: "Upcoming bills", value: -upcomingBills },
+        { label: "Overdue bills", value: -overdueBills },
+        { label: "Safe to spend", value: totals.safeToSpend },
+      ];
+    }, [receivablesRows, expenses, totals]);
+
+    const reportExportFilename = `${String(profile.businessName || "financial-report").trim().replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() || "financial-report"}-${todayLocal()}`;
+
+    const downloadCsvReport = (rows, filename) => {
+      if (!rows?.length) {
+        toast.warning("There is not enough data to export this report yet.", "Export");
+        return;
+      }
+      const headers = Object.keys(rows[0]);
+      const csv = [
+        headers.join(","),
+        ...rows.map((row) => headers.map((key) => {
+          const value = row[key] == null ? "" : String(row[key]);
+          return `"${value.replace(/"/g, '""')}"`;
+        }).join(",")),
+      ].join("\n");
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      toast.success(`Exported ${filename}`, "Report ready");
+    };
+
     const renderDashboard = () => {
       // ── Onboarding checklist ──────────────────────────────────────
       const onboardingSteps = [
@@ -5641,469 +5703,480 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; position: 
     </div>
       );
     };
-    const renderFinancialInsights = () => (
-    <div style={{ display: "grid", gap: 20 }}>
-      <DashboardHero
-        title="Financial Insights"
-        subtitle="A lighter analysis page that keeps the current look, but focuses on interpretation instead of repeating the dashboard."
-        highlight={`${financialInsights.healthScore.toFixed(0)}/100`}
-      >
-        <InsightChip label="Health" value={financialInsights.healthLabel} />
-        <InsightChip label="Top 3 client share" value={`${financialInsights.topThreeClientShare.toFixed(1)}%`} />
-        <InsightChip label="You keep" value={`${Math.max(financialInsights.usableCashRatio, 0).toFixed(1)}%`} />
-      </DashboardHero>
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-          gap: 16,
-        }}
-      >
-        <MetricCard title="Average monthly revenue" value={currency(financialInsights.averageMonthlyRevenue)} subtitle="Average paid revenue across the months currently shown." accent={colours.navy} />
-        <MetricCard title="Revenue change" value={`${financialInsights.revenueChangePct >= 0 ? "+" : ""}${financialInsights.revenueChangePct.toFixed(1)}%`} subtitle="Movement versus the previous month." accent={colours.teal} />
-        <MetricCard title="Expense ratio" value={`${financialInsights.expenseRatio.toFixed(1)}%`} subtitle="Recorded expenses as a share of paid income." accent={colours.purple} />
-        <MetricCard title="Revenue volatility" value={`${financialInsights.averageVolatility.toFixed(1)}%`} subtitle="Average month-to-month movement across recent months." accent={colours.navy} />
-      </div>
+    const formatReportPeriodLabel = (range) => {
+      const now = new Date();
+      if (range === "this-month") {
+        return now.toLocaleDateString("en-AU", { month: "long", year: "numeric" });
+      }
+      if (range === "last-month") {
+        const last = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        return last.toLocaleDateString("en-AU", { month: "long", year: "numeric" });
+      }
+      if (range === "last-3-months") {
+        const start = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+        return `${start.toLocaleDateString("en-AU", { month: "short", year: "numeric" })} – ${now.toLocaleDateString("en-AU", { month: "short", year: "numeric" })}`;
+      }
+      if (range === "ytd") {
+        return `Year to date ${now.getFullYear()}`;
+      }
+      return "All time";
+    };
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "minmax(0, 1.15fr) minmax(320px, 0.85fr)",
-          gap: 20,
-        }}
-      >
-        <SectionCard title="Revenue reliability" right={<div style={{ fontSize: 12, color: colours.muted }}>Best, worst, and recent movement</div>}>
-          {monthlyFinance.length ? (
-            <div style={{ display: "grid", gap: 16 }}>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-                  gap: 12,
-                }}
-              >
-                <div style={{ ...cardStyle, padding: 14, background: colours.bg }}>
-                  <div style={{ fontSize: 12, fontWeight: 800, textTransform: "uppercase", color: colours.muted }}>Best month</div>
-                  <div style={{ fontSize: 16, fontWeight: 800, color: colours.text, marginTop: 6 }}>{financialInsights.bestMonth?.label || "—"}</div>
-                  <div style={{ fontSize: 13, color: colours.muted, marginTop: 6 }}>{currency(financialInsights.bestMonth?.revenue || 0)}</div>
-                </div>
-                <div style={{ ...cardStyle, padding: 14, background: colours.bg }}>
-                  <div style={{ fontSize: 12, fontWeight: 800, textTransform: "uppercase", color: colours.muted }}>Worst month</div>
-                  <div style={{ fontSize: 16, fontWeight: 800, color: colours.text, marginTop: 6 }}>{financialInsights.worstMonth?.label || "—"}</div>
-                  <div style={{ fontSize: 13, color: colours.muted, marginTop: 6 }}>{currency(financialInsights.worstMonth?.revenue || 0)}</div>
-                </div>
-                <div style={{ ...cardStyle, padding: 14, background: colours.bg }}>
-                  <div style={{ fontSize: 12, fontWeight: 800, textTransform: "uppercase", color: colours.muted }}>Average invoice</div>
-                  <div style={{ fontSize: 16, fontWeight: 800, color: colours.text, marginTop: 6 }}>{currency(financialInsights.averageInvoiceValue)}</div>
-                  <div style={{ fontSize: 13, color: colours.muted, marginTop: 6 }}>Across all invoices in the portal.</div>
-                </div>
-              </div>
-              {monthlyFinance.map((month, index) => {
-                const maxRevenue = Math.max(...monthlyFinance.map((item) => item.revenue), 0);
-                const width = maxRevenue > 0 ? (month.revenue / maxRevenue) * 100 : 0;
-                const previous = index > 0 ? monthlyFinance[index - 1].revenue : 0;
-                const change = previous > 0 ? ((month.revenue - previous) / previous) * 100 : 0;
-                return (
-                  <div key={month.monthKey} style={{ display: "grid", gap: 6 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: colours.text }}>{month.label}</div>
-                      <div style={{ fontSize: 12, color: colours.muted }}>
-                        {index === 0 ? "Starting point" : `${change >= 0 ? "+" : ""}${change.toFixed(1)}% vs prior month`}
-                      </div>
-                    </div>
-                    <div style={{ height: 12, borderRadius: 999, background: colours.bg }}>
-                      <div style={{ width: `${Math.max(width, month.revenue ? 8 : 0)}%`, height: "100%", borderRadius: 999, background: `linear-gradient(90deg, ${colours.teal} 0%, ${colours.navy} 100%)` }} />
-                    </div>
-                    <div style={{ fontSize: 13, color: colours.text }}>{currency(month.revenue)} paid revenue</div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div style={{ fontSize: 14, color: colours.muted }}>Add paid invoices to see revenue reliability insights.</div>
-          )}
-        </SectionCard>
+    const getFinancialRangeStart = (range) => {
+      const now = new Date();
+      if (range === "this-month") return new Date(now.getFullYear(), now.getMonth(), 1);
+      if (range === "last-month") return new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      if (range === "last-3-months") return new Date(now.getFullYear(), now.getMonth() - 2, 1);
+      if (range === "ytd") return new Date(now.getFullYear(), 0, 1);
+      return null;
+    };
 
-        <WaterfallCard
-          title="Cash efficiency"
-          rows={[
-            { label: "Paid income", value: totals.paidIncome },
-            { label: "Less GST payable", value: -totals.gstPayable },
-            { label: "Less tax reserve", value: -totals.estimatedTax },
-            { label: "Less expenses", value: -totals.totalExpenses },
-            { label: "Safe to spend", value: totals.safeToSpend },
-          ]}
-        />
-      </div>
+    const matchesFinancialRange = (dateValue, range) => {
+      if (!dateValue || range === "all") return true;
+      const date = parseLocalDate(String(dateValue).slice(0, 10));
+      if (Number.isNaN(date.getTime())) return false;
+      const now = new Date();
+      const start = getFinancialRangeStart(range);
+      if (!start) return true;
+      if (range === "last-month") {
+        const end = new Date(now.getFullYear(), now.getMonth(), 1);
+        return date >= start && date < end;
+      }
+      return date >= start && date <= now;
+    };
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
-          gap: 20,
-        }}
-      >
-        <SectionCard title="Client risk" right={<div style={{ fontSize: 12, color: colours.muted }}>Concentration view</div>}>
-          <div style={{ display: "grid", gap: 14 }}>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
-                gap: 12,
-              }}
-            >
-              <div style={{ ...cardStyle, padding: 14, background: colours.bg }}>
-                <div style={{ fontSize: 12, fontWeight: 800, textTransform: "uppercase", color: colours.muted }}>Top client share</div>
-                <div style={{ fontSize: 22, fontWeight: 900, color: colours.text, marginTop: 6 }}>{financialInsights.topClientShare.toFixed(1)}%</div>
-              </div>
-              <div style={{ ...cardStyle, padding: 14, background: colours.bg }}>
-                <div style={{ fontSize: 12, fontWeight: 800, textTransform: "uppercase", color: colours.muted }}>Top 3 clients</div>
-                <div style={{ fontSize: 22, fontWeight: 900, color: colours.text, marginTop: 6 }}>{financialInsights.topThreeClientShare.toFixed(1)}%</div>
-              </div>
-            </div>
-            <TrendBarsCard title="Top clients" subtitle="Highest paid revenue contributors" data={clientRevenueRows.slice(0, 4)} valueKey="value" formatValue={(value) => currency(value)} accent={colours.teal} emptyText="No paid client revenue yet." />
-          </div>
-        </SectionCard>
+    const buildFinancialInsightSentence = (reportKey, metrics) => {
+      if (reportKey === "profit-loss") {
+        const net = safeNumber(metrics?.netOperatingPosition);
+        return net >= 0
+          ? `Net operating position is ${currency(net)} for ${formatReportPeriodLabel(financialReportRange)}.`
+          : `Operations are currently running at ${currency(Math.abs(net))} below break-even for ${formatReportPeriodLabel(financialReportRange)}.`;
+      }
+      if (reportKey === "cash-flow") {
+        const safeSpend = safeNumber(metrics?.safeToSpend);
+        return safeSpend >= 0
+          ? `Safe-to-spend cash is ${currency(safeSpend)} after reserves and current expenses.`
+          : `Current reserves and expenses exceed paid cash by ${currency(Math.abs(safeSpend))}.`;
+      }
+      if (reportKey === "accounts-receivable") {
+        const overdue = safeNumber(metrics?.overdueReceivables);
+        return overdue > 0
+          ? `${currency(overdue)} is currently overdue and should be prioritised for follow-up.`
+          : `There are no overdue receivables in the selected reporting period.`;
+      }
+      if (reportKey === "expense-analysis") {
+        return metrics?.largestExpenseCategoryLabel && metrics?.largestExpenseCategoryValue > 0
+          ? `${metrics.largestExpenseCategoryLabel} is the largest cost category at ${currency(metrics.largestExpenseCategoryValue)}.`
+          : "No expense concentration is available yet for the selected period.";
+      }
+      if (reportKey === "client-performance") {
+        return metrics?.topClientName && metrics?.topClientPaid > 0
+          ? `${metrics.topClientName} is your top client in this period at ${currency(metrics.topClientPaid)} paid.`
+          : "Client performance will appear once invoices are recorded in the selected period.";
+      }
+      return "";
+    };
 
-        <SectionCard title="Expense behaviour" right={<div style={{ fontSize: 12, color: colours.muted }}>Largest categories and recent change</div>}>
-          <div style={{ display: "grid", gap: 14 }}>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
-                gap: 12,
-              }}
-            >
-              <div style={{ ...cardStyle, padding: 14, background: colours.bg }}>
-                <div style={{ fontSize: 12, fontWeight: 800, textTransform: "uppercase", color: colours.muted }}>Latest expense move</div>
-                <div style={{ fontSize: 22, fontWeight: 900, color: colours.text, marginTop: 6 }}>{`${financialInsights.expenseChangePct >= 0 ? "+" : ""}${financialInsights.expenseChangePct.toFixed(1)}%`}</div>
-              </div>
-              <div style={{ ...cardStyle, padding: 14, background: colours.bg }}>
-                <div style={{ fontSize: 12, fontWeight: 800, textTransform: "uppercase", color: colours.muted }}>Largest category</div>
-                <div style={{ fontSize: 16, fontWeight: 800, color: colours.text, marginTop: 6 }}>{financialInsights.largestExpenseCategory?.label || "—"}</div>
-                <div style={{ fontSize: 13, color: colours.muted, marginTop: 6 }}>{currency(financialInsights.largestExpenseCategory?.value || 0)}</div>
-              </div>
-            </div>
-            <TrendBarsCard title="Expense categories" subtitle="Largest recorded categories" data={expenseCategoryRows.slice(0, 5)} valueKey="value" formatValue={(value) => currency(value)} accent={colours.purple} emptyText="No expenses recorded yet." />
-          </div>
-        </SectionCard>
-      </div>
+    const printFinancialReport = () => {
+      window.print();
+    };
 
-      <SectionCard title="Simple alerts" right={<div style={{ fontSize: 12, color: colours.muted }}>Automatic observations</div>}>
-        <div style={{ display: "grid", gap: 12 }}>
-          {financialInsights.alerts.map((alert, index) => (
-            <div key={index} style={{ ...cardStyle, padding: 14, background: colours.bg, borderLeft: `4px solid ${index === 0 && alert.includes("No immediate") ? colours.teal : colours.purple}` }}>
-              <div style={{ fontSize: 14, color: colours.text, lineHeight: 1.6 }}>{alert}</div>
-            </div>
-          ))}
-        </div>
-      </SectionCard>
-    </div>
-    );
+    const downloadFinancialReportPdf = async () => {
+      if (!selectedFinancialReport || !financialReportRef.current) return;
+      const filename = `${selectedFinancialReport}-report-${todayLocal()}.pdf`;
+      try {
+        await html2pdf()
+          .set({
+            margin: 10,
+            filename,
+            image: { type: "jpeg", quality: 0.98 },
+            html2canvas: { scale: 2, useCORS: true, logging: false },
+            jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+          })
+          .from(financialReportRef.current)
+          .save();
+      } catch (error) {
+        console.error("FINANCIAL REPORT PDF ERROR:", error);
+        toast.error("Could not generate the report PDF.");
+      }
+    };
 
-    const renderClients = () => {
-    const activeClients = clients.filter((c) => {
-      const clientInvoices = invoices.filter((inv) => String(inv.clientId) === String(c.id));
-      return clientInvoices.length > 0;
-    });
-    const gstExemptClients = clients.filter((c) => c.outsideAustraliaOrGstExempt);
-    const totalClientRevenue = invoices
-      .filter((inv) => inv.status === "Paid")
-      .reduce((sum, inv) => sum + safeNumber(inv.total), 0);
-    return (
-    <div style={{ display: "grid", gap: 20 }}>
-      <DashboardHero
-        title="Clients"
-        subtitle="Manage your client roster, billing preferences, and GST settings. All clients feed directly into your invoices and quotes."
-        highlight={String(clients.length)}
-      >
-        <InsightChip label="Active (invoiced)" value={String(activeClients.length)} />
-        <InsightChip label="GST exempt" value={String(gstExemptClients.length)} />
-        <InsightChip label="Total paid revenue" value={currency(totalClientRevenue)} />
-      </DashboardHero>
+    const renderFinancialInsights = () => {
+      const reportCards = [
+        { key: "profit-loss", icon: "📘", title: "Profit & Loss", description: "Generate a clear operating report showing revenue, expenses, reserves and net position.", tone: colours.navy },
+        { key: "cash-flow", icon: "💧", title: "Cash Flow", description: "Review cash in, receivables, upcoming bills and safe-to-spend position.", tone: colours.teal },
+        { key: "accounts-receivable", icon: "🧾", title: "Accounts Receivable", description: "Generate your receivables ageing report with current and overdue balances.", tone: colours.purple },
+        { key: "expense-analysis", icon: "📉", title: "Expense Analysis", description: "See supplier spend, category concentration and monthly expense movement.", tone: colours.navy },
+        { key: "client-performance", icon: "👥", title: "Client Performance", description: "Compare invoiced, paid and net expected value across clients.", tone: colours.teal },
+      ];
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 16 }}>
-        <MetricCard title="Total clients" value={String(clients.length)} subtitle="All clients currently in the portal." accent={colours.navy} />
-        <MetricCard title="Active clients" value={String(activeClients.length)} subtitle="Clients with at least one invoice." accent={colours.teal} />
-        <MetricCard title="GST exempt" value={String(gstExemptClients.length)} subtitle="Clients outside Australia or GST exempt." accent={colours.purple} />
-        <MetricCard title="Paid revenue" value={currency(totalClientRevenue)} subtitle="Total paid invoices across all clients." accent={colours.navy} />
-      </div>
+      const reportHeadingMap = {
+        "profit-loss": "Profit & Loss Report",
+        "cash-flow": "Cash Flow Report",
+        "accounts-receivable": "Accounts Receivable Report",
+        "expense-analysis": "Expense Analysis Report",
+        "client-performance": "Client Performance Report",
+      };
 
-      <SectionCard title="Client details">
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-            gap: 16,
-          }}
-        >
-          <div>
-            <label style={labelStyle}>What is the name of the person or organisation? *</label>
-            <input
-              style={inputStyle}
-              value={clientForm.name}
-              onChange={(e) => setClientForm({ ...clientForm, name: e.target.value })}
-            />
-          </div>
+      const reportSubtitleMap = {
+        "profit-loss": "Generated from paid income, current expenses, reserves and safe-to-spend calculations already in the portal.",
+        "cash-flow": "Generated from invoice status, due dates, receivables and bills currently recorded in the portal.",
+        "accounts-receivable": "Generated from open invoices, due dates and ageing buckets for collection follow-up.",
+        "expense-analysis": "Generated from recorded expenses, suppliers, categories and recent monthly movement.",
+        "client-performance": "Generated from invoice history, paid value and estimated net value by client.",
+      };
 
-          <div>
-            <label style={labelStyle}>What type of work do you do for this Client? *</label>
-            <select
-              style={inputStyle}
-              value={clientForm.workType}
-              onChange={(e) => setClientForm({ ...clientForm, workType: e.target.value })}
-            >
-              <option>Financial / Management Accountant</option>
-              <option>Bookkeeping</option>
-              <option>Payroll</option>
-              <option>BAS / GST Services</option>
-              <option>Business Advisory</option>
-              <option>Other</option>
-            </select>
-          </div>
+      const filteredInvoices = invoices.filter((invoice) => matchesFinancialRange(invoice.invoiceDate || invoice.date, financialReportRange));
+      const filteredExpenses = expenses.filter((expense) => matchesFinancialRange(expense.date || expense.expenseDate, financialReportRange));
+      const filteredPaidInvoices = filteredInvoices.filter((invoice) => invoice.status === "Paid");
+      const filteredOpenInvoices = filteredInvoices.filter((invoice) => invoice.status !== "Paid");
+      const generatedOnLabel = new Date().toLocaleDateString("en-AU", { day: "2-digit", month: "short", year: "numeric" });
+      const selectedPeriodLabel = formatReportPeriodLabel(financialReportRange);
 
-          <div>
-            <label style={labelStyle}>What is the name of the contact person there?</label>
-            <input
-              style={inputStyle}
-              value={clientForm.contactPerson}
-              onChange={(e) => setClientForm({ ...clientForm, contactPerson: e.target.value })}
-            />
-          </div>
+      const filteredRevenue = filteredInvoices.reduce((sum, invoice) => sum + safeNumber(invoice.total), 0);
+      const filteredPaidRevenue = filteredPaidInvoices.reduce((sum, invoice) => sum + safeNumber(invoice.total), 0);
+      const filteredExpensesTotal = filteredExpenses.reduce((sum, expense) => sum + safeNumber(expense.amount), 0);
+      const filteredGstPayable = filteredPaidInvoices.reduce((sum, invoice) => sum + safeNumber(invoice.gst), 0);
+      const filteredEstimatedTax = Math.max(0, (filteredPaidRevenue - filteredGstPayable) * (safeNumber(profile.taxRate) / 100));
+      const filteredSafeToSpend = filteredPaidRevenue - filteredGstPayable - filteredEstimatedTax - filteredExpensesTotal;
+      const filteredOverdueReceivables = filteredOpenInvoices.reduce((sum, invoice) => {
+        if (!invoice.dueDate) return sum;
+        const due = parseLocalDate(invoice.dueDate);
+        return due < new Date() ? sum + safeNumber(invoice.total) : sum;
+      }, 0);
+      const filteredUpcomingBills = filteredExpenses.reduce((sum, expense) => {
+        if (!expense.dueDate) return sum;
+        const due = parseLocalDate(expense.dueDate);
+        const diff = (due.getTime() - Date.now()) / (1000 * 60 * 60 * 24);
+        return diff >= 0 && diff <= 14 ? sum + safeNumber(expense.amount) : sum;
+      }, 0);
 
-          <div>
-            <label style={labelStyle}>What is their email address?</label>
-            <input
-              style={inputStyle}
-              value={clientForm.email}
-              onChange={(e) => setClientForm({ ...clientForm, email: e.target.value })}
-            />
-          </div>
-        </div>
+      const filteredExpenseCategoryMap = filteredExpenses.reduce((acc, expense) => {
+        const key = expense.category || "Other";
+        acc[key] = (acc[key] || 0) + safeNumber(expense.amount);
+        return acc;
+      }, {});
+      const filteredExpenseCategoryRows = Object.entries(filteredExpenseCategoryMap)
+        .map(([label, value]) => ({ label, value }))
+        .sort((a, b) => b.value - a.value);
+      const largestExpenseCategory = filteredExpenseCategoryRows[0] || { label: "—", value: 0 };
 
-        <div style={{ marginTop: 16 }}>
-          <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14 }}>
-            <input
-              type="checkbox"
-              checked={clientForm.recruiterUsed}
-              onChange={(e) => setClientForm({ ...clientForm, recruiterUsed: e.target.checked })}
-            />
-            I went through a recruiter or similar third party to get this work
-          </label>
-        </div>
+      const filteredSupplierMap = filteredExpenses.reduce((acc, expense) => {
+        const key = expense.supplier || "Unknown supplier";
+        acc[key] = (acc[key] || 0) + safeNumber(expense.amount);
+        return acc;
+      }, {});
+      const filteredSupplierSpendRows = Object.entries(filteredSupplierMap)
+        .map(([label, value]) => ({ label, value }))
+        .sort((a, b) => b.value - a.value)
+        .slice(0, 8);
 
-        <details style={{ ...cardStyle, marginTop: 20, padding: 18, background: "#FAFAFA" }}>
-          <summary style={{ fontWeight: 800, marginBottom: 14, cursor: "pointer" }}>Invoice & Quote Options</summary>
+      const filteredExpenseMonthlyMap = filteredExpenses.reduce((acc, expense) => {
+        const key = formatMonthKey(expense.date || expense.expenseDate);
+        acc[key] = (acc[key] || 0) + safeNumber(expense.amount);
+        return acc;
+      }, {});
+      const filteredExpenseMonthlyRows = Object.entries(filteredExpenseMonthlyMap)
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .slice(-6)
+        .map(([key, value]) => ({ label: formatMonthLabel(key), value }));
+      const filteredExpenseChangePct = filteredExpenseMonthlyRows.length >= 2
+        ? ((safeNumber(filteredExpenseMonthlyRows[filteredExpenseMonthlyRows.length - 1]?.value) - safeNumber(filteredExpenseMonthlyRows[filteredExpenseMonthlyRows.length - 2]?.value)) / Math.max(safeNumber(filteredExpenseMonthlyRows[filteredExpenseMonthlyRows.length - 2]?.value), 1)) * 100
+        : 0;
 
-          <div style={{ display: "grid", gap: 12, marginTop: 14 }}>
-            <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14 }}>
-              <input
-                type="checkbox"
-                checked={clientForm.sendToClient}
-                onChange={(e) => setClientForm({ ...clientForm, sendToClient: e.target.checked })}
-              />
-              Send to my Client
-            </label>
+      const filteredRevenueMonthlyMap = filteredPaidInvoices.reduce((acc, invoice) => {
+        const key = formatMonthKey(invoice.invoiceDate || invoice.date);
+        acc[key] = (acc[key] || 0) + safeNumber(invoice.total);
+        return acc;
+      }, {});
+      const filteredRevenueMonthlyRows = Object.entries(filteredRevenueMonthlyMap)
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .slice(-6)
+        .map(([key, value]) => ({ label: formatMonthLabel(key), revenue: value }));
 
-            <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14 }}>
-              <input
-                type="checkbox"
-                checked={clientForm.sendToMe}
-                onChange={(e) => setClientForm({ ...clientForm, sendToMe: e.target.checked })}
-              />
-              Send to me
-            </label>
+      const filteredReceivablesRows = filteredOpenInvoices.map((invoice) => {
+        const dueDate = invoice.dueDate || "";
+        const due = dueDate ? parseLocalDate(dueDate) : null;
+        const daysOverdue = due ? Math.max(0, Math.floor((Date.now() - due.getTime()) / (1000 * 60 * 60 * 24))) : 0;
+        const agingBucket = daysOverdue <= 0 ? "Current" : daysOverdue <= 30 ? "1–30 days" : daysOverdue <= 60 ? "31–60 days" : "60+ days";
+        return {
+          id: invoice.id,
+          invoiceNumber: invoice.invoiceNumber,
+          client: getClientName(invoice.clientId),
+          dueDate: formatDateAU(dueDate),
+          daysOverdue,
+          agingBucket,
+          amount: safeNumber(invoice.total),
+        };
+      });
 
-            <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14 }}>
-              <input
-                type="checkbox"
-                checked={clientForm.autoReminders}
-                onChange={(e) => setClientForm({ ...clientForm, autoReminders: e.target.checked })}
-              />
-              Automatically send reminders once an Invoice is more than 2 days overdue
-            </label>
+      const filteredReceivablesSummaryRows = [
+        { label: "Current", value: filteredReceivablesRows.filter((row) => row.agingBucket === "Current").reduce((sum, row) => sum + row.amount, 0) },
+        { label: "1–30", value: filteredReceivablesRows.filter((row) => row.agingBucket === "1–30 days").reduce((sum, row) => sum + row.amount, 0) },
+        { label: "31–60", value: filteredReceivablesRows.filter((row) => row.agingBucket === "31–60 days").reduce((sum, row) => sum + row.amount, 0) },
+        { label: "60+", value: filteredReceivablesRows.filter((row) => row.agingBucket === "60+ days").reduce((sum, row) => sum + row.amount, 0) },
+      ];
 
-            <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14 }}>
-              <input
-                type="checkbox"
-                checked={clientForm.includeAddressDetails}
-                onChange={(e) =>
-                  setClientForm({ ...clientForm, includeAddressDetails: e.target.checked })
-                }
-              />
-              Include Client address or other details
-            </label>
+      const filteredClientMap = filteredInvoices.reduce((acc, invoice) => {
+        const key = String(invoice.clientId || "unknown");
+        if (!acc[key]) {
+          acc[key] = { client: getClientName(invoice.clientId), invoiceCount: 0, invoiced: 0, paid: 0, netExpected: 0 };
+        }
+        acc[key].invoiceCount += 1;
+        acc[key].invoiced += safeNumber(invoice.total);
+        if (invoice.status === "Paid") acc[key].paid += safeNumber(invoice.total);
+        acc[key].netExpected += safeNumber(invoice.netExpected != null ? invoice.netExpected : invoice.total);
+        return acc;
+      }, {});
+      const filteredClientPerformanceRows = Object.values(filteredClientMap).sort((a, b) => b.paid - a.paid);
+      const filteredClientRevenueRows = filteredClientPerformanceRows.map((row) => ({ label: row.client, value: row.paid }));
+      const topClient = filteredClientPerformanceRows[0] || { client: "—", paid: 0 };
 
-            {clientForm.includeAddressDetails && (
+      const reportMetrics = {
+        "profit-loss": {
+          netOperatingPosition: filteredPaidRevenue - filteredExpensesTotal,
+        },
+        "cash-flow": {
+          safeToSpend: filteredSafeToSpend,
+        },
+        "accounts-receivable": {
+          overdueReceivables: filteredOverdueReceivables,
+        },
+        "expense-analysis": {
+          largestExpenseCategoryLabel: largestExpenseCategory.label,
+          largestExpenseCategoryValue: largestExpenseCategory.value,
+        },
+        "client-performance": {
+          topClientName: topClient.client,
+          topClientPaid: topClient.paid,
+        },
+      };
+
+      const reportProfitAndLossRowsFiltered = [
+        { label: "Gross revenue", value: filteredRevenue },
+        { label: "Paid revenue", value: filteredPaidRevenue },
+        { label: "GST payable", value: -filteredGstPayable },
+        { label: "Estimated tax reserve", value: -filteredEstimatedTax },
+        { label: "Operating expenses", value: -filteredExpensesTotal },
+        { label: "Net operating position", value: filteredPaidRevenue - filteredExpensesTotal },
+        { label: "Safe to spend", value: filteredSafeToSpend },
+      ];
+
+      const cashFlowReportRowsFiltered = [
+        { label: "Paid cash in", value: filteredPaidRevenue },
+        { label: "Open receivables", value: filteredOpenInvoices.reduce((sum, invoice) => sum + safeNumber(invoice.total), 0) },
+        { label: "Overdue receivables", value: filteredOverdueReceivables },
+        { label: "Upcoming bills (14 days)", value: filteredUpcomingBills },
+        { label: "Safe to spend", value: filteredSafeToSpend },
+      ];
+
+      const renderSelectedReport = () => {
+        if (!selectedFinancialReport) return null;
+
+        return (
+          <div style={{ display: "grid", gap: 20 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
               <div>
-                <label style={labelStyle}>Client address/additional details</label>
-                <textarea
-                  style={{ ...inputStyle, minHeight: 90, resize: "vertical" }}
-                  value={clientForm.addressDetails}
-                  onChange={(e) =>
-                    setClientForm({ ...clientForm,
-                      addressDetails: e.target.value,
-                      address: e.target.value,
-                    })
-                  }
+                <div style={{ fontSize: 28, fontWeight: 900, color: colours.text }}>{reportHeadingMap[selectedFinancialReport]}</div>
+                <div style={{ fontSize: 14, color: colours.muted, lineHeight: 1.6, marginTop: 6, maxWidth: 860 }}>{reportSubtitleMap[selectedFinancialReport]}</div>
+              </div>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                <select style={{ ...inputStyle, width: 180 }} value={financialReportRange} onChange={(e) => setFinancialReportRange(e.target.value)}>
+                  <option value="all">All time</option>
+                  <option value="this-month">This month</option>
+                  <option value="last-month">Last month</option>
+                  <option value="last-3-months">Last 3 months</option>
+                  <option value="ytd">Year to date</option>
+                </select>
+                <button style={buttonSecondary} onClick={printFinancialReport}>Print report</button>
+                <button style={buttonSecondary} onClick={downloadFinancialReportPdf}>Download PDF</button>
+                <button style={buttonSecondary} onClick={() => setSelectedFinancialReport("")}>Back to reports</button>
+              </div>
+            </div>
+
+            <div ref={financialReportRef} style={{ display: "grid", gap: 20 }}>
+              <SectionCard title="Report context" right={<div style={{ fontSize: 12, color: colours.muted }}>Generated {generatedOnLabel}</div>}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16 }}>
+                  <div style={{ ...cardStyle, padding: 16, background: colours.bg }}>
+                    <div style={{ fontSize: 12, fontWeight: 800, textTransform: "uppercase", color: colours.muted }}>Period</div>
+                    <div style={{ fontSize: 20, fontWeight: 900, color: colours.text, marginTop: 6 }}>{selectedPeriodLabel}</div>
+                  </div>
+                  <div style={{ ...cardStyle, padding: 16, background: colours.bg }}>
+                    <div style={{ fontSize: 12, fontWeight: 800, textTransform: "uppercase", color: colours.muted }}>Generated</div>
+                    <div style={{ fontSize: 20, fontWeight: 900, color: colours.text, marginTop: 6 }}>{generatedOnLabel}</div>
+                  </div>
+                  <div style={{ ...cardStyle, padding: 16, background: colours.bg, gridColumn: "span 2" }}>
+                    <div style={{ fontSize: 12, fontWeight: 800, textTransform: "uppercase", color: colours.muted }}>Key insight</div>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: colours.text, marginTop: 6, lineHeight: 1.5 }}>{buildFinancialInsightSentence(selectedFinancialReport, reportMetrics[selectedFinancialReport])}</div>
+                  </div>
+                </div>
+              </SectionCard>
+
+            {selectedFinancialReport === "profit-loss" && (
+              <div style={{ display: "grid", gap: 20 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16 }}>
+                  <MetricCard title="Gross revenue" value={currency(filteredRevenue)} subtitle="All invoiced revenue currently recorded." accent={colours.navy} />
+                  <MetricCard title="Paid revenue" value={currency(filteredPaidRevenue)} subtitle="Income already received from paid invoices." accent={colours.teal} />
+                  <MetricCard title="Total expenses" value={currency(filteredExpensesTotal)} subtitle="Recorded portal expenses to date." accent={colours.purple} />
+                  <MetricCard title="Safe to spend" value={currency(filteredSafeToSpend)} subtitle="After GST, tax reserve and current expenses." accent={colours.navy} />
+                </div>
+                <SectionCard title="Profit & Loss statement" right={<div style={{ fontSize: 12, color: colours.muted }}>Generated live</div>}>
+                  <div style={{ display: "grid", gap: 12 }}>
+                    {reportProfitAndLossRowsFiltered.map((row) => (
+                      <div key={row.label} style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "12px 0", borderBottom: `1px solid ${colours.border}` }}>
+                        <div style={{ fontSize: 14, fontWeight: row.label.includes("Net") || row.label.includes("Gross") ? 800 : 600, color: colours.text }}>{row.label}</div>
+                        <div style={{ fontSize: 14, fontWeight: 800, color: row.value >= 0 ? colours.text : colours.purple }}>{currency(row.value)}</div>
+                      </div>
+                    ))}
+                  </div>
+                </SectionCard>
+                <WaterfallCard
+                  title="Operating position"
+                  rows={[
+                    { label: "Paid income", value: filteredPaidRevenue },
+                    { label: "Less GST payable", value: -filteredGstPayable },
+                    { label: "Less tax reserve", value: -filteredEstimatedTax },
+                    { label: "Less expenses", value: -filteredExpensesTotal },
+                    { label: "Safe to spend", value: filteredSafeToSpend },
+                  ]}
                 />
               </div>
             )}
 
-            <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14 }}>
-              <input
-                type="checkbox"
-                checked={clientForm.sendReceipts}
-                onChange={(e) => setClientForm({ ...clientForm, sendReceipts: e.target.checked })}
-              />
-              Send receipts to this client for Invoice payments made via card
-            </label>
-          </div>
-        </details>
-
-        <details style={{ ...cardStyle, marginTop: 20, padding: 18, background: "#FAFAFA" }}>
-          <summary style={{ fontWeight: 800, marginBottom: 14, cursor: "pointer" }}>Advanced Options</summary>
-
-          <div style={{ display: "grid", gap: 12, marginTop: 14 }}>
-            <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14 }}>
-              <input
-                type="checkbox"
-                checked={clientForm.outsideAustraliaOrGstExempt}
-                onChange={(e) =>
-                  setClientForm({ ...clientForm,
-                    outsideAustraliaOrGstExempt: e.target.checked,
-                  })
-                }
-              />
-              This Client is outside Australia or Services for this Client are exempt from GST
-            </label>
-
-            <div style={{ maxWidth: 220 }}>
-              <label style={labelStyle}>Default currency:</label>
-              <select
-                style={inputStyle}
-                value={clientForm.defaultCurrency}
-                onChange={(e) => setClientForm({ ...clientForm, defaultCurrency: e.target.value })}
-              >
-                <option>AUD $</option>
-                <option>USD $</option>
-                <option>NZD $</option>
-                <option>GBP £</option>
-                <option>EUR €</option>
-              </select>
-            </div>
-
-            <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14 }}>
-              <input
-                type="checkbox"
-                checked={clientForm.feesDeducted}
-                onChange={(e) => setClientForm({ ...clientForm, feesDeducted: e.target.checked })}
-              />
-              Payments will have fees or expenses deducted
-            </label>
-
-            <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14 }}>
-              <input
-                type="checkbox"
-                checked={clientForm.deductsTaxPrior}
-                onChange={(e) => setClientForm({ ...clientForm, deductsTaxPrior: e.target.checked })}
-              />
-              This Client deducts tax prior to payment
-            </label>
-
-            <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14 }}>
-              <input
-                type="checkbox"
-                checked={clientForm.shortTermRentalIncome}
-                onChange={(e) =>
-                  setClientForm({ ...clientForm, shortTermRentalIncome: e.target.checked })
-                }
-              />
-              This “Client” is for short-term rental income
-            </label>
-
-            <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14 }}>
-              <input
-                type="checkbox"
-                checked={clientForm.hasPurchaseOrder}
-                onChange={(e) => setClientForm({ ...clientForm, hasPurchaseOrder: e.target.checked })}
-              />
-              I have a purchase order or reference number
-            </label>
-          </div>
-        </details>
-
-        <div
-          style={{
-            marginTop: 18,
-            display: "flex",
-            gap: 10,
-            justifyContent: "space-between",
-          }}
-        >
-          <button style={buttonSecondary} onClick={() => setClientForm(blankClient)}>
-            Cancel
-          </button>
-          <button style={buttonPrimary} onClick={saveClient}>
-            Save
-          </button>
-        </div>
-      </SectionCard>
-
-      <SectionCard title="Client List">
-        <DataTable
-          emptyState={{ icon: "👥", title: "No clients yet", message: "Add your first client above to start creating invoices and quotes." }}
-          columns={[
-            { key: "name", label: "Client" },
-            { key: "contactPerson", label: "Contact" },
-            { key: "workType", label: "Work Type" },
-            { key: "isPaid", label: "Status", render: (v, row) => (row.isPaid ? "Paid" : (((row.dueDate || row.date || "") < todayLocal()) ? "Overdue" : "Unpaid")) },
-            { key: "email", label: "Email" },
-            { key: "defaultCurrency", label: "Currency" },
-            {
-              key: "actions",
-              label: "",
-              render: (_, row) => (
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <button style={buttonSecondary} onClick={() => openClientEditor(row)}>View / Edit</button>
-                  <button style={buttonSecondary} onClick={() => deleteClient(row.id)}>Delete</button>
+            {selectedFinancialReport === "cash-flow" && (
+              <div style={{ display: "grid", gap: 20 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16 }}>
+                  {cashFlowReportRowsFiltered.map((row) => (
+                    <MetricCard key={row.label} title={row.label} value={currency(row.value)} subtitle="Live from current portal records." accent={row.value < 0 ? colours.purple : colours.teal} />
+                  ))}
                 </div>
-              ),
-            },
-          ]}
-          rows={clients}
-        />
+                <TrendBarsCard title="Monthly revenue trend" subtitle="Paid revenue by month" data={filteredRevenueMonthlyRows} valueKey="revenue" labelKey="label" formatValue={(value) => currency(value)} accent={colours.teal} emptyText="Add paid invoices to generate this report." />
+                <SectionCard title="Cash flow interpretation" right={<div style={{ fontSize: 12, color: colours.muted }}>Management view</div>}>
+                  <div style={{ display: "grid", gap: 12 }}>
+                    {cashFlowReportRowsFiltered.map((row) => (
+                      <div key={row.label} style={{ ...cardStyle, padding: 14, background: colours.bg }}>
+                        <div style={{ fontSize: 12, fontWeight: 800, textTransform: "uppercase", color: colours.muted }}>{row.label}</div>
+                        <div style={{ fontSize: 20, fontWeight: 900, color: colours.text, marginTop: 6 }}>{currency(row.value)}</div>
+                      </div>
+                    ))}
+                  </div>
+                </SectionCard>
+              </div>
+            )}
 
-        {clientEditorOpen && clientEditorForm ? (
-          <div style={{ marginTop: 20, ...cardStyle, padding: 20, border: `2px solid ${colours.lightPurple}` }}>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", marginBottom: 16 }}>
-              <h3 style={{ margin: 0, fontSize: 18 }}>View / Edit Client</h3>
-              <button style={buttonSecondary} onClick={closeClientEditor}>Close</button>
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 14 }}>
-              <div><label style={labelStyle}>Client name</label><input style={inputStyle} value={clientEditorForm.name} onChange={(e) => setClientEditorForm((prev) => ({ ...prev, name: e.target.value }))} /></div>
-              <div><label style={labelStyle}>Contact person</label><input style={inputStyle} value={clientEditorForm.contactPerson || ""} onChange={(e) => setClientEditorForm((prev) => ({ ...prev, contactPerson: e.target.value }))} /></div>
-              <div><label style={labelStyle}>Email</label><input style={inputStyle} value={clientEditorForm.email || ""} onChange={(e) => setClientEditorForm((prev) => ({ ...prev, email: e.target.value }))} /></div>
-              <div><label style={labelStyle}>Phone</label><input style={inputStyle} value={clientEditorForm.phone || ""} onChange={(e) => setClientEditorForm((prev) => ({ ...prev, phone: e.target.value }))} /></div>
-              <div><label style={labelStyle}>Work type</label><input style={inputStyle} value={clientEditorForm.workType || ""} onChange={(e) => setClientEditorForm((prev) => ({ ...prev, workType: e.target.value }))} /></div>
-              <div><label style={labelStyle}>Default currency</label><select style={inputStyle} value={clientEditorForm.defaultCurrency || "AUD $"} onChange={(e) => setClientEditorForm((prev) => ({ ...prev, defaultCurrency: e.target.value }))}><option>AUD $</option><option>USD $</option><option>NZD $</option><option>GBP £</option><option>EUR €</option></select></div>
-              <div style={{ gridColumn: "1 / -1" }}><label style={labelStyle}>Address details</label><textarea style={{ ...inputStyle, minHeight: 90 }} value={clientEditorForm.addressDetails || clientEditorForm.address || ""} onChange={(e) => setClientEditorForm((prev) => ({ ...prev, addressDetails: e.target.value, address: e.target.value }))} /></div>
-            </div>
-            <div style={{ display: "grid", gap: 10, marginTop: 14 }}>
-              <label style={{ display: "flex", gap: 10, fontSize: 14, alignItems: "center" }}><input type="checkbox" checked={Boolean(clientEditorForm.outsideAustraliaOrGstExempt)} onChange={(e) => setClientEditorForm((prev) => ({ ...prev, outsideAustraliaOrGstExempt: e.target.checked }))} /> Client is GST exempt / outside Australia</label>
-              <label style={{ display: "flex", gap: 10, fontSize: 14, alignItems: "center" }}><input type="checkbox" checked={Boolean(clientEditorForm.feesDeducted)} onChange={(e) => setClientEditorForm((prev) => ({ ...prev, feesDeducted: e.target.checked }))} /> Fees deducted before payment</label>
-              <label style={{ display: "flex", gap: 10, fontSize: 14, alignItems: "center" }}><input type="checkbox" checked={Boolean(clientEditorForm.deductsTaxPrior)} onChange={(e) => setClientEditorForm((prev) => ({ ...prev, deductsTaxPrior: e.target.checked }))} /> Client deducts tax prior to payment</label>
-            </div>
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, marginTop: 16 }}>
-              <button style={buttonSecondary} onClick={closeClientEditor}>Cancel</button>
-              <button style={buttonPrimary} onClick={saveClientEdits}>Save Changes</button>
+            {selectedFinancialReport === "accounts-receivable" && (
+              <div style={{ display: "grid", gap: 20 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12 }}>
+                  {filteredReceivablesSummaryRows.map((bucket) => (
+                    <div key={bucket.label} style={{ ...cardStyle, padding: 16, background: colours.bg }}>
+                      <div style={{ fontSize: 12, fontWeight: 800, textTransform: "uppercase", color: colours.muted }}>{bucket.label}</div>
+                      <div style={{ fontSize: 22, fontWeight: 900, color: colours.text, marginTop: 6 }}>{currency(bucket.value)}</div>
+                    </div>
+                  ))}
+                </div>
+                <SectionCard title="Receivables ageing schedule" right={<div style={{ fontSize: 12, color: colours.muted }}>Live from open invoices</div>}>
+                  <DataTable
+                    rows={filteredReceivablesRows}
+                    emptyState={{ icon: "✅", title: "No open receivables", message: "All invoices are either paid or you have not created any invoices yet." }}
+                    columns={[
+                      { key: "invoiceNumber", label: "Invoice" },
+                      { key: "client", label: "Client" },
+                      { key: "dueDate", label: "Due" },
+                      { key: "daysOverdue", label: "Days overdue", render: (value) => value > 0 ? value : 0 },
+                      { key: "agingBucket", label: "Ageing" },
+                      { key: "amount", label: "Amount", render: (value) => currency(value) },
+                    ]}
+                  />
+                </SectionCard>
+              </div>
+            )}
+
+            {selectedFinancialReport === "expense-analysis" && (
+              <div style={{ display: "grid", gap: 20 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16 }}>
+                  <MetricCard title="Total expenses" value={currency(filteredExpensesTotal)} subtitle="All recorded expenses in the portal." accent={colours.purple} />
+                  <MetricCard title="Expense ratio" value={`${(filteredPaidRevenue > 0 ? (filteredExpensesTotal / filteredPaidRevenue) * 100 : 0).toFixed(1)}%`} subtitle="Expenses as a share of paid income." accent={colours.navy} />
+                  <MetricCard title="Largest category" value={largestExpenseCategory?.label || "—"} subtitle={currency(largestExpenseCategory?.value || 0)} accent={colours.teal} />
+                  <MetricCard title="Latest movement" value={`${filteredExpenseChangePct >= 0 ? "+" : ""}${filteredExpenseChangePct.toFixed(1)}%`} subtitle="Change versus the prior month." accent={colours.purple} />
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 20 }}>
+                  <TrendBarsCard title="Expense categories" subtitle="Largest recorded categories" data={filteredExpenseCategoryRows.slice(0, 8)} valueKey="value" formatValue={(value) => currency(value)} accent={colours.purple} emptyText="No expenses recorded yet." />
+                  <TrendBarsCard title="Top suppliers" subtitle="Highest spend by supplier" data={filteredSupplierSpendRows} valueKey="value" formatValue={(value) => currency(value)} accent={colours.navy} emptyText="No supplier spend recorded yet." />
+                </div>
+                <TrendBarsCard title="Monthly expense trend" subtitle="Most recent months" data={filteredExpenseMonthlyRows} valueKey="value" formatValue={(value) => currency(value)} accent={colours.purple} emptyText="No monthly expense trend yet." />
+              </div>
+            )}
+
+            {selectedFinancialReport === "client-performance" && (
+              <div style={{ display: "grid", gap: 20 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16 }}>
+                  <MetricCard title="Top client" value={topClient.client || "—"} subtitle={currency(topClient.paid || 0)} accent={colours.teal} />
+                  <MetricCard title="Client count" value={`${filteredClientPerformanceRows.length}`} subtitle="Clients represented in the selected period." accent={colours.navy} />
+                  <MetricCard title="Average invoice" value={currency(filteredInvoices.length ? filteredRevenue / filteredInvoices.length : 0)} subtitle="Across invoices in the selected period." accent={colours.purple} />
+                  <MetricCard title="Paid revenue" value={currency(filteredPaidRevenue)} subtitle="Revenue received across all clients." accent={colours.teal} />
+                </div>
+                <TrendBarsCard title="Top clients by paid revenue" subtitle="Highest paid contributors" data={filteredClientRevenueRows.slice(0, 8)} valueKey="value" formatValue={(value) => currency(value)} accent={colours.teal} emptyText="No paid client revenue yet." />
+                <SectionCard title="Client performance schedule" right={<div style={{ fontSize: 12, color: colours.muted }}>Generated from invoice history</div>}>
+                  <DataTable
+                    rows={filteredClientPerformanceRows}
+                    emptyState={{ icon: "📭", title: "No client performance yet", message: "Create a few invoices and this report will populate automatically." }}
+                    columns={[
+                      { key: "client", label: "Client" },
+                      { key: "invoiceCount", label: "Invoices" },
+                      { key: "invoiced", label: "Invoiced", render: (value) => currency(value) },
+                      { key: "paid", label: "Paid", render: (value) => currency(value) },
+                      { key: "netExpected", label: "Net expected", render: (value) => currency(value) },
+                    ]}
+                  />
+                </SectionCard>
+              </div>
+            )}
             </div>
           </div>
-        ) : <EmptyState icon="📁" title="No documents yet" message="Upload receipts, contracts and generated PDFs here. All documents are stored securely against your account." />}
-      </SectionCard>
-    </div>
-    );
+        );
+      };
+
+      if (selectedFinancialReport) {
+        return renderSelectedReport();
+      }
+
+      return (
+        <div style={{ display: "grid", gap: 20 }}>
+          <DashboardHero
+            title="Financial Reports"
+            subtitle="Choose a report tile below to generate a formatted financial report from your live portal data."
+            highlight={`${financialInsights.healthScore.toFixed(0)}/100`}
+          >
+            <InsightChip label="Health" value={financialInsights.healthLabel} />
+            <InsightChip label="Top 3 client share" value={`${financialInsights.topThreeClientShare.toFixed(1)}%`} />
+            <InsightChip label="You keep" value={`${Math.max(financialInsights.usableCashRatio, 0).toFixed(1)}%`} />
+          </DashboardHero>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16 }}>
+            <MetricCard title="Average monthly revenue" value={currency(financialInsights.averageMonthlyRevenue)} subtitle="Average paid revenue across the months currently shown." accent={colours.navy} />
+            <MetricCard title="Revenue change" value={`${financialInsights.revenueChangePct >= 0 ? "+" : ""}${financialInsights.revenueChangePct.toFixed(1)}%`} subtitle="Movement versus the previous month." accent={colours.teal} />
+            <MetricCard title="Expense ratio" value={`${(filteredPaidRevenue > 0 ? (filteredExpensesTotal / filteredPaidRevenue) * 100 : 0).toFixed(1)}%`} subtitle="Recorded expenses as a share of paid income." accent={colours.purple} />
+            <MetricCard title="Revenue volatility" value={`${financialInsights.averageVolatility.toFixed(1)}%`} subtitle="Average month-to-month movement across recent months." accent={colours.navy} />
+          </div>
+
+          <SectionCard title="Generate a report" right={<div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}><div style={{ fontSize: 12, color: colours.muted }}>Base period</div><select style={{ ...inputStyle, width: 180 }} value={financialReportRange} onChange={(e) => setFinancialReportRange(e.target.value)}><option value="all">All time</option><option value="this-month">This month</option><option value="last-month">Last month</option><option value="last-3-months">Last 3 months</option><option value="ytd">Year to date</option></select></div>}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 16 }}>
+              {reportCards.map((card) => (
+                <ActionHubCard
+                  key={card.key}
+                  icon={card.icon}
+                  title={card.title}
+                  description={card.description}
+                  buttonLabel="Open report"
+                  onClick={() => setSelectedFinancialReport(card.key)}
+                  tone={card.tone}
+                />
+              ))}
+            </div>
+          </SectionCard>
+        </div>
+      );
     };
     const renderInvoices = () => {
     const invLines = computeLineItemTotals(invoiceForm.lineItems || [], invoiceForm.clientId);
@@ -6176,8 +6249,6 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; position: 
             <div style={{ display: "grid", gap: 20 }}>
               <div>
                 <label style={labelStyle}>Search or Select Client</label>
-                <div style={{ fontSize: 12, color: colours.muted, marginBottom: 8 }}>Start with a recent client or search to create a new quote faster.</div>
-                <div style={{ fontSize: 12, color: colours.muted, marginBottom: 8 }}>Smart default: the portal remembers your most recent client and can prefill recent line items.</div>
                 <input style={{ ...inputStyle, fontSize: 15 }} value={invClientSearch}
                   onChange={(e) => { setInvClientSearch(e.target.value); if (!e.target.value) setInvoiceForm((p) => ({ ...p, clientId: "" })); }}
                   placeholder="Type client name..." />
@@ -6185,7 +6256,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; position: 
                   <div style={{ border: `1px solid ${colours.border}`, borderRadius: 10, marginTop: 4, overflow: "hidden", maxHeight: 200, overflowY: "auto" }}>
                     {clients.filter((c) => c.name.toLowerCase().includes(invClientSearch.toLowerCase()) || (c.businessName || "").toLowerCase().includes(invClientSearch.toLowerCase()))
                       .map((c) => (
-                        <div key={c.id} onClick={() => { applySmartDefaultsToInvoice(String(c.id)); }}
+                        <div key={c.id} onClick={() => { setInvoiceForm((p) => ({ ...p, clientId: String(c.id), currencyCode: getClientCurrencyCode(c) })); setInvClientSearch(c.name); }}
                           style={{ padding: "10px 14px", cursor: "pointer", fontSize: 14, borderBottom: `1px solid ${colours.border}`, background: String(invoiceForm.clientId) === String(c.id) ? colours.lightPurple : "#fff" }}>
                           <strong>{c.name}</strong>{c.businessName ? <span style={{ color: colours.muted }}> — {c.businessName}</span> : ""}
                         </div>
@@ -6197,7 +6268,9 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; position: 
                 )}
                 {!invClientSearch && (
                   <select style={{ ...inputStyle, marginTop: 8 }} value={invoiceForm.clientId} onChange={(e) => {
-                    applySmartDefaultsToInvoice(String(e.target.value));
+                    const sel = getClientById(e.target.value);
+                    setInvoiceForm((p) => ({ ...p, clientId: e.target.value, currencyCode: getClientCurrencyCode(sel) }));
+                    setInvClientSearch(sel?.name || "");
                   }}>
                     <option value="">— or pick from list —</option>
                     {clients.map((c) => <option key={c.id} value={c.id}>{c.name}{c.businessName ? ` — ${c.businessName}` : ""}</option>)}
@@ -6930,7 +7003,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; position: 
                   <div style={{ border: `1px solid ${colours.border}`, borderRadius: 10, marginTop: 4, overflow: "hidden", maxHeight: 200, overflowY: "auto" }}>
                     {clients.filter((c) => c.name.toLowerCase().includes(quoteClientSearch.toLowerCase()) || (c.businessName || "").toLowerCase().includes(quoteClientSearch.toLowerCase()))
                       .map((c) => (
-                        <div key={c.id} onClick={() => { applySmartDefaultsToQuote(String(c.id)); }}
+                        <div key={c.id} onClick={() => { setQuoteForm((p) => ({ ...p, clientId: String(c.id), currencyCode: getClientCurrencyCode(c) })); setQuoteClientSearch(c.name); }}
                           style={{ padding: "10px 14px", cursor: "pointer", fontSize: 14, borderBottom: `1px solid ${colours.border}`, background: String(quoteForm.clientId) === String(c.id) ? colours.lightPurple : "#fff" }}>
                           <strong>{c.name}</strong>{c.businessName ? <span style={{ color: colours.muted }}> — {c.businessName}</span> : ""}
                         </div>
@@ -6942,7 +7015,9 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; position: 
                 )}
                 {!quoteClientSearch && (
                   <select style={{ ...inputStyle, marginTop: 8 }} value={quoteForm.clientId} onChange={(e) => {
-                    applySmartDefaultsToQuote(String(e.target.value));
+                    const sel = getClientById(e.target.value);
+                    setQuoteForm((p) => ({ ...p, clientId: e.target.value, currencyCode: getClientCurrencyCode(sel) }));
+                    setQuoteClientSearch(sel?.name || "");
                   }}>
                     <option value="">— or pick from list —</option>
                     {clients.map((c) => <option key={c.id} value={c.id}>{c.name}{c.businessName ? ` — ${c.businessName}` : ""}</option>)}
@@ -8336,7 +8411,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; position: 
     const typeData = Object.entries(typeBreakdown).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([label, value]) => ({ label: label.slice(0, 10), value }));
     return (
     <div style={{ display: "grid", gap: 20 }}>
-      <DashboardHero title="Revenue Streams" subtitle="Track all personal and business income streams for tax reporting. Feeds directly into your ATO export." highlight={currency(annualised)}>
+      <DashboardHero title="Income Sources" subtitle="Track all personal and business income streams for tax reporting. Feeds directly into your ATO export." highlight={currency(annualised)}>
         <InsightChip label="Sources recorded" value={String(incomeSources.length)} />
         <InsightChip label="Total before tax" value={currency(totalBeforeTax)} />
         <InsightChip label="Annualised est." value={currency(annualised)} />
@@ -8351,7 +8426,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; position: 
           <MiniBarChart data={typeData} height={90} accent={colours.teal} />
         </div>
       </div>
-      <SectionCard title="Revenue Streams" right={<button style={buttonPrimary} onClick={() => setShowIncomeSourceModal(true)}>New Revenue Stream</button>}>
+      <SectionCard title="Income Sources" right={<button style={buttonPrimary} onClick={() => setShowIncomeSourceModal(true)}>New Income Source</button>}>
         <DataTable
           emptyState={{ icon: "💰", title: "No income sources yet", message: "Add your income sources for your ATO export — employment, freelance, rental income and other earnings.", action: { label: "Add income source", onClick: () => {} } }}
           columns={[
@@ -9524,33 +9599,6 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; position: 
             {activePage === "settings" && renderSettings()}
           </div>
         </main>
-      </div>
-
-
-      <div style={{ position: "fixed", right: 24, bottom: 24, zIndex: 99990, display: "grid", gap: 10 }}>
-        {quickAddOpen && (
-          <div style={{ ...cardStyle, padding: 12, display: "grid", gap: 8, minWidth: 220, boxShadow: "0 20px 40px rgba(15,23,42,0.16)" }}>
-            <button style={buttonSecondary} onClick={() => { setActivePage("invoices"); setInvoiceWizardStep(1); setQuickAddOpen(false); }}>+ New Invoice</button>
-            <button style={buttonSecondary} onClick={() => { setActivePage("quotes"); setQuoteWizardStep(1); setQuickAddOpen(false); }}>+ New Quote</button>
-            <button style={buttonSecondary} onClick={() => { setActivePage("expenses"); setQuickAddOpen(false); }}>+ New Expense</button>
-          </div>
-        )}
-        <button
-          onClick={() => setQuickAddOpen((prev) => !prev)}
-          style={{
-            ...buttonPrimary,
-            width: 62,
-            height: 62,
-            borderRadius: 999,
-            boxShadow: "0 20px 40px rgba(106,27,154,0.28)",
-            fontSize: 28,
-            padding: 0,
-            justifySelf: "end",
-          }}
-          title="Quick Add"
-        >
-          +
-        </button>
       </div>
 
       <ExpenseTypeModal
