@@ -4649,6 +4649,16 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     writeQuotePreviewToWindow(w, quote, { allowEmail: true });
     };
 
+    // Expose preview-email handlers on window so the popup can call them via window.opener
+    useEffect(() => {
+      window.sendInvoiceFromPreview = sendInvoiceFromPreview;
+      window.sendQuoteFromPreview = sendQuoteFromPreview;
+      return () => {
+        delete window.sendInvoiceFromPreview;
+        delete window.sendQuoteFromPreview;
+      };
+    }, [invoices, quotes, profile, clients]);
+
     const saveExpense = async () => {
     try {
       const expenseErrors = validateExpensePayload({ ...expenseForm, amount: safeNumber(expenseForm.amount) });
