@@ -1,10 +1,282 @@
-import html2pdf from "html2pdf.js";
+const colours = {
+  purple: "#6A1B9A",
+  teal: "#006D6D",
+  navy: "#2B2F6B",
+  bg: "#F8FAFC",
+  white: "#FFFFFF",
+  text: "#14202B",
+  muted: "#64748B",
+  border: "#E2E8F0",
+  lightPurple: "#F5ECFB",
+  lightTeal: "#E7F6F5",
+  successText: "#166534",
+};
 
 const LOGO_DOCUMENT_MAX_HEIGHT = 140;
 const LOGO_DOCUMENT_MAX_WIDTH = 440;
 const LOGO_PREVIEW_MAX_HEIGHT = 180;
 const LOGO_PREVIEW_MAX_WIDTH = 480;
+
+const isValidEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim());
+
+const collectValidationErrors = (...groups) => groups.flat().filter(Boolean);
+
+const summariseValidationErrors = (title, errors, toastFn) => {
+  if (!errors.length) return;
+  if (toastFn) {
+    errors.forEach((e) => toastFn.error(e, title));
+  }
+};
+
+const DEFAULT_API_BASE_URL =
+  ((typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL)
+    ? String(import.meta.env.VITE_API_BASE_URL).trim()
+    : "") ||
+  (typeof window !== "undefined"
+    ? (
+        window.location.hostname === "localhost" ||
+        window.location.hostname === "127.0.0.1"
+      )
+        ? "http://localhost:3001"
+        : (typeof window !== "undefined" ? window.location.origin : "")
+    : (typeof window !== "undefined" ? window.location.origin : ""));
+
+const normaliseApiBaseUrl = (value) => String(value || "").trim().replace(/\/$/, "");
+
+const getApiBaseUrl = (preferredValue = "") => {
+  const fallbackUrl = normaliseApiBaseUrl(DEFAULT_API_BASE_URL);
+  const rawCandidate = normaliseApiBaseUrl(preferredValue);
+
+  if (!rawCandidate) {
+    return fallbackUrl;
+  }
+
+  try {
+    const parsed = new URL(rawCandidate);
+
+    if (typeof window !== "undefined") {
+      const pageIsLocal =
+        window.location.hostname === "localhost" ||
+        window.location.hostname === "127.0.0.1";
+      const candidateIsLocal =
+        parsed.hostname === "localhost" ||
+        parsed.hostname === "127.0.0.1";
+
+      if (!pageIsLocal && candidateIsLocal) {
+        return fallbackUrl;
+      }
+
+      if (window.location.protocol === "https:" && parsed.protocol !== "https:") {
+        return fallbackUrl;
+      }
+    }
+
+    return parsed.origin.replace(/\/$/, "");
+  } catch (error) {
+    console.warn("Invalid API base URL, falling back to default.", {
+      preferredValue,
+      fallbackUrl,
+      error,
+    });
+    return fallbackUrl;
+  }
+};
+
 const LOCKED_FEE_RATE_PERCENT = 1;
+const DEFAULT_MONTHLY_SUBSCRIPTION = 45;
+
+const SUPABASE_STORAGE_BUCKET = "receipts";
+
+const SUPABASE_TABLES = {
+  profile: "sas_profile",
+  clients: "sas_clients",
+  invoices: "sas_invoices",
+  quotes: "sas_quotes",
+  expenses: "sas_expenses",
+  incomeSources: "sas_income_sources",
+  services: "sas_services",
+  documents: "sas_documents",
+  suppliers: "sas_suppliers",
+};
+
+const SUPABASE_SCHEMA_SQL = `-- Run this once in Supabase SQL Editor
+create table if not exists sas_profile (
+  id bigint primary key,
+  user_id text not null,
+  data jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default timezone('utc', now())
+);
+create index if not exists sas_profile_user_id_idx on sas_profile (user_id);
+
+create table if not exists sas_clients (
+  id bigint primary key,
+  user_id text not null,
+  data jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default timezone('utc', now())
+);
+create index if not exists sas_clients_user_id_idx on sas_clients (user_id);
+
+create table if not exists sas_invoices (
+  id bigint primary key,
+  user_id text not null,
+  data jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default timezone('utc', now())
+);
+create index if not exists sas_invoices_user_id_idx on sas_invoices (user_id);
+
+create table if not exists sas_quotes (
+  id bigint primary key,
+  user_id text not null,
+  data jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default timezone('utc', now())
+);
+create index if not exists sas_quotes_user_id_idx on sas_quotes (user_id);
+
+create table if not exists sas_expenses (
+  id bigint primary key,
+  user_id text not null,
+  data jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default timezone('utc', now())
+);
+create index if not exists sas_expenses_user_id_idx on sas_expenses (user_id);
+
+create table if not exists sas_income_sources (
+  id bigint primary key,
+  user_id text not null,
+  data jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default timezone('utc', now())
+);
+create index if not exists sas_income_sources_user_id_idx on sas_income_sources (user_id);
+
+create table if not exists sas_services (
+  id bigint primary key,
+  user_id text not null,
+  data jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default timezone('utc', now())
+);
+create index if not exists sas_services_user_id_idx on sas_services (user_id);
+
+create table if not exists sas_documents (
+  id bigint primary key,
+  user_id text not null,
+  data jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default timezone('utc', now())
+);
+create index if not exists sas_documents_user_id_idx on sas_documents (user_id);
+
+create table if not exists sas_suppliers (
+  id bigint primary key,
+  user_id text not null,
+  data jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default timezone('utc', now())
+);
+create index if not exists sas_suppliers_user_id_idx on sas_suppliers (user_id);`;
+
+const GST_TYPE_OPTIONS = [
+  { value: "GST on Income (10%)", label: "GST on Income (10%)" },
+  { value: "GST Free", label: "GST Free" },
+  { value: "Input taxed / No GST", label: "Input taxed / No GST" },
+];
+
+const expenseCategories = [
+  "Advertising",
+  "Bank Fees",
+  "Cost of goods sold",
+  "Depreciation",
+  "Insurance",
+  "Motor vehicle expenses",
+  "Office Supplies",
+  "Printing",
+  "Rent",
+  "Repairs and maintenance",
+  "Software",
+  "Stationery",
+  "Subscriptions",
+  "Telephone and internet",
+  "Travel",
+  "Utilities",
+  "Wages",
+  "Other",
+];
+
+const incomeTypeOptions = [
+  "Casual employment",
+  "Salary",
+  "Centrelink/Australian government payments",
+  "Rental income",
+  "Australian interest",
+  "Australian dividends",
+  "Income earned outside Australia",
+  "Cryptocurrency gain/loss",
+  "Capital gain/loss from sale of shares",
+  "Managed funds distribution",
+  "Partnership income",
+  "Taxed government pension",
+  "Superannuation lump sum payment",
+  "Estate or trust income",
+  "Capital gain/loss from property sale",
+];
+
+const incomeFrequencyOptions = [
+  "Weekly",
+  "Fortnightly",
+  "Monthly",
+  "Quarterly",
+  "Annually",
+  "One-off",
+];
+
+const inputStyle = {
+  width: "100%",
+  border: `1px solid ${colours.border}`,
+  borderRadius: 10,
+  padding: "10px 12px",
+  fontSize: 14,
+  boxSizing: "border-box",
+  background: colours.white,
+};
+
+const labelStyle = {
+  display: "block",
+  fontSize: 13,
+  fontWeight: 600,
+  color: colours.text,
+  marginBottom: 6,
+};
+
+const cardStyle = {
+  background: colours.white,
+  border: `1px solid ${colours.border}`,
+  borderRadius: 18,
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+};
+
+const buttonPrimary = {
+  background: colours.purple,
+  color: "#fff",
+  border: "none",
+  borderRadius: 10,
+  padding: "10px 14px",
+  fontWeight: 700,
+  cursor: "pointer",
+};
+
+const buttonSecondary = {
+  background: colours.white,
+  color: colours.text,
+  border: `1px solid ${colours.border}`,
+  borderRadius: 10,
+  padding: "10px 14px",
+  fontWeight: 700,
+  cursor: "pointer",
+};
+
+const currency = (value) =>
+  new Intl.NumberFormat("en-AU", {
+    style: "currency",
+    currency: "AUD",
+    minimumFractionDigits: 2,
+  }).format(Number(value || 0));
 
 const safeNumber = (value) => {
   const parsed = Number(value);
@@ -21,11 +293,21 @@ const escapeHtml = (value) =>
 
 const nl2br = (value) => escapeHtml(value).replace(/\n/g, "<br/>");
 
+// Parse YYYY-MM-DD as LOCAL date (not UTC) — prevents day-shift in AU timezones
 const parseLocalDate = (dateString) => {
   if (!dateString) return new Date();
   const parts = String(dateString).slice(0, 10).split("-");
   if (parts.length !== 3) return new Date(dateString);
   return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+};
+
+// Get today in YYYY-MM-DD local time (not UTC)
+const todayLocal = () => {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 };
 
 const formatDateAU = (date) => {
@@ -37,6 +319,37 @@ const formatDateAU = (date) => {
   const year = d.getFullYear();
   return `${day}/${month}/${year}`;
 };
+
+const addDays = (dateString, days) => {
+  const base = parseLocalDate(dateString);
+  base.setDate(base.getDate() + safeNumber(days));
+  const y = base.getFullYear();
+  const m = String(base.getMonth() + 1).padStart(2, "0");
+  const d = String(base.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+};
+
+// End of month + 30 days: go to last day of the bill's month, then add 30 days
+const addDaysEOM = (dateString) => {
+  const base = parseLocalDate(dateString);
+  const eom = new Date(base.getFullYear(), base.getMonth() + 1, 0);
+  eom.setDate(eom.getDate() + 30);
+  const y = eom.getFullYear();
+  const m = String(eom.getMonth() + 1).padStart(2, "0");
+  const d = String(eom.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+};
+
+const nextNumber = (prefix, items, key) => {
+  const nums = items
+    .map((item) => String(item[key] || ""))
+    .map((v) => Number((v.split("-")[1] || "0").replace(/\D/g, "")))
+    .filter((v) => Number.isFinite(v));
+  const next = (nums.length ? Math.max(...nums) : 0) + 1;
+  return `${prefix}-${String(next).padStart(4, "0")}`;
+};
+
+const makePaymentReference = (invoiceNumber) => `SAS-${invoiceNumber}`;
 
 const currencyCodeFromLabel = (label) => {
   const value = String(label || "").toUpperCase();
@@ -57,11 +370,17 @@ const formatCurrencyByCode = (value, currencyCode = "AUD") =>
 const getClientCurrencyCode = (client) => currencyCodeFromLabel(client?.defaultCurrency || "AUD $");
 
 const calculateAdjustmentValues = ({ subtotal = 0, total = 0, client, profile }) => {
-  const feeAmount = client?.feesDeducted ? total * (LOCKED_FEE_RATE_PERCENT / 100) : 0;
+  const feeAmount = client?.feesDeducted ?
+    total * (LOCKED_FEE_RATE_PERCENT / 100) : 0;
   const taxWithheld = client?.deductsTaxPrior ? subtotal * (safeNumber(profile?.taxRate) / 100) : 0;
   const netExpected = total - feeAmount - taxWithheld;
-  return { feeAmount, taxWithheld, netExpected };
+  return {
+    feeAmount,
+    taxWithheld,
+    netExpected,
+  };
 };
+
 
 export function buildQuoteHtml(quote, options = {}, ctx = {}) {
   const { profile, clients } = ctx;
