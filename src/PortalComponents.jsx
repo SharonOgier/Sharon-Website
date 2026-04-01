@@ -187,7 +187,7 @@ export function PaywallScreen({ profile, serverBaseUrl }) {
 
 export function SectionCard({ title, children, right }) {
   return (
-    <div style={{ ...cardStyle, padding: 20 }}>
+    <div className="sas-section-card" style={{ ...cardStyle, padding: 20 }}>
       <div
         style={{
           display: "flex",
@@ -536,7 +536,7 @@ export function DataTable({ columns, rows, emptyState }) {
     return <EmptyState {...emptyState} />;
   }
   return (
-    <div style={{ overflowX: "auto" }}>
+    <div className="sas-table-wrap" style={{ overflowX: "auto" }}>
       <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 780 }}>
         <thead>
           <tr style={{ background: "#F8FAFC" }}>
