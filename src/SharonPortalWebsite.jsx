@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import html2pdf from "html2pdf.js";
 import { supabase } from "./client";
 import MobileWizard from "./MobileWizard";
+import { buildQuoteHtml, buildQuoteEmailHtml, buildInvoiceHtml, openBlobUrlInWindow, writeInvoicePreviewToWindow } from "./PortalDocumentBuilders";
 
 
 
@@ -1582,510 +1583,6 @@ function IncomeSourceModal({
 }
 
 
-// ── Document builder functions (top-level for correct scope access) ──────────
-
-function buildQuoteHtml(quote, options = {}, ctx = {}) {
-  const { profile, clients } = ctx;
-  const getClientById = (id) => clients.find((c) => c.id === safeNumber(id));
-  const clientIsGstExempt = (id) => Boolean(getClientById(id)?.outsideAustraliaOrGstExempt);
-  const gstAppliesToClient = (id) => Boolean(profile.gstRegistered) && !clientIsGstExempt(id);
-  const getDocumentBusinessName = () => profile.hideLegalNameOnDocs || !profile.legalBusinessName ? profile.businessName : profile.legalBusinessName;
-  const getDocumentAddress = () => profile.hideAddressOnDocs ? "" : profile.address || "";
-const { allowEmail = false } = options;
-const qClient = getClientById(quote.clientId);
-const currencyCode = quote.currencyCode || getClientCurrencyCode(qClient);
-const money = (value) => formatCurrencyByCode(value, currencyCode);
-const adjustments = calculateAdjustmentValues({
-  subtotal: safeNumber(quote.subtotal),
-  total: safeNumber(quote.total),
-  client: qClient,
-  profile,
-});
-const gstStatus =
-  quote.gstStatus ||
-  (clientIsGstExempt(quote.clientId)
-    ? "GST not applicable"
-    : safeNumber(quote.gst) > 0
-      ? "GST applies"
-      : "GST free");
-const businessName = escapeHtml(getDocumentBusinessName());
-const businessAddress = escapeHtml(getDocumentAddress());
-const clientName = escapeHtml(qClient?.name || "");
-const businessEmail = escapeHtml(profile.email || "");
-const businessPhone = escapeHtml(profile.phone || "");
-const businessAbn = escapeHtml(profile.abn || "");
-const clientDetails =
-  qClient?.includeAddressDetails && qClient?.addressDetails
-    ? `<div style="margin-top:6px; color:#555;">${nl2br(qClient.addressDetails)}</div>`
-    : "";
-
-return `<!doctype html>
-<html>
-<head>
-<meta charset="utf-8" />
-<title>Quote Preview</title>
-<style>
-body { font-family: Arial; padding:40px; color:#14202B; }
-.header { display:flex; justify-content:space-between; border-bottom:1px solid #ddd; padding-bottom:20px; }
-.title { font-size:32px; font-weight:900; color:#6A1B9A; }
-.right { text-align:right; font-size:14px; }
-table { width:100%; border-collapse:collapse; margin-top:24px; }
-th, td { padding:10px; border-bottom:1px solid #eee; }
-th { text-align:left; color:#667085; }
-.totals { width:360px; margin-left:auto; margin-top:20px; }
-.totals div { display:flex; justify-content:space-between; padding:6px 0; }
-.total { font-weight:800; font-size:18px; color:#006D6D; }
-.footer { margin-top:30px; display:flex; justify-content:space-between; font-size:12px; color:#666; }
-.print-toolbar { margin-bottom: 24px; display:flex !important; justify-content:space-between; align-items:center; gap:16px; }
-.toolbar-actions { display:flex; gap:10px; flex-wrap:wrap; }
-.preview-status { font-size:13px; color:#64748B; }
-.print-button { background:#6A1B9A; color:#fff; border:none; border-radius:10px; padding:10px 16px; font-weight:700; cursor:pointer; text-decoration:none; display:inline-block; }
-.email-button { background:#006D6D; color:#fff; border:none; border-radius:10px; padding:10px 16px; font-weight:700; cursor:pointer; }
-@media print {
-  .print-toolbar { display:none !important; }
-  body { padding: 0; }
-}
-</style>
-</head>
-<body>
-
-<div class="print-toolbar">
-<div id="preview-email-status" class="preview-status"></div>
-<div class="toolbar-actions">
-  ${allowEmail ? `<button id="preview-email-button" class="email-button" onclick="window.opener && window.opener.sendQuoteFromPreview && window.opener.sendQuoteFromPreview(${JSON.stringify(quote.id)}, window)">Email Quote</button>` : ""}
-  <a href="javascript:void(0)" class="print-button" onclick="window.print()">Print / Download PDF</a>
-</div>
-</div>
-
-<div class="header">
-<div>
-  ${profile.logoDataUrl
-    ? `<div style="margin-bottom:12px;"><img src="${profile.logoDataUrl}" alt="Logo" style="max-height:${LOGO_DOCUMENT_MAX_HEIGHT}px; max-width:${LOGO_DOCUMENT_MAX_WIDTH}px; object-fit:contain;" /></div>`
-    : ""
-  }
-  <div class="title">QUOTE</div>
-  <div style="margin-top:8px; font-weight:700;">${businessName}</div>
-  <div style="font-size:13px; color:#555;">${businessAddress || ""}</div>
-  <div style="font-size:13px; color:#555;">${businessEmail}${quote.hidePhoneNumber ? "" : ` | ${businessPhone}`}</div>
-  <div style="font-size:13px; color:#555;">ABN: ${businessAbn}</div>
-</div>
-
-<div class="right">
-  <div><strong>Quote ref:</strong> ${quote.quoteNumber || ""}</div>
-  <div><strong>Quote date:</strong> ${formatDateAU(quote.quoteDate)}</div>
-  <div><strong>Expiry date:</strong> ${formatDateAU(quote.expiryDate)}</div>
-</div>
-</div>
-
-<div style="margin-top:20px; font-weight:700;">${clientName}</div>
-${clientDetails}
-
-<table>
-<thead>
-  <tr>
-    <th>Description</th>
-    <th>Qty</th>
-    <th style="text-align:right">Unit Price</th>
-    <th style="text-align:right">GST</th>
-    <th style="text-align:right">Total (excl. GST)</th>
-  </tr>
-</thead>
-<tbody>
-  ${(quote.lineItems && quote.lineItems.length > 0
-    ? quote.lineItems
-    : [{ description: quote.description || "Professional services", quantity: quote.quantity || 1, unitPrice: safeNumber(quote.subtotal) / Math.max(1, safeNumber(quote.quantity || 1)), rowGst: quote.gst, rowTotal: quote.total }]
-  ).map((item) => {
-    const qty = safeNumber(item.quantity || item.qty || 1);
-    const unit = safeNumber(item.unitPrice || item.unit || 0);
-    const rowSub = unit * qty;
-    const rowGst = safeNumber(item.rowGst != null ? item.rowGst : ((item.gstType || "GST on Income (10%)") === "GST on Income (10%)" ? rowSub * 0.1 : 0));
-    return `<tr>
-    <td>${escapeHtml(item.description || "Service")}</td>
-    <td>${qty}</td>
-    <td style="text-align:right">${money(unit)}</td>
-    <td style="text-align:right">${money(rowGst)}</td>
-    <td style="text-align:right">${money(rowSub)}</td>
-  </tr>`;
-  }).join("")}
-</tbody>
-</table>
-
-<div class="totals">
-<div><span>Subtotal (excl GST):</span><span>${money(quote.subtotal)}</span></div>
-<div><span>Total GST:</span><span>${money(quote.gst)}</span></div>
-<div><span>GST status:</span><span>${gstStatus}</span></div>
-<div><span>Less fees:</span><span>${money(adjustments.feeAmount)}</span></div>
-<div><span>Less tax withheld:</span><span>${money(adjustments.taxWithheld)}</span></div>
-<div class="total"><span>Total estimate:</span><span>${money(quote.total)}</span></div>
-<div class="total"><span>Net expected:</span><span>${money(adjustments.netExpected)}</span></div>
-</div>
-
-<div class="footer">
-<div>For any queries relating to this quote please contact ${profile.businessName}</div>
-<div>Private & Confidential</div>
-</div>
-
-</body>
-</html>`;
-}
-
-function buildQuoteEmailHtml(quote, ctx = {}) {
-  const { profile, clients } = ctx;
-  const getClientById = (id) => clients.find((c) => c.id === safeNumber(id));
-  const clientIsGstExempt = (id) => Boolean(getClientById(id)?.outsideAustraliaOrGstExempt);
-  const gstAppliesToClient = (id) => Boolean(profile.gstRegistered) && !clientIsGstExempt(id);
-  const getDocumentBusinessName = () => profile.hideLegalNameOnDocs || !profile.legalBusinessName ? profile.businessName : profile.legalBusinessName;
-  const getDocumentAddress = () => profile.hideAddressOnDocs ? "" : profile.address || "";
-const qClient = getClientById(quote.clientId);
-const currencyCode = quote.currencyCode || getClientCurrencyCode(qClient);
-const money = (value) => formatCurrencyByCode(value, currencyCode);
-const businessName = escapeHtml(getDocumentBusinessName());
-const businessAddress = escapeHtml(getDocumentAddress());
-const clientName = escapeHtml(qClient?.name || "");
-const businessEmail = escapeHtml(profile.email || "");
-const businessPhone = escapeHtml(profile.phone || "");
-const businessAbn = escapeHtml(profile.abn || "");
-const clientDetails =
-  qClient?.includeAddressDetails && qClient?.addressDetails
-    ? `<div style="margin-top:6px; color:#475569;">${nl2br(qClient.addressDetails)}</div>`
-    : "";
-const notesHtml = quote.comments
-  ? `<div style="margin-top:20px; padding:16px; background:#F8FAFC; border:1px solid #E2E8F0; border-radius:12px;">${nl2br(quote.comments)}</div>`
-  : "";
-const quoteLineItems = (quote.lineItems && quote.lineItems.length > 0)
-  ? quote.lineItems
-  : [{ description: quote.description || "Professional services", quantity: quote.quantity || 1, unitPrice: safeNumber(quote.subtotal) / Math.max(1, safeNumber(quote.quantity || 1)), rowGst: quote.gst, rowTotal: quote.total }];
-
-return `<!doctype html>
-<html>
-<head>
-<meta charset="utf-8" />
-<title>Quote ${quote.quoteNumber || ""}</title>
-</head>
-<body style="margin:0; padding:24px; background:#F8FAFC; font-family:Arial, sans-serif; color:#14202B;">
-  <div style="max-width:760px; margin:0 auto; background:#FFFFFF; border:1px solid #E2E8F0; border-radius:18px; padding:28px;">
-    ${profile.logoDataUrl
-      ? `<div style="margin-bottom:16px;"><img src="${profile.logoDataUrl}" alt="Logo" style="max-height:${LOGO_PREVIEW_MAX_HEIGHT}px; max-width:${LOGO_PREVIEW_MAX_WIDTH}px; object-fit:contain;" /></div>`
-      : ""
-    }
-    <div style="display:flex; justify-content:space-between; gap:16px; flex-wrap:wrap; border-bottom:1px solid #E2E8F0; padding-bottom:18px;">
-      <div>
-        <div style="font-size:30px; font-weight:900; color:#6A1B9A;">QUOTE</div>
-        <div style="margin-top:8px; font-weight:700;">${businessName}</div>
-        <div style="font-size:13px; color:#475569; margin-top:4px;">${businessAddress || ""}</div>
-        <div style="font-size:13px; color:#475569; margin-top:4px;">${businessEmail}${quote.hidePhoneNumber ? "" : ` | ${businessPhone}`}</div>
-        <div style="font-size:13px; color:#475569; margin-top:4px;">ABN: ${businessAbn}</div>
-      </div>
-      <div style="text-align:right; font-size:14px; color:#14202B;">
-        <div><strong>Quote ref:</strong> ${quote.quoteNumber || ""}</div>
-        <div style="margin-top:6px;"><strong>Quote date:</strong> ${formatDateAU(quote.quoteDate)}</div>
-        <div style="margin-top:6px;"><strong>Expiry date:</strong> ${formatDateAU(quote.expiryDate)}</div>
-      </div>
-    </div>
-
-    <div style="margin-top:20px;">
-      <div style="font-weight:700;">${clientName}</div>
-      ${clientDetails}
-    </div>
-
-    <table style="width:100%; border-collapse:collapse; margin-top:24px;">
-      <thead>
-        <tr>
-          <th style="text-align:left; padding:10px; border-bottom:1px solid #E2E8F0; color:#64748B;">Description</th>
-          <th style="text-align:left; padding:10px; border-bottom:1px solid #E2E8F0; color:#64748B;">Qty</th>
-          <th style="text-align:right; padding:10px; border-bottom:1px solid #E2E8F0; color:#64748B;">Unit Price</th>
-          <th style="text-align:right; padding:10px; border-bottom:1px solid #E2E8F0; color:#64748B;">GST</th>
-          <th style="text-align:right; padding:10px; border-bottom:1px solid #E2E8F0; color:#64748B;">Total (excl. GST)</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${quoteLineItems.map((item) => {
-          const qty = safeNumber(item.quantity || item.qty || 1);
-          const unit = safeNumber(item.unitPrice || item.unit || 0);
-          const rowSub = unit * qty;
-          const rowGst = safeNumber(item.rowGst != null ? item.rowGst : ((item.gstType || "GST on Income (10%)") === "GST on Income (10%)" ? rowSub * 0.1 : 0));
-          return `<tr>
-          <td style="padding:10px; border-bottom:1px solid #E2E8F0;">${escapeHtml(item.description || "Professional services")}</td>
-          <td style="padding:10px; border-bottom:1px solid #E2E8F0;">${qty}</td>
-          <td style="padding:10px; border-bottom:1px solid #E2E8F0; text-align:right;">${money(unit)}</td>
-          <td style="padding:10px; border-bottom:1px solid #E2E8F0; text-align:right;">${money(rowGst)}</td>
-          <td style="padding:10px; border-bottom:1px solid #E2E8F0; text-align:right;">${money(rowSub)}</td>
-        </tr>`;
-        }).join("")}
-      </tbody>
-    </table>
-
-    <div style="max-width:360px; margin:24px 0 0 auto;">
-      <div style="display:flex; justify-content:space-between; padding:6px 0;"><span>Subtotal (excl GST):</span><span>${money(quote.subtotal)}</span></div>
-      <div style="display:flex; justify-content:space-between; padding:6px 0;"><span>Total GST:</span><span>${money(quote.gst)}</span></div>
-      <div style="display:flex; justify-content:space-between; padding:6px 0; font-weight:800; color:#006D6D;"><span>Total estimate:</span><span>${money(quote.total)}</span></div>
-    </div>
-
-    ${notesHtml}
-
-    <div style="margin-top:24px; font-size:12px; color:#64748B; line-height:1.6;">
-      This is a quote only and not a tax invoice.
-    </div>
-  </div>
-</body>
-</html>`;
-}
-
-function buildInvoiceHtml(invoice, stripeCheckoutUrl = "", options = {}, ctx = {}) {
-  const { profile, clients } = ctx;
-  const getClientById = (id) => clients.find((c) => c.id === safeNumber(id));
-  const clientIsGstExempt = (id) => Boolean(getClientById(id)?.outsideAustraliaOrGstExempt);
-  const gstAppliesToClient = (id) => Boolean(profile.gstRegistered) && !clientIsGstExempt(id);
-  const getDocumentBusinessName = () => profile.hideLegalNameOnDocs || !profile.legalBusinessName ? profile.businessName : profile.legalBusinessName;
-  const getDocumentAddress = () => profile.hideAddressOnDocs ? "" : profile.address || "";
-const { allowEmail = false } = options;
-const previewClient = getClientById(invoice.clientId);
-const currencyCode = invoice.currencyCode || getClientCurrencyCode(previewClient);
-const money = (value) => formatCurrencyByCode(value, currencyCode);
-const feeAmount =
-  invoice.feeAmount != null
-    ? safeNumber(invoice.feeAmount)
-    : calculateAdjustmentValues({
-      subtotal: safeNumber(invoice.subtotal),
-      total: safeNumber(invoice.total),
-      client: previewClient,
-      profile,
-    }).feeAmount;
-const taxWithheld =
-  invoice.taxWithheld != null
-    ? safeNumber(invoice.taxWithheld)
-    : calculateAdjustmentValues({
-      subtotal: safeNumber(invoice.subtotal),
-      total: safeNumber(invoice.total),
-      client: previewClient,
-      profile,
-    }).taxWithheld;
-const netExpected =
-  invoice.netExpected != null
-    ? safeNumber(invoice.netExpected)
-    : calculateAdjustmentValues({
-      subtotal: safeNumber(invoice.subtotal),
-      total: safeNumber(invoice.total),
-      client: previewClient,
-      profile,
-    }).netExpected;
-const gstStatus =
-  invoice.gstStatus ||
-  (clientIsGstExempt(invoice.clientId)
-    ? "GST not applicable"
-    : safeNumber(invoice.gst) > 0
-      ? "GST applies"
-      : "GST free");
-const purchaseOrderReference = escapeHtml(invoice.purchaseOrderReference || "");
-const purchaseOrderBlock =
-  previewClient?.hasPurchaseOrder && purchaseOrderReference
-    ? `<div style="margin-top:10px; font-size:14px; color:#555;"><strong>PO / Reference:</strong> ${purchaseOrderReference}</div>`
-    : "";
-const businessName = escapeHtml(getDocumentBusinessName());
-const businessAddress = escapeHtml(getDocumentAddress());
-const clientName = escapeHtml(previewClient?.name || "");
-const clientEmail = escapeHtml(previewClient?.email || "");
-const businessEmail = escapeHtml(profile.email || "");
-const businessPhone = escapeHtml(profile.phone || "");
-const businessAbn = escapeHtml(profile.abn || "");
-const paymentReference = escapeHtml(invoice.paymentReference || invoice.invoiceNumber || "");
-
-const clientDetails =
-  previewClient?.includeAddressDetails && previewClient?.addressDetails
-    ? `<div style="margin-top:6px; color:#555;">
-          ${nl2br(previewClient.addressDetails)}
-        </div>`
-    : "";
-return `<!doctype html>
-<html>
-<head>
-<meta charset="utf-8" />
-<title>Invoice Preview</title>
-<style>
-body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
-.header { display:flex; justify-content:space-between; border-bottom:2px solid #eee; padding-bottom:20px; }
-.title { font-size:34px; font-weight:900; color:#6A1B9A; }
-.right { text-align:right; }
-.section { margin-top:24px; }
-table { width:100%; border-collapse: collapse; margin-top:20px; }
-th, td { padding:12px; border-bottom:1px solid #ddd; font-size:14px; }
-th { text-align:left; color:#64748B; }
-.totals { margin-top:20px; width:360px; margin-left:auto; }
-.totals div { display:flex; justify-content:space-between; padding:6px 0; }
-.total { font-size:20px; font-weight:800; color:#006D6D; }
-.payment { margin-top:30px; padding-top:20px; border-top:1px solid #ddd; }
-.footer { margin-top:40px; font-size:12px; color:#666; display:flex; justify-content:space-between; }
-.print-toolbar { margin-bottom: 24px; display:flex !important; justify-content:space-between; align-items:center; gap:16px; }
-.toolbar-actions { display:flex; gap:10px; flex-wrap:wrap; }
-.preview-status { font-size:13px; color:#64748B; }
-.print-button { background:#6A1B9A; color:#fff; border:none; border-radius:10px; padding:10px 16px; font-weight:700; cursor:pointer; text-decoration:none; display:inline-block; }
-.email-button { background:#006D6D; color:#fff; border:none; border-radius:10px; padding:10px 16px; font-weight:700; cursor:pointer; }
-@media print {
-  .print-toolbar { display:none !important; }
-  body { padding: 0; }
-}
-</style>
-</head>
-<body>
-
-<div class="print-toolbar">
-<div id="preview-email-status" class="preview-status"></div>
-<div class="toolbar-actions">
-  ${allowEmail ? `<button id="preview-email-button" class="email-button" onclick="window.opener && window.opener.sendInvoiceFromPreview && window.opener.sendInvoiceFromPreview(${JSON.stringify(invoice.id)}, window)">Email Invoice</button>` : ""}
-  <a href="javascript:void(0)" class="print-button" onclick="window.print()">Print / Download PDF</a>
-</div>
-</div>
-
-<div class="header">
-<div>
-  ${profile.logoDataUrl
-    ? `<div style="margin-bottom:12px;"><img src="${profile.logoDataUrl}" alt="Logo" style="max-height:${LOGO_DOCUMENT_MAX_HEIGHT}px; max-width:${LOGO_DOCUMENT_MAX_WIDTH}px; object-fit:contain;" /></div>`
-    : ""
-  }
-  <div class="title">TAX INVOICE</div>
-  <div style="margin-top:10px; font-weight:700;">${businessName}</div>
-  <div style="font-size:14px; color:#555;">${businessAddress || ""}</div>
-  <div style="font-size:14px; color:#555;">${businessEmail}${invoice.hidePhoneNumber ? "" : ` | ${businessPhone}`}</div>
-  <div style="font-size:14px; color:#555;">ABN: ${businessAbn}</div>
-</div>
-
-<div class="right">
-  <div><strong>Invoice #:</strong> ${invoice.invoiceNumber || ""}</div>
-  <div><strong>Date:</strong> ${formatDateAU(invoice.invoiceDate)}</div>
-  <div><strong>Due:</strong> ${formatDateAU(invoice.dueDate)}</div>
-</div>
-</div>
-
-<div class="section">
-<strong>Billed To:</strong><br/>
-${clientName}<br/>
-${clientEmail}
-${clientDetails}
-${purchaseOrderBlock}
-</div>
-
-<table>
-<thead>
-  <tr>
-    <th>Description</th>
-    <th>Qty</th>
-    <th class="right">Unit Price</th>
-    <th class="right">GST</th>
-    <th class="right">Total</th>
-  </tr>
-</thead>
-<tbody>
-  ${(invoice.lineItems && invoice.lineItems.length > 0
-    ? invoice.lineItems
-    : [{ description: invoice.description || "Professional services", quantity: invoice.quantity || 1, unitPrice: safeNumber(invoice.subtotal) / Math.max(1, safeNumber(invoice.quantity || 1)), rowGst: invoice.gst, rowTotal: invoice.total }]
-  ).map((item) => {
-    const qty = safeNumber(item.quantity || item.qty || 1);
-    const unit = safeNumber(item.unitPrice || item.unit || 0);
-    const rowSub = unit * qty;
-    const rowGst = safeNumber(item.rowGst != null ? item.rowGst : ((item.gstType || "GST on Income (10%)") === "GST on Income (10%)" ? rowSub * 0.1 : 0));
-    const rowTotal = rowSub + rowGst;
-    return `<tr>
-    <td>${escapeHtml(item.description || "Service")}</td>
-    <td>${qty}</td>
-    <td class="right">${money(unit)}</td>
-    <td class="right">${money(rowGst)}</td>
-    <td class="right">${money(rowTotal)}</td>
-  </tr>`;
-  }).join("")}
-</tbody>
-</table>
-
-<div class="totals">
-<div><span>Subtotal (ex GST)</span><span>${money(invoice.subtotal)}</span></div>
-<div><span>GST</span><span>${money(invoice.gst)}</span></div>
-<div><span>GST status</span><span>${gstStatus}</span></div>
-<div><span>Less fees</span><span>${money(feeAmount)}</span></div>
-<div><span>Less tax withheld</span><span>${money(taxWithheld)}</span></div>
-<div class="total"><span>Amount Due</span><span>${money(invoice.total)}</span></div>
-<div class="total"><span>Net expected</span><span>${money(netExpected)}</span></div>
-</div>
-
-<div class="payment">
-<strong>Please make payment to:</strong>
-<div style="margin-top:10px; font-size:14px;">
-  ${profile.bankName ? `<div><strong>Account Name:</strong> ${profile.bankName}</div>` : ""}
-  ${profile.bsb ? `<div><strong>BSB:</strong> ${profile.bsb}</div>` : ""}
-  ${profile.accountNumber ? `<div><strong>Account Number:</strong> ${profile.accountNumber}</div>` : ""}
-  ${profile.payId ? `<div><strong>PayID:</strong> ${profile.payId}</div>` : ""}
-</div>
-<div style="margin-top:10px; font-size:13px; color:#555;">
-  Please use reference: ${paymentReference}
-</div>
-${stripeCheckoutUrl || profile.paypalPaymentLink
-    ? `<div style="margin-top:16px; padding:14px; border:1px solid #E2E8F0; border-radius:12px; background:#F7F6F5;">
-        <div style="font-weight:700; color:#14202B; margin-bottom:8px;">Pay Online</div>
-        <div style="font-size:13px; color:#555; margin-bottom:10px;">Choose your preferred payment method below.</div>
-        ${stripeCheckoutUrl
-      ? `<a href="${stripeCheckoutUrl}" target="_blank" rel="noreferrer" style="display:inline-block; margin-right:10px; background:#6A1B9A; color:#FFFFFF; text-decoration:none; padding:10px 16px; border-radius:10px; font-weight:700;">Pay with Card</a>`
-      : ""
-    }
-        ${profile.paypalPaymentLink
-      ? `<a href="${profile.paypalPaymentLink}" target="_blank" rel="noreferrer" style="display:inline-block; background:#0070BA; color:#FFFFFF; text-decoration:none; padding:10px 16px; border-radius:10px; font-weight:700;">Pay with PayPal</a>`
-      : ""
-    }
-      </div>`
-    : ""
-  }
-</div>
-
-<div class="footer">
-<div>For any queries please contact ${profile.businessName || "Your business"}</div>
-<div>Private & Confidential</div>
-</div>
-
-<script>
-  document.getElementById('print-btn') && document.getElementById('print-btn').addEventListener('click', function() { window.print(); });
-</script>
-</body>
-</html>`;
-}
-
-function openBlobUrlInWindow(w, blob) {
-const url = URL.createObjectURL(blob);
-try {
-  if (w.location.origin === "null") {
-    try {
-      URL.revokeObjectURL(w.location.href);
-    } catch (error) {
-      console.warn("Could not revoke previous preview URL", error);
-    }
-  }
-} catch (error) {
-  console.warn("Could not inspect previous preview URL", error);
-}
-w.location.href = url;
-const revoke = () => {
-  try {
-    URL.revokeObjectURL(url);
-  } catch (error) {
-    console.warn("Could not revoke preview URL", error);
-  }
-};
-try {
-  w.addEventListener("beforeunload", revoke, { once: true });
-} catch (error) {
-  console.warn("Preview cleanup listener failed", error);
-}
-setTimeout(revoke, 60000);
-try {
-  w.focus();
-} catch (error) {
-  console.warn("Preview window focus failed", error);
-}
-}
-
-function writeInvoicePreviewToWindow(w, invoice, stripeCheckoutUrl = "", options = {}, ctx = {}) {
-const html = buildInvoiceHtml(invoice, stripeCheckoutUrl, options, ctx);
-const blob = new Blob([html], { type: "text/html" });
-openBlobUrlInWindow(w, blob);
-}
-
-
 export default function AccountingPortalPrototype() {
   const { toasts, toast, removeToast } = useToast();
   const { confirm, modal: confirmModal } = useConfirm();
@@ -2132,6 +1629,7 @@ export default function AccountingPortalPrototype() {
   const recurringShownRef = useRef(false);
   const [quoteWizardStep, setQuoteWizardStep] = useState(1);
   const [activePage, setActivePage] = useState("dashboard");
+  const [activeFinancialTile, setActiveFinancialTile] = useState("profit_loss");
   const [showQuickAddMenu, setShowQuickAddMenu] = useState(false);
   const [showMobileWizard, setShowMobileWizard] = useState(false);
   const [isMobileViewport, setIsMobileViewport] = useState(() => (typeof window !== "undefined" ? window.innerWidth <= 768 : false));
@@ -5799,166 +5297,250 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     </div>
       );
     };
-    const renderFinancialInsights = () => (
+    const renderFinancialInsights = () => {
+    const reportTitle =
+      activeFinancialTile === "profit_loss"
+        ? "Statement of Profit or Loss"
+        : activeFinancialTile === "cash_movement"
+          ? "Cash Movement Statement"
+          : activeFinancialTile === "gst_position"
+            ? "GST Position Statement"
+            : "Revenue Summary Statement";
+    const reportSubtitle =
+      activeFinancialTile === "profit_loss"
+        ? "Prepared from portal activity currently recorded in your invoices and expenses."
+        : activeFinancialTile === "cash_movement"
+          ? "Prepared from paid invoices, tax reserves, GST balances and recorded expenses."
+          : activeFinancialTile === "gst_position"
+            ? "Prepared from GST collected on invoices and GST credits recorded on expenses."
+            : "Prepared from paid client revenue and recent monthly trends recorded in the portal.";
+    const statementRows =
+      activeFinancialTile === "profit_loss"
+        ? [
+            { label: "Income", value: totals.incomeExGst, strong: true },
+            { label: "Less: Expenses", value: -totals.totalExpenses },
+            { label: "Operating surplus / (deficit)", value: totals.incomeExGst - totals.totalExpenses, strong: true },
+            { label: "Less: Estimated tax reserve", value: -totals.estimatedTax },
+            { label: "Net result after tax reserve", value: totals.incomeExGst - totals.totalExpenses - totals.estimatedTax, strong: true },
+          ]
+        : activeFinancialTile === "cash_movement"
+          ? [
+              { label: "Cash received from paid invoices", value: totals.paidIncome, strong: true },
+              { label: "Less: GST payable", value: -totals.gstPayable },
+              { label: "Less: Estimated tax reserve", value: -totals.estimatedTax },
+              { label: "Less: Platform fees", value: -totals.totalFees },
+              { label: "Less: Expenses paid / recorded", value: -totals.totalExpenses },
+              { label: `Less: Subscription (${currency(totals.monthlySubscriptionCost)}/mo)`, value: -totals.monthlySubscriptionCost },
+              { label: "Closing safe-to-spend balance", value: totals.safeToSpend, strong: true },
+            ]
+          : activeFinancialTile === "gst_position"
+            ? [
+                { label: "GST collected on invoices", value: totals.gstCollected, strong: true },
+                { label: "Less: GST credits on expenses", value: -totals.gstOnExpenses },
+                { label: "Net GST payable / (refundable)", value: totals.gstPayable, strong: true },
+              ]
+            : [
+                { label: "Average monthly paid revenue", value: financialInsights.averageMonthlyRevenue, strong: true },
+                { label: "Top client revenue share", value: financialInsights.topClientShare, suffix: "%" },
+                { label: "Top three client revenue share", value: financialInsights.topThreeClientShare, suffix: "%" },
+                { label: "Revenue volatility", value: financialInsights.averageVolatility, suffix: "%" },
+              ];
+    const rightColumnRows =
+      activeFinancialTile === "profit_loss"
+        ? [
+            ["Gross invoiced", currency(totals.totalIncome)],
+            ["GST collected", currency(totals.gstCollected)],
+            ["Income ex GST", currency(totals.incomeExGst)],
+            ["Expense ratio", `${financialInsights.expenseRatio.toFixed(1)}%`],
+          ]
+        : activeFinancialTile === "cash_movement"
+          ? [
+              ["Paid income", currency(totals.paidIncome)],
+              ["GST payable", currency(totals.gstPayable)],
+              ["Tax reserve", currency(totals.estimatedTax)],
+              ["You keep", `${Math.max(financialInsights.usableCashRatio, 0).toFixed(1)}%`],
+            ]
+          : activeFinancialTile === "gst_position"
+            ? [
+                ["GST registration", profile.gstRegistered ? "Registered" : "Not registered"],
+                ["GST collected", currency(totals.gstCollected)],
+                ["GST credits", currency(totals.gstOnExpenses)],
+                ["Net GST", currency(totals.gstPayable)],
+              ]
+            : [
+                ["Average monthly revenue", currency(financialInsights.averageMonthlyRevenue)],
+                ["Best month", `${financialInsights.bestMonth?.label || "—"} · ${currency(financialInsights.bestMonth?.revenue || 0)}`],
+                ["Worst month", `${financialInsights.worstMonth?.label || "—"} · ${currency(financialInsights.worstMonth?.revenue || 0)}`],
+                ["Average invoice", currency(financialInsights.averageInvoiceValue)],
+              ];
+
+    return (
     <div style={{ display: "grid", gap: 20 }}>
-      <DashboardHero
-        title="Financial Insights"
-        subtitle="A lighter analysis page that keeps the current look, but focuses on interpretation instead of repeating the dashboard."
-        highlight={`${financialInsights.healthScore.toFixed(0)}/100`}
-      >
-        <InsightChip label="Health" value={financialInsights.healthLabel} />
-        <InsightChip label="Top 3 client share" value={`${financialInsights.topThreeClientShare.toFixed(1)}%`} />
-        <InsightChip label="You keep" value={`${Math.max(financialInsights.usableCashRatio, 0).toFixed(1)}%`} />
-      </DashboardHero>
+      <SectionCard title="Financial reports" right={<div style={{ fontSize: 12, color: colours.muted }}>Formal statement style</div>}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+            gap: 16,
+          }}
+        >
+          <ActionHubCard
+            icon="📈"
+            title="Profit & loss"
+            description="Standard income less expenses style report."
+            buttonLabel={activeFinancialTile === "profit_loss" ? "Showing report" : "View report"}
+            onClick={() => setActiveFinancialTile("profit_loss")}
+            tone={colours.purple}
+          />
+          <ActionHubCard
+            icon="💧"
+            title="Cash movement"
+            description="Cash in, deductions, and closing usable balance."
+            buttonLabel={activeFinancialTile === "cash_movement" ? "Showing report" : "View report"}
+            onClick={() => setActiveFinancialTile("cash_movement")}
+            tone={colours.teal}
+          />
+          <ActionHubCard
+            icon="🧾"
+            title="GST position"
+            description="GST collected, GST credits, and net GST result."
+            buttonLabel={activeFinancialTile === "gst_position" ? "Showing report" : "View report"}
+            onClick={() => setActiveFinancialTile("gst_position")}
+            tone={colours.navy}
+          />
+          <ActionHubCard
+            icon="📊"
+            title="Revenue summary"
+            description="Revenue concentration and consistency summary."
+            buttonLabel={activeFinancialTile === "revenue_summary" ? "Showing report" : "View report"}
+            onClick={() => setActiveFinancialTile("revenue_summary")}
+            tone={colours.purple}
+          />
+        </div>
+      </SectionCard>
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-          gap: 16,
-        }}
-      >
-        <MetricCard title="Average monthly revenue" value={currency(financialInsights.averageMonthlyRevenue)} subtitle="Average paid revenue across the months currently shown." accent={colours.navy} />
-        <MetricCard title="Revenue change" value={`${financialInsights.revenueChangePct >= 0 ? "+" : ""}${financialInsights.revenueChangePct.toFixed(1)}%`} subtitle="Movement versus the previous month." accent={colours.teal} />
-        <MetricCard title="Expense ratio" value={`${financialInsights.expenseRatio.toFixed(1)}%`} subtitle="Recorded expenses as a share of paid income." accent={colours.purple} />
-        <MetricCard title="Revenue volatility" value={`${financialInsights.averageVolatility.toFixed(1)}%`} subtitle="Average month-to-month movement across recent months." accent={colours.navy} />
-      </div>
-
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "minmax(0, 1.15fr) minmax(320px, 0.85fr)",
-          gap: 20,
-        }}
-      >
-        <SectionCard title="Revenue reliability" right={<div style={{ fontSize: 12, color: colours.muted }}>Best, worst, and recent movement</div>}>
-          {monthlyFinance.length ? (
-            <div style={{ display: "grid", gap: 16 }}>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-                  gap: 12,
-                }}
-              >
-                <div style={{ ...cardStyle, padding: 14, background: colours.bg }}>
-                  <div style={{ fontSize: 12, fontWeight: 800, textTransform: "uppercase", color: colours.muted }}>Best month</div>
-                  <div style={{ fontSize: 16, fontWeight: 800, color: colours.text, marginTop: 6 }}>{financialInsights.bestMonth?.label || "—"}</div>
-                  <div style={{ fontSize: 13, color: colours.muted, marginTop: 6 }}>{currency(financialInsights.bestMonth?.revenue || 0)}</div>
-                </div>
-                <div style={{ ...cardStyle, padding: 14, background: colours.bg }}>
-                  <div style={{ fontSize: 12, fontWeight: 800, textTransform: "uppercase", color: colours.muted }}>Worst month</div>
-                  <div style={{ fontSize: 16, fontWeight: 800, color: colours.text, marginTop: 6 }}>{financialInsights.worstMonth?.label || "—"}</div>
-                  <div style={{ fontSize: 13, color: colours.muted, marginTop: 6 }}>{currency(financialInsights.worstMonth?.revenue || 0)}</div>
-                </div>
-                <div style={{ ...cardStyle, padding: 14, background: colours.bg }}>
-                  <div style={{ fontSize: 12, fontWeight: 800, textTransform: "uppercase", color: colours.muted }}>Average invoice</div>
-                  <div style={{ fontSize: 16, fontWeight: 800, color: colours.text, marginTop: 6 }}>{currency(financialInsights.averageInvoiceValue)}</div>
-                  <div style={{ fontSize: 13, color: colours.muted, marginTop: 6 }}>Across all invoices in the portal.</div>
-                </div>
-              </div>
-              {monthlyFinance.map((month, index) => {
-                const maxRevenue = Math.max(...monthlyFinance.map((item) => item.revenue), 0);
-                const width = maxRevenue > 0 ? (month.revenue / maxRevenue) * 100 : 0;
-                const previous = index > 0 ? monthlyFinance[index - 1].revenue : 0;
-                const change = previous > 0 ? ((month.revenue - previous) / previous) * 100 : 0;
-                return (
-                  <div key={month.monthKey} style={{ display: "grid", gap: 6 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: colours.text }}>{month.label}</div>
-                      <div style={{ fontSize: 12, color: colours.muted }}>
-                        {index === 0 ? "Starting point" : `${change >= 0 ? "+" : ""}${change.toFixed(1)}% vs prior month`}
-                      </div>
-                    </div>
-                    <div style={{ height: 12, borderRadius: 999, background: colours.bg }}>
-                      <div style={{ width: `${Math.max(width, month.revenue ? 8 : 0)}%`, height: "100%", borderRadius: 999, background: `linear-gradient(90deg, ${colours.teal} 0%, ${colours.navy} 100%)` }} />
-                    </div>
-                    <div style={{ fontSize: 13, color: colours.text }}>{currency(month.revenue)} paid revenue</div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div style={{ fontSize: 14, color: colours.muted }}>Add paid invoices to see revenue reliability insights.</div>
-          )}
-        </SectionCard>
-
-        <WaterfallCard
-          title="Cash efficiency"
-          rows={[
-            { label: "Paid income", value: totals.paidIncome },
-            { label: "Less GST payable", value: -totals.gstPayable },
-            { label: "Less tax reserve", value: -totals.estimatedTax },
-            { label: "Less expenses", value: -totals.totalExpenses },
-            { label: "Safe to spend", value: totals.safeToSpend },
-          ]}
-        />
-      </div>
-
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
-          gap: 20,
-        }}
-      >
-        <SectionCard title="Client risk" right={<div style={{ fontSize: 12, color: colours.muted }}>Concentration view</div>}>
-          <div style={{ display: "grid", gap: 14 }}>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
-                gap: 12,
-              }}
-            >
-              <div style={{ ...cardStyle, padding: 14, background: colours.bg }}>
-                <div style={{ fontSize: 12, fontWeight: 800, textTransform: "uppercase", color: colours.muted }}>Top client share</div>
-                <div style={{ fontSize: 22, fontWeight: 900, color: colours.text, marginTop: 6 }}>{financialInsights.topClientShare.toFixed(1)}%</div>
-              </div>
-              <div style={{ ...cardStyle, padding: 14, background: colours.bg }}>
-                <div style={{ fontSize: 12, fontWeight: 800, textTransform: "uppercase", color: colours.muted }}>Top 3 clients</div>
-                <div style={{ fontSize: 22, fontWeight: 900, color: colours.text, marginTop: 6 }}>{financialInsights.topThreeClientShare.toFixed(1)}%</div>
-              </div>
-            </div>
-            <TrendBarsCard title="Top clients" subtitle="Highest paid revenue contributors" data={clientRevenueRows.slice(0, 4)} valueKey="value" formatValue={(value) => currency(value)} accent={colours.teal} emptyText="No paid client revenue yet." />
+      <div style={{ ...cardStyle, padding: 0, overflow: "hidden" }}>
+        <div style={{ padding: "28px 30px 20px", borderBottom: `1px solid ${colours.border}`, background: colours.white }}>
+          <div style={{ fontSize: 13, letterSpacing: 1.1, textTransform: "uppercase", fontWeight: 800, color: colours.muted }}>
+            Financial Statement
           </div>
-        </SectionCard>
-
-        <SectionCard title="Expense behaviour" right={<div style={{ fontSize: 12, color: colours.muted }}>Largest categories and recent change</div>}>
-          <div style={{ display: "grid", gap: 14 }}>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
-                gap: 12,
-              }}
-            >
-              <div style={{ ...cardStyle, padding: 14, background: colours.bg }}>
-                <div style={{ fontSize: 12, fontWeight: 800, textTransform: "uppercase", color: colours.muted }}>Latest expense move</div>
-                <div style={{ fontSize: 22, fontWeight: 900, color: colours.text, marginTop: 6 }}>{`${financialInsights.expenseChangePct >= 0 ? "+" : ""}${financialInsights.expenseChangePct.toFixed(1)}%`}</div>
-              </div>
-              <div style={{ ...cardStyle, padding: 14, background: colours.bg }}>
-                <div style={{ fontSize: 12, fontWeight: 800, textTransform: "uppercase", color: colours.muted }}>Largest category</div>
-                <div style={{ fontSize: 16, fontWeight: 800, color: colours.text, marginTop: 6 }}>{financialInsights.largestExpenseCategory?.label || "—"}</div>
-                <div style={{ fontSize: 13, color: colours.muted, marginTop: 6 }}>{currency(financialInsights.largestExpenseCategory?.value || 0)}</div>
-              </div>
-            </div>
-            <TrendBarsCard title="Expense categories" subtitle="Largest recorded categories" data={expenseCategoryRows.slice(0, 5)} valueKey="value" formatValue={(value) => currency(value)} accent={colours.purple} emptyText="No expenses recorded yet." />
+          <div style={{ fontSize: 30, fontWeight: 900, color: colours.text, marginTop: 8 }}>{reportTitle}</div>
+          <div style={{ fontSize: 14, color: colours.muted, marginTop: 8, lineHeight: 1.7 }}>{reportSubtitle}</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12, marginTop: 18, fontSize: 13 }}>
+            <div><strong>Entity:</strong> {profile.businessName || "Your business"}</div>
+            <div><strong>Prepared on:</strong> {formatDateAU(todayLocal())}</div>
+            <div><strong>Basis:</strong> Internal portal records</div>
           </div>
-        </SectionCard>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.25fr) minmax(280px, 0.75fr)", gap: 0 }}>
+          <div style={{ padding: "24px 30px 28px", borderRight: `1px solid ${colours.border}` }}>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: "left", padding: "0 0 12px", fontSize: 12, textTransform: "uppercase", letterSpacing: 0.8, color: colours.muted, borderBottom: `1px solid ${colours.border}` }}>Particulars</th>
+                  <th style={{ textAlign: "right", padding: "0 0 12px", fontSize: 12, textTransform: "uppercase", letterSpacing: 0.8, color: colours.muted, borderBottom: `1px solid ${colours.border}` }}>Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {statementRows.map((row) => {
+                  const displayValue = row.suffix ? `${safeNumber(row.value).toFixed(1)}${row.suffix}` : currency(row.value);
+                  return (
+                    <tr key={row.label}>
+                      <td style={{ padding: "14px 0", fontSize: 15, fontWeight: row.strong ? 800 : 500, color: colours.text, borderBottom: `1px solid ${colours.border}` }}>{row.label}</td>
+                      <td style={{ padding: "14px 0", textAlign: "right", fontSize: 15, fontWeight: row.strong ? 800 : 600, color: colours.text, borderBottom: `1px solid ${colours.border}` }}>{displayValue}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+
+            <div style={{ marginTop: 22, fontSize: 13, color: colours.muted, lineHeight: 1.8 }}>
+              <strong style={{ color: colours.text }}>Notes:</strong>
+              <div>• Figures are generated from the invoices, paid invoices, expenses, GST settings, and client allocations currently stored in the portal.</div>
+              {activeFinancialTile === "profit_loss" && <div>• This statement is presented on a management-reporting basis rather than a statutory accounting basis.</div>}
+              {activeFinancialTile === "cash_movement" && <div>• Safe-to-spend reflects paid income after GST, estimated tax, fees, expenses, and current subscription cost.</div>}
+              {activeFinancialTile === "gst_position" && <div>• GST payable is shown net of GST credits recorded on expenses.</div>}
+              {activeFinancialTile === "revenue_summary" && <div>• Client concentration percentages are based on paid revenue currently attributed to each client.</div>}
+            </div>
+          </div>
+
+          <div style={{ padding: "24px 26px 28px", background: "#FCFCFD" }}>
+            <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: 0.8, fontWeight: 800, color: colours.muted, marginBottom: 14 }}>
+              Supporting details
+            </div>
+            <div style={{ display: "grid", gap: 12 }}>
+              {rightColumnRows.map(([label, value]) => (
+                <div key={label} style={{ paddingBottom: 12, borderBottom: `1px solid ${colours.border}` }}>
+                  <div style={{ fontSize: 12, textTransform: "uppercase", color: colours.muted, fontWeight: 800 }}>{label}</div>
+                  <div style={{ fontSize: 16, color: colours.text, fontWeight: 800, marginTop: 6 }}>{value}</div>
+                </div>
+              ))}
+            </div>
+
+            {activeFinancialTile === "revenue_summary" && (
+              <div style={{ marginTop: 22 }}>
+                <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: 0.8, fontWeight: 800, color: colours.muted, marginBottom: 10 }}>
+                  Top clients
+                </div>
+                <div style={{ display: "grid", gap: 10 }}>
+                  {clientRevenueRows.slice(0, 5).map((row) => (
+                    <div key={row.label} style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 14, color: colours.text }}>
+                      <span>{row.label}</span>
+                      <strong>{currency(row.value)}</strong>
+                    </div>
+                  ))}
+                  {!clientRevenueRows.length && <div style={{ fontSize: 13, color: colours.muted }}>No paid client revenue yet.</div>}
+                </div>
+              </div>
+            )}
+
+            {activeFinancialTile === "profit_loss" && (
+              <div style={{ marginTop: 22 }}>
+                <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: 0.8, fontWeight: 800, color: colours.muted, marginBottom: 10 }}>
+                  Largest expense categories
+                </div>
+                <div style={{ display: "grid", gap: 10 }}>
+                  {expenseCategoryRows.slice(0, 5).map((row) => (
+                    <div key={row.label} style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 14, color: colours.text }}>
+                      <span>{row.label}</span>
+                      <strong>{currency(row.value)}</strong>
+                    </div>
+                  ))}
+                  {!expenseCategoryRows.length && <div style={{ fontSize: 13, color: colours.muted }}>No expenses recorded yet.</div>}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
-      <SectionCard title="Simple alerts" right={<div style={{ fontSize: 12, color: colours.muted }}>Automatic observations</div>}>
+      {activeFinancialTile === "revenue_summary" && monthlyFinance.length > 0 && (
+        <SectionCard title="Monthly revenue schedule" right={<div style={{ fontSize: 12, color: colours.muted }}>Recent paid revenue periods</div>}>
+          <DataTable
+            columns={[
+              { key: "label", label: "Period" },
+              { key: "revenue", label: "Paid revenue", render: (v) => currency(v) },
+              { key: "expenses", label: "Expenses", render: (v) => currency(v) },
+              { key: "safeToSpend", label: "Safe to spend", render: (v) => currency(v) },
+            ]}
+            rows={monthlyFinance}
+          />
+        </SectionCard>
+      )}
+
+      <SectionCard title="Automatic observations" right={<div style={{ fontSize: 12, color: colours.muted }}>Report commentary</div>}>
         <div style={{ display: "grid", gap: 12 }}>
           {financialInsights.alerts.map((alert, index) => (
-            <div key={index} style={{ ...cardStyle, padding: 14, background: colours.bg, borderLeft: `4px solid ${index === 0 && alert.includes("No immediate") ? colours.teal : colours.purple}` }}>
-              <div style={{ fontSize: 14, color: colours.text, lineHeight: 1.6 }}>{alert}</div>
+            <div key={index} style={{ padding: "14px 16px", border: `1px solid ${colours.border}`, borderRadius: 12, background: colours.white, fontSize: 14, color: colours.text, lineHeight: 1.7 }}>
+              {alert}
             </div>
           ))}
         </div>
       </SectionCard>
     </div>
     );
+    };
 
     const renderClients = () => {
     const activeClients = clients.filter((c) => {
