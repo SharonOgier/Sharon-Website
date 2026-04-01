@@ -1835,136 +1835,116 @@ return `<!doctype html>
 </html>`;
 }
 
-// ── Gmail-safe email HTML builders (fully inline styles, no <style> block) ──
+// ── Clean email builders — summary + portal link, Gmail-safe ──────────────
 
 function buildInvoiceEmailHtml(invoice, stripeCheckoutUrl = "", ctx = {}) {
   const { profile, clients } = ctx;
   const getClientById = (id) => clients.find((c) => c.id === safeNumber(id));
-  const clientIsGstExempt = (id) => Boolean(getClientById(id)?.outsideAustraliaOrGstExempt);
   const getDocumentBusinessName = () => profile.hideLegalNameOnDocs || !profile.legalBusinessName ? profile.businessName : profile.legalBusinessName;
-  const getDocumentAddress = () => profile.hideAddressOnDocs ? "" : profile.address || "";
   const previewClient = getClientById(invoice.clientId);
   const currencyCode = invoice.currencyCode || getClientCurrencyCode(previewClient);
   const money = (v) => formatCurrencyByCode(v, currencyCode);
-  const adj = calculateAdjustmentValues({ subtotal: safeNumber(invoice.subtotal), total: safeNumber(invoice.total), client: previewClient, profile });
-  const feeAmount = invoice.feeAmount != null ? safeNumber(invoice.feeAmount) : adj.feeAmount;
-  const taxWithheld = invoice.taxWithheld != null ? safeNumber(invoice.taxWithheld) : adj.taxWithheld;
-  const netExpected = invoice.netExpected != null ? safeNumber(invoice.netExpected) : adj.netExpected;
-  const gstStatus = invoice.gstStatus || (clientIsGstExempt(invoice.clientId) ? "GST not applicable" : safeNumber(invoice.gst) > 0 ? "GST applies" : "GST free");
   const businessName = escapeHtml(getDocumentBusinessName());
-  const businessAddress = escapeHtml(getDocumentAddress());
-  const businessEmail = escapeHtml(profile.email || "");
-  const businessPhone = escapeHtml(profile.phone || "");
-  const businessAbn = escapeHtml(profile.abn || "");
   const clientName = escapeHtml(previewClient?.name || "");
-  const clientEmail = escapeHtml(previewClient?.email || "");
-  const paymentReference = escapeHtml(invoice.paymentReference || invoice.invoiceNumber || "");
-  const purchaseOrderReference = escapeHtml(invoice.purchaseOrderReference || "");
-  const purchaseOrderBlock = previewClient?.hasPurchaseOrder && purchaseOrderReference
-    ? `<div style="margin-top:10px;font-size:14px;color:#555;"><strong>PO / Reference:</strong> ${purchaseOrderReference}</div>` : "";
-  const clientDetails = previewClient?.includeAddressDetails && previewClient?.addressDetails
-    ? `<div style="margin-top:6px;color:#555;font-size:13px;">${nl2br(previewClient.addressDetails)}</div>` : "";
-  const lineItems = invoice.lineItems && invoice.lineItems.length > 0
-    ? invoice.lineItems
-    : [{ description: invoice.description || "Professional services", quantity: invoice.quantity || 1, unitPrice: safeNumber(invoice.subtotal) / Math.max(1, safeNumber(invoice.quantity || 1)), rowGst: invoice.gst, rowTotal: invoice.total }];
-
-  const rows = lineItems.map((item) => {
-    const qty = safeNumber(item.quantity || item.qty || 1);
-    const unit = safeNumber(item.unitPrice || item.unit || 0);
-    const rowSub = unit * qty;
-    const rowGst = safeNumber(item.rowGst != null ? item.rowGst : ((item.gstType || "GST on Income (10%)") === "GST on Income (10%)" ? rowSub * 0.1 : 0));
-    const rowTotal = rowSub + rowGst;
-    return `<tr>
-      <td style="padding:10px 12px;border-bottom:1px solid #E2E8F0;font-size:14px;color:#14202B;">${escapeHtml(item.description || "Service")}</td>
-      <td style="padding:10px 12px;border-bottom:1px solid #E2E8F0;font-size:14px;color:#14202B;">${qty}</td>
-      <td style="padding:10px 12px;border-bottom:1px solid #E2E8F0;font-size:14px;color:#14202B;text-align:right;">${money(unit)}</td>
-      <td style="padding:10px 12px;border-bottom:1px solid #E2E8F0;font-size:14px;color:#14202B;text-align:right;">${money(rowGst)}</td>
-      <td style="padding:10px 12px;border-bottom:1px solid #E2E8F0;font-size:14px;color:#14202B;text-align:right;font-weight:700;">${money(rowTotal)}</td>
-    </tr>`;
-  }).join("");
+  const portalUrl = typeof window !== "undefined" ? window.location.origin : "https://portal.sharonogier.com";
 
   const payOnlineBlock = stripeCheckoutUrl || profile.paypalPaymentLink ? `
-    <div style="margin-top:20px;padding:16px;border:1px solid #E2E8F0;border-radius:12px;background:#F7F6F5;">
-      <div style="font-weight:700;color:#14202B;margin-bottom:8px;font-size:15px;">Pay Online</div>
-      <div style="font-size:13px;color:#555;margin-bottom:12px;">Choose your preferred payment method below.</div>
-      ${stripeCheckoutUrl ? `<a href="${stripeCheckoutUrl}" target="_blank" style="display:inline-block;margin-right:10px;background:#6A1B9A;color:#fff;text-decoration:none;padding:10px 18px;border-radius:10px;font-weight:700;font-size:14px;">Pay with Card</a>` : ""}
-      ${profile.paypalPaymentLink ? `<a href="${profile.paypalPaymentLink}" target="_blank" style="display:inline-block;background:#0070BA;color:#fff;text-decoration:none;padding:10px 18px;border-radius:10px;font-weight:700;font-size:14px;">Pay with PayPal</a>` : ""}
-    </div>` : "";
-
-  const logoBlock = profile.logoDataUrl
-    ? `<div style="margin-bottom:16px;"><img src="${profile.logoDataUrl}" alt="Logo" style="max-height:80px;max-width:220px;object-fit:contain;" /></div>` : "";
+    <tr><td style="padding:0 0 24px;">
+      <table width="100%" cellpadding="0" cellspacing="0" style="background:#F7F6F5;border:1px solid #E2E8F0;border-radius:12px;padding:16px;">
+        <tr><td style="padding:16px;">
+          <div style="font-weight:700;font-size:15px;color:#14202B;margin-bottom:8px;">Pay Online</div>
+          <div style="font-size:13px;color:#555;margin-bottom:12px;">Choose your preferred payment method below.</div>
+          ${stripeCheckoutUrl ? `<a href="${stripeCheckoutUrl}" style="display:inline-block;margin-right:10px;background:#6A1B9A;color:#fff;text-decoration:none;padding:10px 18px;border-radius:10px;font-weight:700;font-size:14px;">Pay with Card</a>` : ""}
+          ${profile.paypalPaymentLink ? `<a href="${profile.paypalPaymentLink}" style="display:inline-block;background:#0070BA;color:#fff;text-decoration:none;padding:10px 18px;border-radius:10px;font-weight:700;font-size:14px;">Pay with PayPal</a>` : ""}
+        </td></tr>
+      </table>
+    </td></tr>` : "";
 
   return `<!doctype html>
 <html>
-<head><meta charset="utf-8"/><title>Invoice ${invoice.invoiceNumber || ""}</title></head>
+<head><meta charset="utf-8"/><title>Invoice ${escapeHtml(invoice.invoiceNumber || "")}</title></head>
 <body style="margin:0;padding:0;background:#F8FAFC;font-family:Arial,sans-serif;color:#14202B;">
-<div style="max-width:680px;margin:0 auto;padding:32px 16px;">
-<div style="background:#fff;border:1px solid #E2E8F0;border-radius:16px;padding:32px;">
-  ${logoBlock}
-  <table width="100%" cellpadding="0" cellspacing="0" style="border-bottom:2px solid #E2E8F0;padding-bottom:20px;margin-bottom:24px;">
-    <tr>
-      <td style="vertical-align:top;">
-        <div style="font-size:32px;font-weight:900;color:#6A1B9A;">TAX INVOICE</div>
-        <div style="margin-top:10px;font-weight:700;font-size:15px;">${businessName}</div>
-        ${businessAddress ? `<div style="font-size:13px;color:#555;margin-top:3px;">${businessAddress}</div>` : ""}
-        <div style="font-size:13px;color:#555;margin-top:3px;">${businessEmail}${invoice.hidePhoneNumber ? "" : ` | ${businessPhone}`}</div>
-        <div style="font-size:13px;color:#555;margin-top:3px;">ABN: ${businessAbn}</div>
-      </td>
-      <td style="vertical-align:top;text-align:right;">
-        <div style="font-size:14px;margin-bottom:4px;"><strong>Invoice #:</strong> ${invoice.invoiceNumber || ""}</div>
-        <div style="font-size:14px;margin-bottom:4px;"><strong>Date:</strong> ${formatDateAU(invoice.invoiceDate)}</div>
-        <div style="font-size:14px;"><strong>Due:</strong> ${formatDateAU(invoice.dueDate)}</div>
-      </td>
-    </tr>
-  </table>
-  <div style="margin-bottom:24px;">
-    <div style="font-size:12px;font-weight:700;text-transform:uppercase;color:#64748B;margin-bottom:6px;">Billed To</div>
-    <div style="font-weight:700;font-size:15px;">${clientName}</div>
-    <div style="font-size:13px;color:#555;margin-top:2px;">${clientEmail}</div>
-    ${clientDetails}${purchaseOrderBlock}
-  </div>
-  <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-bottom:24px;">
-    <thead>
-      <tr style="background:#F8FAFC;">
-        <th style="padding:10px 12px;text-align:left;font-size:12px;font-weight:700;color:#64748B;border-bottom:2px solid #E2E8F0;">Description</th>
-        <th style="padding:10px 12px;text-align:left;font-size:12px;font-weight:700;color:#64748B;border-bottom:2px solid #E2E8F0;">Qty</th>
-        <th style="padding:10px 12px;text-align:right;font-size:12px;font-weight:700;color:#64748B;border-bottom:2px solid #E2E8F0;">Unit Price</th>
-        <th style="padding:10px 12px;text-align:right;font-size:12px;font-weight:700;color:#64748B;border-bottom:2px solid #E2E8F0;">GST</th>
-        <th style="padding:10px 12px;text-align:right;font-size:12px;font-weight:700;color:#64748B;border-bottom:2px solid #E2E8F0;">Total</th>
-      </tr>
-    </thead>
-    <tbody>${rows}</tbody>
-  </table>
-  <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
-    <tr><td></td><td width="320">
-      <table width="100%" cellpadding="0" cellspacing="0">
-        <tr><td style="padding:5px 0;font-size:14px;color:#555;">Subtotal (ex GST)</td><td style="padding:5px 0;font-size:14px;text-align:right;">${money(invoice.subtotal)}</td></tr>
-        <tr><td style="padding:5px 0;font-size:14px;color:#555;">GST</td><td style="padding:5px 0;font-size:14px;text-align:right;">${money(invoice.gst)}</td></tr>
-        <tr><td style="padding:5px 0;font-size:14px;color:#555;">GST status</td><td style="padding:5px 0;font-size:14px;text-align:right;">${gstStatus}</td></tr>
-        ${feeAmount > 0 ? `<tr><td style="padding:5px 0;font-size:14px;color:#555;">Less fees</td><td style="padding:5px 0;font-size:14px;text-align:right;">${money(feeAmount)}</td></tr>` : ""}
-        ${taxWithheld > 0 ? `<tr><td style="padding:5px 0;font-size:14px;color:#555;">Less tax withheld</td><td style="padding:5px 0;font-size:14px;text-align:right;">${money(taxWithheld)}</td></tr>` : ""}
-        <tr><td colspan="2" style="padding:0;"><div style="border-top:2px solid #E2E8F0;margin:8px 0;"></div></td></tr>
-        <tr><td style="padding:6px 0;font-size:18px;font-weight:800;color:#006D6D;">Amount Due</td><td style="padding:6px 0;font-size:18px;font-weight:800;color:#006D6D;text-align:right;">${money(invoice.total)}</td></tr>
-        <tr><td style="padding:4px 0;font-size:14px;font-weight:700;color:#6A1B9A;">Net expected</td><td style="padding:4px 0;font-size:14px;font-weight:700;color:#6A1B9A;text-align:right;">${money(netExpected)}</td></tr>
-      </table>
-    </td></tr>
-  </table>
-  <div style="border-top:1px solid #E2E8F0;padding-top:20px;">
-    <div style="font-weight:700;font-size:15px;margin-bottom:10px;">Please make payment to:</div>
-    <div style="font-size:14px;color:#14202B;line-height:1.9;">
-      ${profile.bankName ? `<div><strong>Account Name:</strong> ${escapeHtml(profile.bankName)}</div>` : ""}
-      ${profile.bsb ? `<div><strong>BSB:</strong> ${escapeHtml(profile.bsb)}</div>` : ""}
-      ${profile.accountNumber ? `<div><strong>Account Number:</strong> ${escapeHtml(profile.accountNumber)}</div>` : ""}
-      ${profile.payId ? `<div><strong>PayID:</strong> ${escapeHtml(profile.payId)}</div>` : ""}
-    </div>
-    <div style="margin-top:10px;font-size:13px;color:#555;">Please use reference: <strong>${paymentReference}</strong></div>
-    ${payOnlineBlock}
-  </div>
-  <div style="margin-top:32px;padding-top:16px;border-top:1px solid #E2E8F0;font-size:12px;color:#94A3B8;">
-    For any queries please contact ${escapeHtml(profile.businessName || "Your business")} &nbsp;&middot;&nbsp; Private &amp; Confidential
-  </div>
-</div>
-</div>
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#F8FAFC;padding:32px 16px;">
+  <tr><td align="center">
+    <table width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;">
+
+      <!-- Card -->
+      <tr><td style="background:#fff;border:1px solid #E2E8F0;border-radius:16px;padding:32px;">
+        <table width="100%" cellpadding="0" cellspacing="0">
+
+          <!-- Title bar -->
+          <tr><td style="padding:0 0 24px;border-bottom:2px solid #E2E8F0;">
+            <div style="font-size:28px;font-weight:900;color:#6A1B9A;">TAX INVOICE</div>
+            <div style="font-size:15px;font-weight:700;margin-top:6px;">${businessName}</div>
+            <div style="font-size:13px;color:#555;margin-top:2px;">ABN: ${escapeHtml(profile.abn || "")}</div>
+          </td></tr>
+
+          <!-- Details -->
+          <tr><td style="padding:20px 0;border-bottom:1px solid #E2E8F0;">
+            <table width="100%" cellpadding="0" cellspacing="0">
+              <tr>
+                <td style="vertical-align:top;width:50%;">
+                  <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#64748B;margin-bottom:6px;">Billed To</div>
+                  <div style="font-size:15px;font-weight:700;">${clientName}</div>
+                </td>
+                <td style="vertical-align:top;text-align:right;width:50%;">
+                  <div style="font-size:13px;color:#555;margin-bottom:3px;"><strong>Invoice #:</strong> ${escapeHtml(invoice.invoiceNumber || "")}</div>
+                  <div style="font-size:13px;color:#555;margin-bottom:3px;"><strong>Date:</strong> ${formatDateAU(invoice.invoiceDate)}</div>
+                  <div style="font-size:13px;color:#555;"><strong>Due:</strong> ${formatDateAU(invoice.dueDate)}</div>
+                </td>
+              </tr>
+            </table>
+          </td></tr>
+
+          <!-- Amount -->
+          <tr><td style="padding:20px 0;border-bottom:1px solid #E2E8F0;">
+            <table width="100%" cellpadding="0" cellspacing="0">
+              <tr>
+                <td style="font-size:14px;color:#555;">Subtotal (ex GST)</td>
+                <td style="font-size:14px;text-align:right;">${money(invoice.subtotal)}</td>
+              </tr>
+              <tr>
+                <td style="font-size:14px;color:#555;padding-top:4px;">GST</td>
+                <td style="font-size:14px;text-align:right;padding-top:4px;">${money(invoice.gst)}</td>
+              </tr>
+              <tr>
+                <td style="font-size:20px;font-weight:800;color:#006D6D;padding-top:12px;">Amount Due</td>
+                <td style="font-size:20px;font-weight:800;color:#006D6D;text-align:right;padding-top:12px;">${money(invoice.total)}</td>
+              </tr>
+            </table>
+          </td></tr>
+
+          <!-- Payment -->
+          <tr><td style="padding:20px 0;border-bottom:1px solid #E2E8F0;">
+            <div style="font-size:13px;font-weight:700;margin-bottom:8px;">Payment Details</div>
+            <div style="font-size:13px;color:#555;line-height:1.9;">
+              ${profile.bankName ? `<div><strong>Account Name:</strong> ${escapeHtml(profile.bankName)}</div>` : ""}
+              ${profile.bsb ? `<div><strong>BSB:</strong> ${escapeHtml(profile.bsb)}</div>` : ""}
+              ${profile.accountNumber ? `<div><strong>Account Number:</strong> ${escapeHtml(profile.accountNumber)}</div>` : ""}
+              ${profile.payId ? `<div><strong>PayID:</strong> ${escapeHtml(profile.payId)}</div>` : ""}
+              <div style="margin-top:6px;"><strong>Reference:</strong> ${escapeHtml(invoice.paymentReference || invoice.invoiceNumber || "")}</div>
+            </div>
+          </td></tr>
+
+          ${payOnlineBlock}
+
+          <!-- View link -->
+          <tr><td style="padding:24px 0 8px;text-align:center;">
+            <div style="font-size:14px;color:#555;margin-bottom:14px;">Click the button below to view your full invoice.</div>
+            <a href="${portalUrl}" style="display:inline-block;background:#6A1B9A;color:#fff;text-decoration:none;padding:13px 28px;border-radius:12px;font-weight:700;font-size:15px;">View Invoice</a>
+          </td></tr>
+
+          <!-- Footer -->
+          <tr><td style="padding-top:24px;border-top:1px solid #E2E8F0;font-size:12px;color:#94A3B8;text-align:center;">
+            ${escapeHtml(businessName)} &nbsp;&middot;&nbsp; ${escapeHtml(profile.email || "")} &nbsp;&middot;&nbsp; Private &amp; Confidential
+          </td></tr>
+
+        </table>
+      </td></tr>
+
+    </table>
+  </td></tr>
+</table>
 </body>
 </html>`;
 }
@@ -1972,111 +1952,99 @@ function buildInvoiceEmailHtml(invoice, stripeCheckoutUrl = "", ctx = {}) {
 function buildQuoteEmailHtmlInline(quote, ctx = {}) {
   const { profile, clients } = ctx;
   const getClientById = (id) => clients.find((c) => c.id === safeNumber(id));
-  const clientIsGstExempt = (id) => Boolean(getClientById(id)?.outsideAustraliaOrGstExempt);
   const getDocumentBusinessName = () => profile.hideLegalNameOnDocs || !profile.legalBusinessName ? profile.businessName : profile.legalBusinessName;
-  const getDocumentAddress = () => profile.hideAddressOnDocs ? "" : profile.address || "";
   const qClient = getClientById(quote.clientId);
   const currencyCode = quote.currencyCode || getClientCurrencyCode(qClient);
   const money = (v) => formatCurrencyByCode(v, currencyCode);
-  const adj = calculateAdjustmentValues({ subtotal: safeNumber(quote.subtotal), total: safeNumber(quote.total), client: qClient, profile });
-  const gstStatus = clientIsGstExempt(quote.clientId) ? "GST not applicable" : safeNumber(quote.gst) > 0 ? "GST applies" : "GST free";
   const businessName = escapeHtml(getDocumentBusinessName());
-  const businessAddress = escapeHtml(getDocumentAddress());
-  const businessEmail = escapeHtml(profile.email || "");
-  const businessPhone = escapeHtml(profile.phone || "");
-  const businessAbn = escapeHtml(profile.abn || "");
   const clientName = escapeHtml(qClient?.name || "");
-  const clientDetails = qClient?.includeAddressDetails && qClient?.addressDetails
-    ? `<div style="margin-top:6px;color:#555;font-size:13px;">${nl2br(qClient.addressDetails)}</div>` : "";
-  const notesBlock = quote.comments
-    ? `<div style="margin-top:20px;padding:14px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;font-size:14px;">${nl2br(quote.comments)}</div>` : "";
-  const lineItems = quote.lineItems && quote.lineItems.length > 0
-    ? quote.lineItems
-    : [{ description: quote.description || "Professional services", quantity: quote.quantity || 1, unitPrice: safeNumber(quote.subtotal) / Math.max(1, safeNumber(quote.quantity || 1)), rowGst: quote.gst, rowTotal: quote.total }];
+  const portalUrl = typeof window !== "undefined" ? window.location.origin : "https://portal.sharonogier.com";
 
-  const rows = lineItems.map((item) => {
-    const qty = safeNumber(item.quantity || item.qty || 1);
-    const unit = safeNumber(item.unitPrice || item.unit || 0);
-    const rowSub = unit * qty;
-    const rowGst = safeNumber(item.rowGst != null ? item.rowGst : ((item.gstType || "GST on Income (10%)") === "GST on Income (10%)" ? rowSub * 0.1 : 0));
-    return `<tr>
-      <td style="padding:10px 12px;border-bottom:1px solid #E2E8F0;font-size:14px;color:#14202B;">${escapeHtml(item.description || "Service")}</td>
-      <td style="padding:10px 12px;border-bottom:1px solid #E2E8F0;font-size:14px;color:#14202B;">${qty}</td>
-      <td style="padding:10px 12px;border-bottom:1px solid #E2E8F0;font-size:14px;color:#14202B;text-align:right;">${money(unit)}</td>
-      <td style="padding:10px 12px;border-bottom:1px solid #E2E8F0;font-size:14px;color:#14202B;text-align:right;">${money(rowGst)}</td>
-      <td style="padding:10px 12px;border-bottom:1px solid #E2E8F0;font-size:14px;color:#14202B;text-align:right;font-weight:700;">${money(rowSub + rowGst)}</td>
-    </tr>`;
-  }).join("");
-
-  const logoBlock = profile.logoDataUrl
-    ? `<div style="margin-bottom:16px;"><img src="${profile.logoDataUrl}" alt="Logo" style="max-height:80px;max-width:220px;object-fit:contain;" /></div>` : "";
+  const notesBlock = quote.comments ? `
+    <tr><td style="padding:0 0 20px;">
+      <div style="font-size:12px;font-weight:700;text-transform:uppercase;color:#64748B;margin-bottom:6px;">Notes</div>
+      <div style="font-size:14px;color:#555;line-height:1.6;">${nl2br(escapeHtml(quote.comments))}</div>
+    </td></tr>` : "";
 
   return `<!doctype html>
 <html>
-<head><meta charset="utf-8"/><title>Quote ${quote.quoteNumber || ""}</title></head>
+<head><meta charset="utf-8"/><title>Quote ${escapeHtml(quote.quoteNumber || "")}</title></head>
 <body style="margin:0;padding:0;background:#F8FAFC;font-family:Arial,sans-serif;color:#14202B;">
-<div style="max-width:680px;margin:0 auto;padding:32px 16px;">
-<div style="background:#fff;border:1px solid #E2E8F0;border-radius:16px;padding:32px;">
-  ${logoBlock}
-  <table width="100%" cellpadding="0" cellspacing="0" style="border-bottom:2px solid #E2E8F0;padding-bottom:20px;margin-bottom:24px;">
-    <tr>
-      <td style="vertical-align:top;">
-        <div style="font-size:32px;font-weight:900;color:#6A1B9A;">QUOTE</div>
-        <div style="margin-top:10px;font-weight:700;font-size:15px;">${businessName}</div>
-        ${businessAddress ? `<div style="font-size:13px;color:#555;margin-top:3px;">${businessAddress}</div>` : ""}
-        <div style="font-size:13px;color:#555;margin-top:3px;">${businessEmail}${quote.hidePhoneNumber ? "" : ` | ${businessPhone}`}</div>
-        <div style="font-size:13px;color:#555;margin-top:3px;">ABN: ${businessAbn}</div>
-      </td>
-      <td style="vertical-align:top;text-align:right;">
-        <div style="font-size:14px;margin-bottom:4px;"><strong>Quote ref:</strong> ${quote.quoteNumber || ""}</div>
-        <div style="font-size:14px;margin-bottom:4px;"><strong>Quote date:</strong> ${formatDateAU(quote.quoteDate)}</div>
-        <div style="font-size:14px;"><strong>Expiry date:</strong> ${formatDateAU(quote.expiryDate)}</div>
-      </td>
-    </tr>
-  </table>
-  <div style="margin-bottom:24px;">
-    <div style="font-size:12px;font-weight:700;text-transform:uppercase;color:#64748B;margin-bottom:6px;">Prepared For</div>
-    <div style="font-weight:700;font-size:15px;">${clientName}</div>
-    ${clientDetails}
-  </div>
-  <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-bottom:24px;">
-    <thead>
-      <tr style="background:#F8FAFC;">
-        <th style="padding:10px 12px;text-align:left;font-size:12px;font-weight:700;color:#64748B;border-bottom:2px solid #E2E8F0;">Description</th>
-        <th style="padding:10px 12px;text-align:left;font-size:12px;font-weight:700;color:#64748B;border-bottom:2px solid #E2E8F0;">Qty</th>
-        <th style="padding:10px 12px;text-align:right;font-size:12px;font-weight:700;color:#64748B;border-bottom:2px solid #E2E8F0;">Unit Price</th>
-        <th style="padding:10px 12px;text-align:right;font-size:12px;font-weight:700;color:#64748B;border-bottom:2px solid #E2E8F0;">GST</th>
-        <th style="padding:10px 12px;text-align:right;font-size:12px;font-weight:700;color:#64748B;border-bottom:2px solid #E2E8F0;">Total</th>
-      </tr>
-    </thead>
-    <tbody>${rows}</tbody>
-  </table>
-  <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
-    <tr><td></td><td width="320">
-      <table width="100%" cellpadding="0" cellspacing="0">
-        <tr><td style="padding:5px 0;font-size:14px;color:#555;">Subtotal (excl GST)</td><td style="padding:5px 0;font-size:14px;text-align:right;">${money(quote.subtotal)}</td></tr>
-        <tr><td style="padding:5px 0;font-size:14px;color:#555;">GST</td><td style="padding:5px 0;font-size:14px;text-align:right;">${money(quote.gst)}</td></tr>
-        <tr><td style="padding:5px 0;font-size:14px;color:#555;">GST status</td><td style="padding:5px 0;font-size:14px;text-align:right;">${gstStatus}</td></tr>
-        ${adj.feeAmount > 0 ? `<tr><td style="padding:5px 0;font-size:14px;color:#555;">Less fees</td><td style="padding:5px 0;font-size:14px;text-align:right;">${money(adj.feeAmount)}</td></tr>` : ""}
-        ${adj.taxWithheld > 0 ? `<tr><td style="padding:5px 0;font-size:14px;color:#555;">Less tax withheld</td><td style="padding:5px 0;font-size:14px;text-align:right;">${money(adj.taxWithheld)}</td></tr>` : ""}
-        <tr><td colspan="2" style="padding:0;"><div style="border-top:2px solid #E2E8F0;margin:8px 0;"></div></td></tr>
-        <tr><td style="padding:6px 0;font-size:18px;font-weight:800;color:#006D6D;">Total Estimate</td><td style="padding:6px 0;font-size:18px;font-weight:800;color:#006D6D;text-align:right;">${money(quote.total)}</td></tr>
-        <tr><td style="padding:4px 0;font-size:14px;font-weight:700;color:#6A1B9A;">Net expected</td><td style="padding:4px 0;font-size:14px;font-weight:700;color:#6A1B9A;text-align:right;">${money(adj.netExpected)}</td></tr>
-      </table>
-    </td></tr>
-  </table>
-  ${notesBlock}
-  <div style="margin-top:24px;font-size:12px;color:#94A3B8;">This is a quote only and not a tax invoice.</div>
-  <div style="margin-top:20px;padding-top:16px;border-top:1px solid #E2E8F0;font-size:12px;color:#94A3B8;">
-    For any queries please contact ${escapeHtml(profile.businessName || "Your business")} &nbsp;&middot;&nbsp; Private &amp; Confidential
-  </div>
-</div>
-</div>
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#F8FAFC;padding:32px 16px;">
+  <tr><td align="center">
+    <table width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;">
+
+      <!-- Card -->
+      <tr><td style="background:#fff;border:1px solid #E2E8F0;border-radius:16px;padding:32px;">
+        <table width="100%" cellpadding="0" cellspacing="0">
+
+          <!-- Title bar -->
+          <tr><td style="padding:0 0 24px;border-bottom:2px solid #E2E8F0;">
+            <div style="font-size:28px;font-weight:900;color:#6A1B9A;">QUOTE</div>
+            <div style="font-size:15px;font-weight:700;margin-top:6px;">${businessName}</div>
+            <div style="font-size:13px;color:#555;margin-top:2px;">ABN: ${escapeHtml(profile.abn || "")}</div>
+          </td></tr>
+
+          <!-- Details -->
+          <tr><td style="padding:20px 0;border-bottom:1px solid #E2E8F0;">
+            <table width="100%" cellpadding="0" cellspacing="0">
+              <tr>
+                <td style="vertical-align:top;width:50%;">
+                  <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#64748B;margin-bottom:6px;">Prepared For</div>
+                  <div style="font-size:15px;font-weight:700;">${clientName}</div>
+                </td>
+                <td style="vertical-align:top;text-align:right;width:50%;">
+                  <div style="font-size:13px;color:#555;margin-bottom:3px;"><strong>Quote ref:</strong> ${escapeHtml(quote.quoteNumber || "")}</div>
+                  <div style="font-size:13px;color:#555;margin-bottom:3px;"><strong>Date:</strong> ${formatDateAU(quote.quoteDate)}</div>
+                  <div style="font-size:13px;color:#555;"><strong>Expiry:</strong> ${formatDateAU(quote.expiryDate)}</div>
+                </td>
+              </tr>
+            </table>
+          </td></tr>
+
+          <!-- Amount -->
+          <tr><td style="padding:20px 0;border-bottom:1px solid #E2E8F0;">
+            <table width="100%" cellpadding="0" cellspacing="0">
+              <tr>
+                <td style="font-size:14px;color:#555;">Subtotal (ex GST)</td>
+                <td style="font-size:14px;text-align:right;">${money(quote.subtotal)}</td>
+              </tr>
+              <tr>
+                <td style="font-size:14px;color:#555;padding-top:4px;">GST</td>
+                <td style="font-size:14px;text-align:right;padding-top:4px;">${money(quote.gst)}</td>
+              </tr>
+              <tr>
+                <td style="font-size:20px;font-weight:800;color:#006D6D;padding-top:12px;">Total Estimate</td>
+                <td style="font-size:20px;font-weight:800;color:#006D6D;text-align:right;padding-top:12px;">${money(quote.total)}</td>
+              </tr>
+            </table>
+          </td></tr>
+
+          ${notesBlock}
+
+          <!-- View link -->
+          <tr><td style="padding:24px 0 8px;text-align:center;">
+            <div style="font-size:14px;color:#555;margin-bottom:14px;">Click the button below to view your full quote.</div>
+            <a href="${portalUrl}" style="display:inline-block;background:#6A1B9A;color:#fff;text-decoration:none;padding:13px 28px;border-radius:12px;font-weight:700;font-size:15px;">View Quote</a>
+          </td></tr>
+
+          <!-- Footer -->
+          <tr><td style="padding-top:24px;border-top:1px solid #E2E8F0;font-size:12px;color:#94A3B8;text-align:center;">
+            ${escapeHtml(businessName)} &nbsp;&middot;&nbsp; ${escapeHtml(profile.email || "")} &nbsp;&middot;&nbsp; Private &amp; Confidential
+          </td></tr>
+
+        </table>
+      </td></tr>
+
+    </table>
+  </td></tr>
+</table>
 </body>
 </html>`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+
 
 function buildInvoiceHtml(invoice, stripeCheckoutUrl = "", options = {}, ctx = {}) {
   const { profile, clients } = ctx;
