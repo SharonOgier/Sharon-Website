@@ -2134,6 +2134,7 @@ export default function AccountingPortalPrototype() {
   const [recurringSelected, setRecurringSelected] = useState([]);
   const recurringShownRef = useRef(false);
   const [quoteWizardStep, setQuoteWizardStep] = useState(1);
+  const [isMobileViewport, setIsMobileViewport] = useState(() => (typeof window !== "undefined" ? window.innerWidth <= 768 : false));
   const [activePage, setActivePage] = useState("dashboard");
   const [activeSettingsTab, setActiveSettingsTab] = useState("Profile");
   const [authUser, setAuthUser] = useState(null);
@@ -2315,6 +2316,14 @@ export default function AccountingPortalPrototype() {
 
   const [quoteEditorOpen, setQuoteEditorOpen] = useState(false);
   const [quoteEditorForm, setQuoteEditorForm] = useState(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const onResize = () => setIsMobileViewport(window.innerWidth <= 768);
+    onResize();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   const [clientEditorOpen, setClientEditorOpen] = useState(false);
   const [clientEditorForm, setClientEditorForm] = useState(null);
@@ -4207,7 +4216,40 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     try {
       const savedInvoice = await upsertRecordInDatabase(SUPABASE_TABLES.invoices, payload);
       let nextInvoice = savedInvoice;
-      const saveMessage = "Invoice saved to Supabase database. Use Preview to print or download the PDF.";
+      let saveMessage = "Invoice saved to Supabase database. Use Preview to print or download the PDF.";
+
+      const invoiceClient = getClientById(nextInvoice.clientId);
+      const shouldAutoEmailClient = Boolean(
+        invoiceClient?.sendToClient && isValidEmail(invoiceClient?.email)
+      );
+
+      if (shouldAutoEmailClient) {
+        try {
+          const emailResult = await sendSavedDocumentEmail({
+            documentType: "invoice",
+            documentRecord: nextInvoice,
+          });
+
+          if (emailResult?.ok) {
+            const emailedInvoice = {
+              ...nextInvoice,
+              emailedAt: new Date().toISOString(),
+              emailRecipients: emailResult.recipients || [],
+            };
+            nextInvoice = await upsertRecordInDatabase(SUPABASE_TABLES.invoices, emailedInvoice);
+            saveMessage = emailResult.message || "Invoice saved and emailed to client.";
+          } else if (!emailResult?.skipped) {
+            const emailErrorMessage = emailResult?.message || "Invoice email failed after save.";
+            toast.warning(emailErrorMessage);
+            saveMessage = `Invoice saved, but email failed: ${emailErrorMessage}`;
+          }
+        } catch (emailError) {
+          console.error("INVOICE AUTO EMAIL ERROR:", emailError);
+          const emailErrorMessage = emailError?.message || "Invoice email failed after save.";
+          toast.warning(emailErrorMessage);
+          saveMessage = `Invoice saved, but email failed: ${emailErrorMessage}`;
+        }
+      }
 
       setInvoices((prev) => [...prev, nextInvoice]);
       setInvoiceForm((prev) => ({
@@ -6048,7 +6090,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
         </div>
         <SectionCard title="Create Invoice">
           {/* ── Wizard progress bar ── */}
-          <div style={{ display: "flex", alignItems: "center", marginBottom: 28 }}>
+          <div style={{ overflowX: isMobileViewport ? "auto" : "visible", paddingBottom: isMobileViewport ? 6 : 0 }}><div style={{ display: "flex", alignItems: "center", marginBottom: 28, minWidth: isMobileViewport ? 620 : 0 }}>
             {["Client", "Details", "Line Items", "Review & Save"].map((label, i) => {
               const step = i + 1;
               const active = invoiceWizardStep === step;
@@ -6068,7 +6110,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
                 </React.Fragment>
               );
             })}
-          </div>
+          </div></div>
 
           {/* ── Step 1: Client ── */}
           {invoiceWizardStep === 1 && (
@@ -6795,7 +6837,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
         </div>
         <SectionCard title="Create Quote">
           {/* ── Wizard progress bar ── */}
-          <div style={{ display: "flex", alignItems: "center", marginBottom: 28 }}>
+          <div style={{ overflowX: isMobileViewport ? "auto" : "visible", paddingBottom: isMobileViewport ? 6 : 0 }}><div style={{ display: "flex", alignItems: "center", marginBottom: 28, minWidth: isMobileViewport ? 620 : 0 }}>
             {["Client", "Details", "Line Items", "Review & Save"].map((label, i) => {
               const step = i + 1;
               const active = quoteWizardStep === step;
@@ -6815,6 +6857,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
                 </React.Fragment>
               );
             })}
+          </div>
           </div>
 
           {/* ── Step 1: Client ── */}
@@ -8045,7 +8088,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
         </div>
       </div>
       <SectionCard
-        title="Expense Details"
+        title={isMobileViewport ? "Expense Wizard" : "Expense Details"}
         right={
           <button
             style={buttonPrimary}
@@ -8054,10 +8097,34 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
               setExpenseTypeStep(1);
             }}
           >
-            Add Expense
+            {isMobileViewport ? "Start Wizard" : "Add Expense"}
           </button>
         }
       >
+        {isMobileViewport && (
+          <div style={{ display: "grid", gap: 12, marginBottom: 18 }}>
+            <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
+              {[
+                { step: 1, label: "Type & receipt", done: Boolean(expenseTypeSelection || expenseForm.receiptFileName) },
+                { step: 2, label: "Details", done: Boolean(expenseForm.date && expenseForm.supplier && expenseForm.amount) },
+                { step: 3, label: "Save", done: false },
+              ].map((item, index) => (
+                <div key={item.step} style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 120 }}>
+                  <div style={{ width: 30, height: 30, borderRadius: 999, background: item.done ? colours.teal : index === 0 ? colours.purple : colours.border, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 800, flexShrink: 0 }}>
+                    {item.done ? "✓" : item.step}
+                  </div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: item.done ? colours.teal : colours.text }}>{item.label}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{ ...cardStyle, padding: 14, background: colours.lightPurple }}>
+              <div style={{ fontSize: 13, fontWeight: 800, color: colours.purple, marginBottom: 6 }}>Mobile wizard</div>
+              <div style={{ fontSize: 13, color: colours.text, lineHeight: 1.6 }}>
+                Use <strong>Start Wizard</strong> first to choose the expense type, work type, category and receipt. Then complete the details below and save.
+              </div>
+            </div>
+          </div>
+        )}
         <div
           style={{
             display: "grid",
@@ -8176,9 +8243,14 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
           </div>
         ) : <EmptyState icon="📁" title="No documents yet" message="Upload receipts, contracts and generated PDFs here. All documents are stored securely against your account." />}
 
-        <div style={{ marginTop: 18 }}>
+        <div style={{ marginTop: 18, display: "flex", gap: 10, flexWrap: "wrap" }}>
+          {isMobileViewport && (
+            <button style={buttonSecondary} onClick={() => { setExpenseModalOpen(true); setExpenseTypeStep(1); }}>
+              Edit Wizard Steps
+            </button>
+          )}
           <button style={buttonPrimary} onClick={saveExpense}>
-            Save Expense
+            {isMobileViewport ? "Save Expense ✓" : "Save Expense"}
           </button>
         </div>
       </SectionCard>
