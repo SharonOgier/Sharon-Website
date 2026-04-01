@@ -3633,18 +3633,9 @@ export default function AccountingPortalPrototype() {
 
       {/* ── Financial Reports ── */}
       {(() => {
-        const paidInvs    = invoices.filter(inv => inv.status === "Paid");
-        const totalRev    = paidInvs.reduce((s, inv) => s + safeNumber(inv.total), 0);
-        const totalGST    = paidInvs.reduce((s, inv) => s + safeNumber(inv.gst), 0);
-        const revExGST    = totalRev - totalGST;
-        const totalExp    = expenses.reduce((s, e) => s + safeNumber(e.amount), 0);
-        const gstOnExp    = expenses.filter(e => e.gstIncluded !== false).reduce((s, e) => s + safeNumber(e.amount) * 0.1 / 1.1, 0);
-        const expExGST    = totalExp - gstOnExp;
-        const grossProfit = revExGST - expExGST;
-        const taxRate     = safeNumber(profile.taxRate || 30);
-        const estTax      = Math.max(0, grossProfit * (taxRate / 100));
-        const netProfit   = grossProfit - estTax;
-        const netGST      = totalGST - gstOnExp;
+        const taxRate = safeNumber(profile.taxRate || 30);
+        const fn = (profile.businessName||"report").replace(/\s+/g,"_");
+        const dt = new Date().toISOString().slice(0,10);
 
         const dlCSV = (filename, rows) => {
           const esc = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
@@ -3655,121 +3646,194 @@ export default function AccountingPortalPrototype() {
           document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
         };
 
-        const plRows = () => [
-          [`${profile.businessName || "Business"} — Profit & Loss Statement`],
-          [`Generated: ${new Date().toLocaleDateString("en-AU")}`],
-          [],
-          ["INCOME"],
-          ["Invoice #", "Client", "Date", "Amount (incl GST)", "GST", "Amount (ex GST)"],
-          ...paidInvs.map(inv => { const c = getClientById(inv.clientId); const g = safeNumber(inv.gst); return [`${inv.invoiceNumber||inv.id}`, c?.name||c?.businessName||"", inv.paidAt?.slice(0,10)||inv.invoiceDate||"", safeNumber(inv.total).toFixed(2), g.toFixed(2), (safeNumber(inv.total)-g).toFixed(2)]; }),
-          ["TOTAL INCOME","","",totalRev.toFixed(2),totalGST.toFixed(2),revExGST.toFixed(2)],[],
-          ["EXPENSES"],["Category","Supplier","Date","Amount (incl GST)","GST","Amount (ex GST)"],
-          ...expenses.map(e => { const g = e.gstIncluded!==false?safeNumber(e.amount)*0.1/1.1:0; return [e.category||e.expenseType||"Other",e.supplier||e.description||"",e.date||"",safeNumber(e.amount).toFixed(2),g.toFixed(2),(safeNumber(e.amount)-g).toFixed(2)]; }),
-          ["TOTAL EXPENSES","","",totalExp.toFixed(2),gstOnExp.toFixed(2),expExGST.toFixed(2)],[],
-          ["P&L SUMMARY"],["Revenue (ex GST)",revExGST.toFixed(2)],["Less: Expenses (ex GST)",expExGST.toFixed(2)],
-          ["Gross Profit",grossProfit.toFixed(2)],[`Less: Est. Tax (${taxRate}%)`,estTax.toFixed(2)],["Net Profit",netProfit.toFixed(2)],[],
-          ["GST SUMMARY"],["GST Collected",totalGST.toFixed(2)],["Less: GST Credits",gstOnExp.toFixed(2)],["Net GST Payable",netGST.toFixed(2)],
-        ];
-
-        const incomeRows = () => [
-          ["Monthly Income Statement"],
-          [`${profile.businessName||""} · ABN ${profile.abn||""}`],
-          [`Generated: ${new Date().toLocaleDateString("en-AU")}`],[],
-          ["Month","Revenue (incl GST)","Revenue (ex GST)","Expenses (incl GST)","Expenses (ex GST)","Net Position"],
-          ...monthlyFinance.map(m => [m.label, m.revenue.toFixed(2), (m.revenue-m.revenue*0.1/1.1).toFixed(2), m.expenses.toFixed(2), (m.expenses-m.expenses*0.1/1.1).toFixed(2), m.net.toFixed(2)]),
-          [],[  "TOTAL",totalRev.toFixed(2),revExGST.toFixed(2),totalExp.toFixed(2),expExGST.toFixed(2),grossProfit.toFixed(2)],
-        ];
-
-        const expRows = () => {
-          const byCategory = {};
-          expenses.forEach(e => { const cat=e.category||e.expenseType||"Other"; if(!byCategory[cat])byCategory[cat]=[]; byCategory[cat].push(e); });
-          return [
-            ["Expense Report by Category"],[`${profile.businessName||""}`],[`Generated: ${new Date().toLocaleDateString("en-AU")}`],[],
-            ["Category","Supplier / Description","Date","Amount (incl GST)","GST","Amount (ex GST)"],
-            ...Object.entries(byCategory).flatMap(([cat,items]) => {
-              const ct=items.reduce((s,e)=>s+safeNumber(e.amount),0);
-              const cg=items.filter(e=>e.gstIncluded!==false).reduce((s,e)=>s+safeNumber(e.amount)*0.1/1.1,0);
-              return [...items.map(e=>{const g=e.gstIncluded!==false?safeNumber(e.amount)*0.1/1.1:0;return[cat,e.supplier||e.description||"",e.date||"",safeNumber(e.amount).toFixed(2),g.toFixed(2),(safeNumber(e.amount)-g).toFixed(2)];}),
-                      [`${cat} SUBTOTAL`,"","",ct.toFixed(2),cg.toFixed(2),(ct-cg).toFixed(2)],[]];
-            }),
-            ["GRAND TOTAL","","",totalExp.toFixed(2),gstOnExp.toFixed(2),expExGST.toFixed(2)],
-          ];
-        };
-
-        const fn = (profile.businessName||"report").replace(/\s+/g,"_");
-        const dt = new Date().toISOString().slice(0,10);
-
-        // ── Report tile renderer ──
         const ReportTiles = () => {
-          const [open, setOpen] = React.useState(null); // "pl" | "income" | "expense"
+          const [open,      setOpen]      = React.useState(null);
+          const [period,    setPeriod]    = React.useState("all");
+          const [dateFrom,  setDateFrom]  = React.useState("");
+          const [dateTo,    setDateTo]    = React.useState("");
+
           const toggle = key => setOpen(prev => prev === key ? null : key);
 
-          const th = { padding:"10px 14px", fontWeight:700, textAlign:"left", borderBottom:`2px solid #e2e8f0`, fontSize:13, whiteSpace:"nowrap" };
+          // ── Date filtering ────────────────────────────────────────────
+          const today = new Date();
+          const subtractDays = n => { const d = new Date(today); d.setDate(d.getDate()-n); return d.toISOString().slice(0,10); };
+          const subtractMonths = n => { const d = new Date(today); d.setMonth(d.getMonth()-n); return d.toISOString().slice(0,10); };
+
+          const presets = [
+            { key:"all",    label:"All time" },
+            { key:"1m",     label:"Last month" },
+            { key:"3m",     label:"Last 3 months" },
+            { key:"6m",     label:"Last 6 months" },
+            { key:"1y",     label:"Last year" },
+            { key:"custom", label:"Custom range" },
+          ];
+
+          const getRange = () => {
+            if (period === "custom") return { from: dateFrom||null, to: dateTo||null };
+            if (period === "1m")  return { from: subtractMonths(1), to: null };
+            if (period === "3m")  return { from: subtractMonths(3), to: null };
+            if (period === "6m")  return { from: subtractMonths(6), to: null };
+            if (period === "1y")  return { from: subtractMonths(12), to: null };
+            return { from: null, to: null };
+          };
+
+          const inRange = (dateStr) => {
+            if (!dateStr) return true;
+            const { from, to } = getRange();
+            if (from && dateStr < from) return false;
+            if (to   && dateStr > to)   return false;
+            return true;
+          };
+
+          const getInvoiceDate = inv => inv.paidAt?.slice(0,10) || inv.invoiceDate || "";
+          const getExpenseDate = e   => e.date || "";
+
+          const filtInvs = invoices.filter(inv => inv.status === "Paid" && inRange(getInvoiceDate(inv)));
+          const filtExps = expenses.filter(e => inRange(getExpenseDate(e)));
+
+          const totalRev    = filtInvs.reduce((s,inv)=>s+safeNumber(inv.total),0);
+          const totalGST    = filtInvs.reduce((s,inv)=>s+safeNumber(inv.gst),0);
+          const revExGST    = totalRev - totalGST;
+          const totalExp    = filtExps.reduce((s,e)=>s+safeNumber(e.amount),0);
+          const gstOnExp    = filtExps.filter(e=>e.gstIncluded!==false).reduce((s,e)=>s+safeNumber(e.amount)*0.1/1.1,0);
+          const expExGST    = totalExp - gstOnExp;
+          const grossProfit = revExGST - expExGST;
+          const estTax      = Math.max(0, grossProfit*(taxRate/100));
+          const netProfit   = grossProfit - estTax;
+          const netGST      = totalGST - gstOnExp;
+
+          // Monthly finance filtered
+          const filtMonthly = (() => {
+            const bucket = {};
+            filtInvs.forEach(inv => {
+              const key = (inv.paidAt||inv.invoiceDate||"").slice(0,7);
+              if (!key) return;
+              if (!bucket[key]) bucket[key] = { revenue:0, expenses:0 };
+              bucket[key].revenue += safeNumber(inv.total);
+            });
+            filtExps.forEach(e => {
+              const key = (e.date||"").slice(0,7);
+              if (!key) return;
+              if (!bucket[key]) bucket[key] = { revenue:0, expenses:0 };
+              bucket[key].expenses += safeNumber(e.amount);
+            });
+            return Object.entries(bucket).sort((a,b)=>a[0].localeCompare(b[0])).map(([key,v]) => ({
+              monthKey: key,
+              label: (() => { try { return new Date(key+"-01").toLocaleDateString("en-AU",{month:"short",year:"numeric"}); } catch { return key; } })(),
+              revenue: v.revenue,
+              expenses: v.expenses,
+              net: v.revenue - v.expenses - Math.max(0,(v.revenue-v.expenses)*(taxRate/100)),
+            }));
+          })();
+
+          const { from, to } = getRange();
+          const periodLabel = period === "all" ? "All time"
+            : period === "custom" ? `${dateFrom||"start"} to ${dateTo||"today"}`
+            : presets.find(p=>p.key===period)?.label || "";
+
+          // ── CSV builders ───────────────────────────────────────────────
+          const plRows = () => [
+            [`${profile.businessName||"Business"} — Profit & Loss Statement`],
+            [`Period: ${periodLabel}`],
+            [`Generated: ${new Date().toLocaleDateString("en-AU")}`],[],
+            ["INCOME"],["Invoice #","Client","Date","Amount (incl GST)","GST","Amount (ex GST)"],
+            ...filtInvs.map(inv=>{ const c=getClientById(inv.clientId); const g=safeNumber(inv.gst); return [`${inv.invoiceNumber||inv.id}`,c?.name||c?.businessName||"",getInvoiceDate(inv),safeNumber(inv.total).toFixed(2),g.toFixed(2),(safeNumber(inv.total)-g).toFixed(2)]; }),
+            ["TOTAL INCOME","","",totalRev.toFixed(2),totalGST.toFixed(2),revExGST.toFixed(2)],[],
+            ["EXPENSES"],["Category","Supplier","Date","Amount (incl GST)","GST","Amount (ex GST)"],
+            ...filtExps.map(e=>{ const g=e.gstIncluded!==false?safeNumber(e.amount)*0.1/1.1:0; return [e.category||e.expenseType||"Other",e.supplier||e.description||"",e.date||"",safeNumber(e.amount).toFixed(2),g.toFixed(2),(safeNumber(e.amount)-g).toFixed(2)]; }),
+            ["TOTAL EXPENSES","","",totalExp.toFixed(2),gstOnExp.toFixed(2),expExGST.toFixed(2)],[],
+            ["P&L SUMMARY"],["Revenue (ex GST)",revExGST.toFixed(2)],["Less: Expenses (ex GST)",expExGST.toFixed(2)],
+            ["Gross Profit",grossProfit.toFixed(2)],[`Less: Est. Tax (${taxRate}%)`,estTax.toFixed(2)],["Net Profit",netProfit.toFixed(2)],[],
+            ["GST SUMMARY"],["GST Collected",totalGST.toFixed(2)],["Less: GST Credits",gstOnExp.toFixed(2)],["Net GST Payable",netGST.toFixed(2)],
+          ];
+
+          const incomeRows = () => [
+            ["Monthly Income Statement"],[`${profile.businessName||""} · ABN ${profile.abn||""}`],
+            [`Period: ${periodLabel}`],[`Generated: ${new Date().toLocaleDateString("en-AU")}`],[],
+            ["Month","Revenue (incl GST)","Revenue (ex GST)","Expenses (incl GST)","Expenses (ex GST)","Net Position"],
+            ...filtMonthly.map(m=>[m.label,m.revenue.toFixed(2),(m.revenue-m.revenue*0.1/1.1).toFixed(2),m.expenses.toFixed(2),(m.expenses-m.expenses*0.1/1.1).toFixed(2),m.net.toFixed(2)]),
+            [],[  "TOTAL",totalRev.toFixed(2),revExGST.toFixed(2),totalExp.toFixed(2),expExGST.toFixed(2),grossProfit.toFixed(2)],
+          ];
+
+          const expRows = () => {
+            const byCategory = {};
+            filtExps.forEach(e=>{ const cat=e.category||e.expenseType||"Other"; if(!byCategory[cat])byCategory[cat]=[]; byCategory[cat].push(e); });
+            return [
+              ["Expense Report by Category"],[`${profile.businessName||""}`],[`Period: ${periodLabel}`],[`Generated: ${new Date().toLocaleDateString("en-AU")}`],[],
+              ["Category","Supplier","Date","Amount (incl GST)","GST","Amount (ex GST)"],
+              ...Object.entries(byCategory).flatMap(([cat,items])=>{
+                const ct=items.reduce((s,e)=>s+safeNumber(e.amount),0);
+                const cg=items.filter(e=>e.gstIncluded!==false).reduce((s,e)=>s+safeNumber(e.amount)*0.1/1.1,0);
+                return [...items.map(e=>{const g=e.gstIncluded!==false?safeNumber(e.amount)*0.1/1.1:0;return[cat,e.supplier||e.description||"",e.date||"",safeNumber(e.amount).toFixed(2),g.toFixed(2),(safeNumber(e.amount)-g).toFixed(2)];}),
+                        [`${cat} SUBTOTAL`,"","",ct.toFixed(2),cg.toFixed(2),(ct-cg).toFixed(2)],[]];
+              }),
+              ["GRAND TOTAL","","",totalExp.toFixed(2),gstOnExp.toFixed(2),expExGST.toFixed(2)],
+            ];
+          };
+
+          // ── Table styles ───────────────────────────────────────────────
+          const th  = { padding:"10px 14px", fontWeight:700, textAlign:"left",  borderBottom:"2px solid #e2e8f0", fontSize:13, whiteSpace:"nowrap" };
           const thr = { ...th, textAlign:"right" };
-          const td = { padding:"9px 14px", fontSize:13, borderBottom:`1px solid #f1f5f9` };
+          const td  = { padding:"9px 14px",  fontSize:13, borderBottom:"1px solid #f1f5f9" };
           const tdr = { ...td, textAlign:"right" };
 
           const tiles = [
             {
-              key:"pl",
-              icon:"📊",
-              title:"Profit & Loss",
-              subtitle:"Revenue, expenses & net profit",
-              accent: colours.teal,
-              highlight: currency(netProfit),
-              highlightLabel: "Net Profit",
-              highlightColor: netProfit >= 0 ? colours.teal : "#b30021",
+              key:"pl", icon:"📊", title:"Profit & Loss", subtitle:"Revenue, expenses & net profit",
+              accent:colours.teal,
+              highlight: currency(netProfit), highlightLabel:"Net Profit",
+              highlightColor: netProfit>=0?colours.teal:"#b30021",
               csv: () => dlCSV(`PL_${fn}_${dt}.csv`, plRows()),
               view: (
                 <div>
-                  <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))", gap:12, marginBottom:20 }}>
+                  <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))", gap:12, marginBottom:20 }}>
                     {[
-                      {l:"Revenue (incl GST)",   v:currency(totalRev),   c:colours.teal},
-                      {l:"Revenue (ex GST)",     v:currency(revExGST),   c:colours.teal},
-                      {l:"Expenses (incl GST)",  v:currency(totalExp),   c:colours.purple},
-                      {l:"Expenses (ex GST)",    v:currency(expExGST),   c:colours.purple},
-                      {l:"Gross Profit",         v:currency(grossProfit),c:grossProfit>=0?colours.teal:"#b30021"},
+                      {l:"Revenue (incl GST)",  v:currency(totalRev),    c:colours.teal},
+                      {l:"Revenue (ex GST)",    v:currency(revExGST),    c:colours.teal},
+                      {l:"Expenses (incl GST)", v:currency(totalExp),    c:colours.purple},
+                      {l:"Expenses (ex GST)",   v:currency(expExGST),    c:colours.purple},
+                      {l:"Gross Profit",        v:currency(grossProfit), c:grossProfit>=0?colours.teal:"#b30021"},
                       {l:`Est. Tax (${taxRate}%)`,v:currency(estTax),   c:colours.navy},
-                      {l:"Net Profit",           v:currency(netProfit),  c:netProfit>=0?colours.teal:"#b30021"},
-                      {l:"Net GST Payable",      v:currency(netGST),     c:netGST>=0?colours.purple:colours.teal},
+                      {l:"Net Profit",          v:currency(netProfit),   c:netProfit>=0?colours.teal:"#b30021"},
+                      {l:"Net GST Payable",     v:currency(netGST),      c:netGST>=0?colours.purple:colours.teal},
                     ].map(({l,v,c})=>(
                       <div key={l} style={{ background:colours.bg, borderRadius:10, padding:"12px 16px" }}>
                         <div style={{ fontSize:12, color:colours.muted, marginBottom:4 }}>{l}</div>
-                        <div style={{ fontSize:18, fontWeight:800, color:c }}>{v}</div>
+                        <div style={{ fontSize:17, fontWeight:800, color:c }}>{v}</div>
                       </div>
                     ))}
                   </div>
                   <div style={{ overflowX:"auto" }}>
                     <table style={{ width:"100%", borderCollapse:"collapse" }}>
-                      <thead style={{ background:`linear-gradient(135deg, ${colours.navy} 0%, ${colours.teal} 100%)`, color:"#fff" }}>
+                      <thead style={{ background:`linear-gradient(135deg,${colours.navy},${colours.teal})`, color:"#fff" }}>
                         <tr><th style={{...th,color:"#fff"}}>Description</th><th style={{...thr,color:"#fff"}}>Incl GST</th><th style={{...thr,color:"#fff"}}>GST</th><th style={{...thr,color:"#fff"}}>Ex GST</th></tr>
                       </thead>
                       <tbody>
-                        <tr style={{ background:"#E7F6F6" }}><td style={{...td,fontWeight:700,color:colours.teal}} colSpan={4}>INCOME — {paidInvs.length} paid invoice{paidInvs.length!==1?"s":""}</td></tr>
-                        {paidInvs.map((inv,i) => { const c=getClientById(inv.clientId); const g=safeNumber(inv.gst); return (
-                          <tr key={i} style={{ background:i%2===0?"#fff":colours.bg }}>
-                            <td style={td}><span style={{ fontWeight:600 }}>{inv.invoiceNumber||inv.id}</span> — {c?.name||c?.businessName||"Client"}<span style={{ fontSize:12, color:colours.muted, marginLeft:8 }}>{inv.paidAt?.slice(0,10)||inv.invoiceDate||""}</span></td>
+                        <tr style={{background:"#E7F6F6"}}><td style={{...td,fontWeight:700,color:colours.teal}} colSpan={4}>INCOME — {filtInvs.length} paid invoice{filtInvs.length!==1?"s":""}</td></tr>
+                        {filtInvs.map((inv,i)=>{ const c=getClientById(inv.clientId); const g=safeNumber(inv.gst); return (
+                          <tr key={i} style={{background:i%2===0?"#fff":colours.bg}}>
+                            <td style={td}><span style={{fontWeight:600}}>{inv.invoiceNumber||inv.id}</span> — {c?.name||c?.businessName||"Client"}<span style={{fontSize:12,color:colours.muted,marginLeft:8}}>{getInvoiceDate(inv)}</span></td>
                             <td style={tdr}>{currency(safeNumber(inv.total))}</td>
                             <td style={{...tdr,color:colours.muted}}>{currency(g)}</td>
                             <td style={tdr}>{currency(safeNumber(inv.total)-g)}</td>
                           </tr>
                         ); })}
-                        <tr style={{ background:colours.teal, color:"#fff", fontWeight:700 }}>
+                        <tr style={{background:colours.teal,color:"#fff",fontWeight:700}}>
                           <td style={{...td,color:"#fff",fontWeight:700}}>Total Income</td>
                           <td style={{...tdr,color:"#fff",fontWeight:700}}>{currency(totalRev)}</td>
                           <td style={{...tdr,color:"#fff",fontWeight:700}}>{currency(totalGST)}</td>
                           <td style={{...tdr,color:"#fff",fontWeight:700}}>{currency(revExGST)}</td>
                         </tr>
-                        <tr style={{ background:"#F5ECFB" }}><td style={{...td,fontWeight:700,color:colours.purple}} colSpan={4}>EXPENSES — {expenses.length} item{expenses.length!==1?"s":""}</td></tr>
-                        {expenses.map((e,i) => { const g=e.gstIncluded!==false?safeNumber(e.amount)*0.1/1.1:0; return (
-                          <tr key={i} style={{ background:i%2===0?"#fff":colours.bg }}>
-                            <td style={td}><span style={{ fontWeight:600 }}>{e.category||e.expenseType||"Other"}</span> — {e.supplier||e.description||""}<span style={{ fontSize:12, color:colours.muted, marginLeft:8 }}>{e.date||""}</span></td>
+                        <tr style={{background:"#F5ECFB"}}><td style={{...td,fontWeight:700,color:colours.purple}} colSpan={4}>EXPENSES — {filtExps.length} item{filtExps.length!==1?"s":""}</td></tr>
+                        {filtExps.map((e,i)=>{ const g=e.gstIncluded!==false?safeNumber(e.amount)*0.1/1.1:0; return (
+                          <tr key={i} style={{background:i%2===0?"#fff":colours.bg}}>
+                            <td style={td}><span style={{fontWeight:600}}>{e.category||e.expenseType||"Other"}</span> — {e.supplier||e.description||""}<span style={{fontSize:12,color:colours.muted,marginLeft:8}}>{e.date||""}</span></td>
                             <td style={tdr}>{currency(safeNumber(e.amount))}</td>
                             <td style={{...tdr,color:colours.muted}}>{currency(g)}</td>
                             <td style={tdr}>{currency(safeNumber(e.amount)-g)}</td>
                           </tr>
                         ); })}
-                        <tr style={{ background:colours.purple, color:"#fff", fontWeight:700 }}>
+                        <tr style={{background:colours.purple,color:"#fff",fontWeight:700}}>
                           <td style={{...td,color:"#fff",fontWeight:700}}>Total Expenses</td>
                           <td style={{...tdr,color:"#fff",fontWeight:700}}>{currency(totalExp)}</td>
                           <td style={{...tdr,color:"#fff",fontWeight:700}}>{currency(gstOnExp)}</td>
@@ -3777,7 +3841,7 @@ export default function AccountingPortalPrototype() {
                         </tr>
                         <tr><td style={{...td,fontWeight:700,paddingTop:16}}>Gross Profit</td><td colSpan={3} style={{...tdr,fontWeight:800,fontSize:15,color:grossProfit>=0?colours.teal:"#b30021",paddingTop:16}}>{currency(grossProfit)}</td></tr>
                         <tr><td style={{...td,color:colours.muted}}>Less: Estimated tax ({taxRate}%)</td><td colSpan={3} style={{...tdr,color:colours.muted}}>−{currency(estTax)}</td></tr>
-                        <tr style={{ background:netProfit>=0?"#E7F6F6":"#FEE2E2" }}>
+                        <tr style={{background:netProfit>=0?"#E7F6F6":"#FEE2E2"}}>
                           <td style={{...td,fontWeight:800,fontSize:15,color:netProfit>=0?colours.teal:"#b30021"}}>Net Profit (after est. tax)</td>
                           <td colSpan={3} style={{...tdr,fontWeight:900,fontSize:18,color:netProfit>=0?colours.teal:"#b30021"}}>{currency(netProfit)}</td>
                         </tr>
@@ -3788,45 +3852,36 @@ export default function AccountingPortalPrototype() {
               ),
             },
             {
-              key:"income",
-              icon:"📈",
-              title:"Income Statement",
-              subtitle:"Month-by-month revenue & expenses",
-              accent: colours.navy,
-              highlight: `${monthlyFinance.length} months`,
-              highlightLabel: "Data range",
-              highlightColor: colours.navy,
+              key:"income", icon:"📈", title:"Income Statement", subtitle:"Month-by-month revenue & expenses",
+              accent:colours.navy,
+              highlight:`${filtMonthly.length} month${filtMonthly.length!==1?"s":""}`, highlightLabel:"Data range",
+              highlightColor:colours.navy,
               csv: () => dlCSV(`IncomeStatement_${fn}_${dt}.csv`, incomeRows()),
               view: (
-                <div style={{ overflowX:"auto" }}>
-                  <table style={{ width:"100%", borderCollapse:"collapse" }}>
-                    <thead style={{ background:`linear-gradient(135deg, ${colours.navy} 0%, ${colours.purple} 100%)`, color:"#fff" }}>
-                      <tr>
-                        {["Month","Revenue","Revenue ex GST","Expenses","Expenses ex GST","Gross Profit","Net Position"].map(h=>(
-                          <th key={h} style={{...h==="Month"?th:thr, color:"#fff"}}>{h}</th>
-                        ))}
-                      </tr>
+                <div style={{overflowX:"auto"}}>
+                  <table style={{width:"100%",borderCollapse:"collapse"}}>
+                    <thead style={{background:`linear-gradient(135deg,${colours.navy},${colours.purple})`,color:"#fff"}}>
+                      <tr>{["Month","Revenue","Rev ex GST","Expenses","Exp ex GST","Gross Profit","Net Position"].map(h=>(
+                        <th key={h} style={{...(h==="Month"?th:thr),color:"#fff"}}>{h}</th>
+                      ))}</tr>
                     </thead>
                     <tbody>
-                      {monthlyFinance.length===0 && <tr><td colSpan={7} style={{...td,textAlign:"center",color:colours.muted,padding:24}}>No monthly data yet. Add paid invoices and expenses to see your income statement.</td></tr>}
-                      {monthlyFinance.map((m,i) => {
-                        const gp = m.revenue - m.expenses;
-                        return (
-                          <tr key={m.monthKey} style={{ background:i%2===0?"#fff":colours.bg }}>
-                            <td style={{...td,fontWeight:600}}>{m.label}</td>
-                            <td style={tdr}>{currency(m.revenue)}</td>
-                            <td style={{...tdr,color:colours.muted}}>{currency(m.revenue-m.revenue*0.1/1.1)}</td>
-                            <td style={{...tdr,color:colours.purple}}>{currency(m.expenses)}</td>
-                            <td style={{...tdr,color:colours.muted}}>{currency(m.expenses-m.expenses*0.1/1.1)}</td>
-                            <td style={{...tdr,color:gp>=0?colours.teal:"#b30021",fontWeight:600}}>{currency(gp)}</td>
-                            <td style={{...tdr,color:m.net>=0?colours.teal:"#b30021",fontWeight:700}}>{currency(m.net)}</td>
-                          </tr>
-                        );
-                      })}
+                      {filtMonthly.length===0&&<tr><td colSpan={7} style={{...td,textAlign:"center",color:colours.muted,padding:24}}>No data for this period.</td></tr>}
+                      {filtMonthly.map((m,i)=>{ const gp=m.revenue-m.expenses; return (
+                        <tr key={m.monthKey} style={{background:i%2===0?"#fff":colours.bg}}>
+                          <td style={{...td,fontWeight:600}}>{m.label}</td>
+                          <td style={tdr}>{currency(m.revenue)}</td>
+                          <td style={{...tdr,color:colours.muted}}>{currency(m.revenue-m.revenue*0.1/1.1)}</td>
+                          <td style={{...tdr,color:colours.purple}}>{currency(m.expenses)}</td>
+                          <td style={{...tdr,color:colours.muted}}>{currency(m.expenses-m.expenses*0.1/1.1)}</td>
+                          <td style={{...tdr,color:gp>=0?colours.teal:"#b30021",fontWeight:600}}>{currency(gp)}</td>
+                          <td style={{...tdr,color:m.net>=0?colours.teal:"#b30021",fontWeight:700}}>{currency(m.net)}</td>
+                        </tr>
+                      ); })}
                     </tbody>
-                    {monthlyFinance.length>0 && (
+                    {filtMonthly.length>0&&(
                       <tfoot>
-                        <tr style={{ background:`linear-gradient(135deg, ${colours.navy} 0%, ${colours.purple} 100%)`, color:"#fff", fontWeight:800 }}>
+                        <tr style={{background:`linear-gradient(135deg,${colours.navy},${colours.purple})`,color:"#fff",fontWeight:800}}>
                           <td style={{...td,color:"#fff",fontWeight:800}}>Total</td>
                           <td style={{...tdr,color:"#fff"}}>{currency(totalRev)}</td>
                           <td style={{...tdr,color:"#fff"}}>{currency(revExGST)}</td>
@@ -3842,39 +3897,33 @@ export default function AccountingPortalPrototype() {
               ),
             },
             {
-              key:"expense",
-              icon:"🧾",
-              title:"Expense Report",
-              subtitle:"Categorised breakdown with GST",
-              accent: colours.purple,
-              highlight: currency(totalExp),
-              highlightLabel: "Total Expenses",
-              highlightColor: colours.purple,
+              key:"expense", icon:"🧾", title:"Expense Report", subtitle:"Categorised breakdown with GST",
+              accent:colours.purple,
+              highlight:currency(totalExp), highlightLabel:"Total Expenses",
+              highlightColor:colours.purple,
               csv: () => dlCSV(`ExpenseReport_${fn}_${dt}.csv`, expRows()),
               view: (() => {
                 const byCategory = {};
-                expenses.forEach(e => { const cat=e.category||e.expenseType||"Other"; if(!byCategory[cat])byCategory[cat]=[]; byCategory[cat].push(e); });
+                filtExps.forEach(e=>{ const cat=e.category||e.expenseType||"Other"; if(!byCategory[cat])byCategory[cat]=[]; byCategory[cat].push(e); });
                 return (
-                  <div style={{ overflowX:"auto" }}>
-                    <table style={{ width:"100%", borderCollapse:"collapse" }}>
-                      <thead style={{ background:`linear-gradient(135deg, ${colours.purple} 0%, ${colours.navy} 100%)`, color:"#fff" }}>
-                        <tr>
-                          {["Category","Supplier / Description","Date","Amount (incl GST)","GST","Amount (ex GST)"].map(h=>(
-                            <th key={h} style={{...["Amount (incl GST)","GST","Amount (ex GST)"].includes(h)?thr:th,color:"#fff"}}>{h}</th>
-                          ))}
-                        </tr>
+                  <div style={{overflowX:"auto"}}>
+                    <table style={{width:"100%",borderCollapse:"collapse"}}>
+                      <thead style={{background:`linear-gradient(135deg,${colours.purple},${colours.navy})`,color:"#fff"}}>
+                        <tr>{["Category","Supplier / Description","Date","Amount (incl GST)","GST","Amount (ex GST)"].map(h=>(
+                          <th key={h} style={{...(["Amount (incl GST)","GST","Amount (ex GST)"].includes(h)?thr:th),color:"#fff"}}>{h}</th>
+                        ))}</tr>
                       </thead>
                       <tbody>
-                        {expenses.length===0 && <tr><td colSpan={6} style={{...td,textAlign:"center",color:colours.muted,padding:24}}>No expenses recorded yet.</td></tr>}
-                        {Object.entries(byCategory).flatMap(([cat,items],gi) => {
+                        {filtExps.length===0&&<tr><td colSpan={6} style={{...td,textAlign:"center",color:colours.muted,padding:24}}>No expenses for this period.</td></tr>}
+                        {Object.entries(byCategory).flatMap(([cat,items],gi)=>{
                           const ct=items.reduce((s,e)=>s+safeNumber(e.amount),0);
                           const cg=items.filter(e=>e.gstIncluded!==false).reduce((s,e)=>s+safeNumber(e.amount)*0.1/1.1,0);
                           return [
-                            <tr key={`cat-${cat}`} style={{ background:gi%2===0?"#F5ECFB":"#EDE9F6" }}>
+                            <tr key={`cat-${cat}`} style={{background:gi%2===0?"#F5ECFB":"#EDE9F6"}}>
                               <td colSpan={6} style={{...td,fontWeight:800,color:colours.purple,fontSize:13}}>{cat}</td>
                             </tr>,
-                            ...items.map((e,i) => { const g=e.gstIncluded!==false?safeNumber(e.amount)*0.1/1.1:0; return (
-                              <tr key={`${cat}-${i}`} style={{ background:"#fff" }}>
+                            ...items.map((e,i)=>{ const g=e.gstIncluded!==false?safeNumber(e.amount)*0.1/1.1:0; return (
+                              <tr key={`${cat}-${i}`} style={{background:"#fff"}}>
                                 <td style={{...td,color:colours.muted,paddingLeft:24}}>{cat}</td>
                                 <td style={td}>{e.supplier||e.description||"—"}</td>
                                 <td style={td}>{e.date||"—"}</td>
@@ -3883,7 +3932,7 @@ export default function AccountingPortalPrototype() {
                                 <td style={tdr}>{currency(safeNumber(e.amount)-g)}</td>
                               </tr>
                             ); }),
-                            <tr key={`sub-${cat}`} style={{ background:colours.bg, borderTop:`2px solid #e2e8f0` }}>
+                            <tr key={`sub-${cat}`} style={{background:colours.bg,borderTop:"2px solid #e2e8f0"}}>
                               <td colSpan={3} style={{...td,fontWeight:700,paddingLeft:24}}>{cat} subtotal</td>
                               <td style={{...tdr,fontWeight:700}}>{currency(ct)}</td>
                               <td style={{...tdr,fontWeight:700,color:colours.muted}}>{currency(cg)}</td>
@@ -3892,9 +3941,9 @@ export default function AccountingPortalPrototype() {
                           ];
                         })}
                       </tbody>
-                      {expenses.length>0 && (
+                      {filtExps.length>0&&(
                         <tfoot>
-                          <tr style={{ background:`linear-gradient(135deg, ${colours.purple} 0%, ${colours.navy} 100%)`, color:"#fff", fontWeight:800 }}>
+                          <tr style={{background:`linear-gradient(135deg,${colours.purple},${colours.navy})`,color:"#fff",fontWeight:800}}>
                             <td colSpan={3} style={{...td,color:"#fff",fontWeight:800}}>Grand Total</td>
                             <td style={{...tdr,color:"#fff",fontWeight:800}}>{currency(totalExp)}</td>
                             <td style={{...tdr,color:"#fff",fontWeight:800}}>{currency(gstOnExp)}</td>
@@ -3910,77 +3959,96 @@ export default function AccountingPortalPrototype() {
           ];
 
           return (
-            <div style={{ display:"grid", gap:16 }}>
-              {/* Report tiles */}
-              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))", gap:16 }}>
+            <div style={{display:"grid",gap:20}}>
+
+              {/* ── Date filter bar ── */}
+              <div style={{...cardStyle,padding:"14px 18px",background:colours.bg,display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
+                <div style={{fontSize:13,fontWeight:700,color:colours.muted,marginRight:4}}>Period:</div>
+                {presets.map(p=>(
+                  <button
+                    key={p.key}
+                    onClick={()=>{ setPeriod(p.key); if(p.key!=="custom"){setDateFrom("");setDateTo("");} }}
+                    style={{
+                      padding:"7px 14px", fontSize:13, borderRadius:20, border:"none", cursor:"pointer",
+                      fontWeight:period===p.key?700:500,
+                      background:period===p.key?colours.teal:"#fff",
+                      color:period===p.key?"#fff":colours.text,
+                      boxShadow:period===p.key?"0 2px 8px rgba(0,109,109,0.25)":"0 1px 3px rgba(0,0,0,0.08)",
+                      transition:"all 0.15s",
+                    }}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+                {period==="custom" && (
+                  <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",marginLeft:4}}>
+                    <input type="date" value={dateFrom} onChange={e=>setDateFrom(e.target.value)}
+                      style={{padding:"7px 10px",fontSize:13,border:`1px solid ${colours.border}`,borderRadius:8,background:"#fff"}} />
+                    <span style={{fontSize:13,color:colours.muted}}>to</span>
+                    <input type="date" value={dateTo} onChange={e=>setDateTo(e.target.value)}
+                      style={{padding:"7px 10px",fontSize:13,border:`1px solid ${colours.border}`,borderRadius:8,background:"#fff"}} />
+                  </div>
+                )}
+                <div style={{marginLeft:"auto",fontSize:12,color:colours.muted,fontStyle:"italic"}}>
+                  {filtInvs.length} invoice{filtInvs.length!==1?"s":""} · {filtExps.length} expense{filtExps.length!==1?"s":""} · {periodLabel}
+                </div>
+              </div>
+
+              {/* ── Tiles ── */}
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:16}}>
                 {tiles.map(tile=>(
                   <div
                     key={tile.key}
-                    style={{
-                      ...cardStyle,
-                      padding:0,
-                      overflow:"hidden",
-                      border:`2px solid ${open===tile.key ? tile.accent : colours.border}`,
-                      transition:"border-color 0.2s, box-shadow 0.2s",
-                      boxShadow: open===tile.key ? `0 4px 20px ${tile.accent}30` : "none",
-                      cursor:"pointer",
-                    }}
-                    onClick={() => toggle(tile.key)}
+                    style={{...cardStyle,padding:0,overflow:"hidden",border:`2px solid ${open===tile.key?tile.accent:colours.border}`,
+                      boxShadow:open===tile.key?`0 4px 20px ${tile.accent}30`:"none",cursor:"pointer",transition:"border-color 0.2s,box-shadow 0.2s"}}
+                    onClick={()=>toggle(tile.key)}
                   >
-                    {/* Coloured top bar */}
-                    <div style={{ height:5, background:`linear-gradient(90deg, ${tile.accent}, ${colours.navy})` }} />
-                    <div style={{ padding:"18px 20px" }}>
-                      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
+                    <div style={{height:5,background:`linear-gradient(90deg,${tile.accent},${colours.navy})`}} />
+                    <div style={{padding:"18px 20px"}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
                         <div>
-                          <div style={{ fontSize:28, marginBottom:6 }}>{tile.icon}</div>
-                          <div style={{ fontSize:16, fontWeight:800, color:colours.text }}>{tile.title}</div>
-                          <div style={{ fontSize:13, color:colours.muted, marginTop:2 }}>{tile.subtitle}</div>
+                          <div style={{fontSize:28,marginBottom:6}}>{tile.icon}</div>
+                          <div style={{fontSize:16,fontWeight:800,color:colours.text}}>{tile.title}</div>
+                          <div style={{fontSize:13,color:colours.muted,marginTop:2}}>{tile.subtitle}</div>
                         </div>
-                        <div style={{ textAlign:"right" }}>
-                          <div style={{ fontSize:20, fontWeight:900, color:tile.highlightColor }}>{tile.highlight}</div>
-                          <div style={{ fontSize:11, color:colours.muted, marginTop:2 }}>{tile.highlightLabel}</div>
+                        <div style={{textAlign:"right"}}>
+                          <div style={{fontSize:20,fontWeight:900,color:tile.highlightColor}}>{tile.highlight}</div>
+                          <div style={{fontSize:11,color:colours.muted,marginTop:2}}>{tile.highlightLabel}</div>
                         </div>
                       </div>
-                      <div style={{ display:"flex", gap:8, marginTop:16 }} onClick={e=>e.stopPropagation()}>
-                        <button
-                          style={{ ...buttonPrimary, flex:1, fontSize:13, padding:"8px 12px", background:tile.accent, borderColor:tile.accent }}
-                          onClick={() => toggle(tile.key)}
-                        >
-                          {open===tile.key ? "▲ Close" : "▼ View Report"}
+                      <div style={{display:"flex",gap:8,marginTop:16}} onClick={e=>e.stopPropagation()}>
+                        <button style={{...buttonPrimary,flex:1,fontSize:13,padding:"8px 12px",background:tile.accent,borderColor:tile.accent}}
+                          onClick={()=>toggle(tile.key)}>
+                          {open===tile.key?"▲ Close":"▼ View Report"}
                         </button>
-                        <button
-                          style={{ ...buttonSecondary, fontSize:13, padding:"8px 12px" }}
-                          onClick={() => tile.csv()}
-                        >
-                          ⬇ CSV
-                        </button>
+                        <button style={{...buttonSecondary,fontSize:13,padding:"8px 12px"}} onClick={()=>tile.csv()}>⬇ CSV</button>
                       </div>
                     </div>
                   </div>
                 ))}
               </div>
 
-              {/* Report viewer */}
-              {open && (() => {
-                const tile = tiles.find(t => t.key === open);
+              {/* ── Report viewer ── */}
+              {open&&(()=>{
+                const tile=tiles.find(t=>t.key===open);
                 return (
-                  <div style={{ ...cardStyle, padding:0, overflow:"hidden", border:`2px solid ${tile.accent}` }}>
-                    <div style={{ background:`linear-gradient(135deg, ${tile.accent} 0%, ${colours.navy} 100%)`, padding:"16px 20px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                  <div style={{...cardStyle,padding:0,overflow:"hidden",border:`2px solid ${tile.accent}`}}>
+                    <div style={{background:`linear-gradient(135deg,${tile.accent},${colours.navy})`,padding:"16px 20px",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:10}}>
                       <div>
-                        <div style={{ fontSize:18, fontWeight:800, color:"#fff" }}>{tile.icon} {tile.title}</div>
-                        <div style={{ fontSize:13, color:"rgba(255,255,255,0.75)", marginTop:2 }}>
-                          {profile.businessName} · Generated {new Date().toLocaleDateString("en-AU")} · Indicative only
+                        <div style={{fontSize:18,fontWeight:800,color:"#fff"}}>{tile.icon} {tile.title}</div>
+                        <div style={{fontSize:13,color:"rgba(255,255,255,0.75)",marginTop:2}}>
+                          {profile.businessName} · {periodLabel} · Generated {new Date().toLocaleDateString("en-AU")}
                         </div>
                       </div>
-                      <div style={{ display:"flex", gap:8 }}>
-                        <button style={{ ...buttonSecondary, fontSize:13, padding:"8px 14px", background:"rgba(255,255,255,0.15)", color:"#fff", borderColor:"rgba(255,255,255,0.3)" }} onClick={() => tile.csv()}>⬇ Download CSV</button>
-                        <button style={{ ...buttonSecondary, fontSize:13, padding:"8px 14px", background:"rgba(255,255,255,0.15)", color:"#fff", borderColor:"rgba(255,255,255,0.3)" }} onClick={() => setOpen(null)}>✕ Close</button>
+                      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                        <button style={{...buttonSecondary,fontSize:13,padding:"8px 14px",background:"rgba(255,255,255,0.15)",color:"#fff",borderColor:"rgba(255,255,255,0.3)"}}
+                          onClick={()=>tile.csv()}>⬇ Download CSV</button>
+                        <button style={{...buttonSecondary,fontSize:13,padding:"8px 14px",background:"rgba(255,255,255,0.15)",color:"#fff",borderColor:"rgba(255,255,255,0.3)"}}
+                          onClick={()=>setOpen(null)}>✕ Close</button>
                       </div>
                     </div>
-                    <div style={{ padding:20 }}>
-                      {tile.view}
-                    </div>
-                    <div style={{ padding:"10px 20px", background:colours.bg, borderTop:`1px solid ${colours.border}`, fontSize:12, color:colours.muted }}>
+                    <div style={{padding:20}}>{tile.view}</div>
+                    <div style={{padding:"10px 20px",background:colours.bg,borderTop:`1px solid ${colours.border}`,fontSize:12,color:colours.muted}}>
                       ⚠️ Figures are indicative based on portal data. Always verify with your registered tax agent before lodging with the ATO.
                     </div>
                   </div>
@@ -3991,7 +4059,7 @@ export default function AccountingPortalPrototype() {
         };
 
         return (
-          <SectionCard title="Financial Reports" right={<div style={{ fontSize:12, color:colours.muted }}>Click a tile to view · CSV to download</div>}>
+          <SectionCard title="Financial Reports" right={<div style={{fontSize:12,color:colours.muted}}>Filter by period · Click a tile to view · CSV to download</div>}>
             <ReportTiles />
           </SectionCard>
         );
