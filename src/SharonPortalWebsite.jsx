@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import ATOTaxFormPage from "./ATOTaxFormPage";
 import { supabase } from "./client";
 import MobileWizard from "./MobileWizard";
 import {
@@ -7615,6 +7616,15 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
             {activePage === "income sources" && renderIncomeSources()}
             {activePage === "documents" && renderDocuments()}
             {activePage === "bas report" && renderBASReport()}
+            {activePage === "ato tax form" && (
+  <ATOTaxFormPage
+    profile={profile}
+    invoices={invoices}
+    expenses={expenses}
+    incomeSources={incomeSources}
+    getClientById={getClientById}
+  />
+)}
             {activePage === "settings" && renderSettings()}
             </div>
           </div>
