@@ -2,8 +2,8 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import html2pdf from "html2pdf.js";
 import { supabase } from "./client";
 import MobileWizard from "./MobileWizard";
-import ATOTaxFormPage from "./ATOTaxFormPage";
-import { buildQuoteHtml, buildQuoteEmailHtml, buildInvoiceHtml, openBlobUrlInWindow, writeInvoicePreviewToWindow } from "./PortalDocumentBuilders";
+
+
 
 // ── Toast notification system ──────────────────────────────
 function ToastContainer({ toasts, onRemove }) {
@@ -199,7 +199,6 @@ const navItems = [
   "income sources",
   "documents",
   "bas report",
-  "ato tax form",
   "settings",
 ];
 
@@ -214,7 +213,7 @@ const navSections = [
   },
   {
     title: "Admin",
-    items: ["bas report", "ato tax form", "settings"],
+    items: ["bas report", "settings"],
   },
 ];
 
@@ -229,7 +228,6 @@ const navLabels = {
   "income sources": "Income Sources",
   documents: "Documents",
   "bas report": "BAS Report",
-  "ato tax form": "ATO Tax Form",
   settings: "Settings",
 };
 
@@ -1372,7 +1370,7 @@ function ExpenseTypeModal({
                     Remove
                   </button>
                 </div>
-              ) : null}
+              ) : <EmptyState icon="📁" title="No documents yet" message="Upload receipts, contracts and generated PDFs here. All documents are stored securely against your account." />}
             </div>
           )}
         </div>
@@ -1584,6 +1582,510 @@ function IncomeSourceModal({
 }
 
 
+// ── Document builder functions (top-level for correct scope access) ──────────
+
+function buildQuoteHtml(quote, options = {}, ctx = {}) {
+  const { profile, clients } = ctx;
+  const getClientById = (id) => clients.find((c) => c.id === safeNumber(id));
+  const clientIsGstExempt = (id) => Boolean(getClientById(id)?.outsideAustraliaOrGstExempt);
+  const gstAppliesToClient = (id) => Boolean(profile.gstRegistered) && !clientIsGstExempt(id);
+  const getDocumentBusinessName = () => profile.hideLegalNameOnDocs || !profile.legalBusinessName ? profile.businessName : profile.legalBusinessName;
+  const getDocumentAddress = () => profile.hideAddressOnDocs ? "" : profile.address || "";
+const { allowEmail = false } = options;
+const qClient = getClientById(quote.clientId);
+const currencyCode = quote.currencyCode || getClientCurrencyCode(qClient);
+const money = (value) => formatCurrencyByCode(value, currencyCode);
+const adjustments = calculateAdjustmentValues({
+  subtotal: safeNumber(quote.subtotal),
+  total: safeNumber(quote.total),
+  client: qClient,
+  profile,
+});
+const gstStatus =
+  quote.gstStatus ||
+  (clientIsGstExempt(quote.clientId)
+    ? "GST not applicable"
+    : safeNumber(quote.gst) > 0
+      ? "GST applies"
+      : "GST free");
+const businessName = escapeHtml(getDocumentBusinessName());
+const businessAddress = escapeHtml(getDocumentAddress());
+const clientName = escapeHtml(qClient?.name || "");
+const businessEmail = escapeHtml(profile.email || "");
+const businessPhone = escapeHtml(profile.phone || "");
+const businessAbn = escapeHtml(profile.abn || "");
+const clientDetails =
+  qClient?.includeAddressDetails && qClient?.addressDetails
+    ? `<div style="margin-top:6px; color:#555;">${nl2br(qClient.addressDetails)}</div>`
+    : "";
+
+return `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Quote Preview</title>
+<style>
+body { font-family: Arial; padding:40px; color:#14202B; }
+.header { display:flex; justify-content:space-between; border-bottom:1px solid #ddd; padding-bottom:20px; }
+.title { font-size:32px; font-weight:900; color:#6A1B9A; }
+.right { text-align:right; font-size:14px; }
+table { width:100%; border-collapse:collapse; margin-top:24px; }
+th, td { padding:10px; border-bottom:1px solid #eee; }
+th { text-align:left; color:#667085; }
+.totals { width:360px; margin-left:auto; margin-top:20px; }
+.totals div { display:flex; justify-content:space-between; padding:6px 0; }
+.total { font-weight:800; font-size:18px; color:#006D6D; }
+.footer { margin-top:30px; display:flex; justify-content:space-between; font-size:12px; color:#666; }
+.print-toolbar { margin-bottom: 24px; display:flex !important; justify-content:space-between; align-items:center; gap:16px; }
+.toolbar-actions { display:flex; gap:10px; flex-wrap:wrap; }
+.preview-status { font-size:13px; color:#64748B; }
+.print-button { background:#6A1B9A; color:#fff; border:none; border-radius:10px; padding:10px 16px; font-weight:700; cursor:pointer; text-decoration:none; display:inline-block; }
+.email-button { background:#006D6D; color:#fff; border:none; border-radius:10px; padding:10px 16px; font-weight:700; cursor:pointer; }
+@media print {
+  .print-toolbar { display:none !important; }
+  body { padding: 0; }
+}
+</style>
+</head>
+<body>
+
+<div class="print-toolbar">
+<div id="preview-email-status" class="preview-status"></div>
+<div class="toolbar-actions">
+  ${allowEmail ? `<button id="preview-email-button" class="email-button" onclick="window.opener && window.opener.sendQuoteFromPreview && window.opener.sendQuoteFromPreview(${JSON.stringify(quote.id)}, window)">Email Quote</button>` : ""}
+  <a href="javascript:void(0)" class="print-button" onclick="window.print()">Print / Download PDF</a>
+</div>
+</div>
+
+<div class="header">
+<div>
+  ${profile.logoDataUrl
+    ? `<div style="margin-bottom:12px;"><img src="${profile.logoDataUrl}" alt="Logo" style="max-height:${LOGO_DOCUMENT_MAX_HEIGHT}px; max-width:${LOGO_DOCUMENT_MAX_WIDTH}px; object-fit:contain;" /></div>`
+    : ""
+  }
+  <div class="title">QUOTE</div>
+  <div style="margin-top:8px; font-weight:700;">${businessName}</div>
+  <div style="font-size:13px; color:#555;">${businessAddress || ""}</div>
+  <div style="font-size:13px; color:#555;">${businessEmail}${quote.hidePhoneNumber ? "" : ` | ${businessPhone}`}</div>
+  <div style="font-size:13px; color:#555;">ABN: ${businessAbn}</div>
+</div>
+
+<div class="right">
+  <div><strong>Quote ref:</strong> ${quote.quoteNumber || ""}</div>
+  <div><strong>Quote date:</strong> ${formatDateAU(quote.quoteDate)}</div>
+  <div><strong>Expiry date:</strong> ${formatDateAU(quote.expiryDate)}</div>
+</div>
+</div>
+
+<div style="margin-top:20px; font-weight:700;">${clientName}</div>
+${clientDetails}
+
+<table>
+<thead>
+  <tr>
+    <th>Description</th>
+    <th>Qty</th>
+    <th style="text-align:right">Unit Price</th>
+    <th style="text-align:right">GST</th>
+    <th style="text-align:right">Total (excl. GST)</th>
+  </tr>
+</thead>
+<tbody>
+  ${(quote.lineItems && quote.lineItems.length > 0
+    ? quote.lineItems
+    : [{ description: quote.description || "Professional services", quantity: quote.quantity || 1, unitPrice: safeNumber(quote.subtotal) / Math.max(1, safeNumber(quote.quantity || 1)), rowGst: quote.gst, rowTotal: quote.total }]
+  ).map((item) => {
+    const qty = safeNumber(item.quantity || item.qty || 1);
+    const unit = safeNumber(item.unitPrice || item.unit || 0);
+    const rowSub = unit * qty;
+    const rowGst = safeNumber(item.rowGst != null ? item.rowGst : ((item.gstType || "GST on Income (10%)") === "GST on Income (10%)" ? rowSub * 0.1 : 0));
+    return `<tr>
+    <td>${escapeHtml(item.description || "Service")}</td>
+    <td>${qty}</td>
+    <td style="text-align:right">${money(unit)}</td>
+    <td style="text-align:right">${money(rowGst)}</td>
+    <td style="text-align:right">${money(rowSub)}</td>
+  </tr>`;
+  }).join("")}
+</tbody>
+</table>
+
+<div class="totals">
+<div><span>Subtotal (excl GST):</span><span>${money(quote.subtotal)}</span></div>
+<div><span>Total GST:</span><span>${money(quote.gst)}</span></div>
+<div><span>GST status:</span><span>${gstStatus}</span></div>
+<div><span>Less fees:</span><span>${money(adjustments.feeAmount)}</span></div>
+<div><span>Less tax withheld:</span><span>${money(adjustments.taxWithheld)}</span></div>
+<div class="total"><span>Total estimate:</span><span>${money(quote.total)}</span></div>
+<div class="total"><span>Net expected:</span><span>${money(adjustments.netExpected)}</span></div>
+</div>
+
+<div class="footer">
+<div>For any queries relating to this quote please contact ${profile.businessName}</div>
+<div>Private & Confidential</div>
+</div>
+
+</body>
+</html>`;
+}
+
+function buildQuoteEmailHtml(quote, ctx = {}) {
+  const { profile, clients } = ctx;
+  const getClientById = (id) => clients.find((c) => c.id === safeNumber(id));
+  const clientIsGstExempt = (id) => Boolean(getClientById(id)?.outsideAustraliaOrGstExempt);
+  const gstAppliesToClient = (id) => Boolean(profile.gstRegistered) && !clientIsGstExempt(id);
+  const getDocumentBusinessName = () => profile.hideLegalNameOnDocs || !profile.legalBusinessName ? profile.businessName : profile.legalBusinessName;
+  const getDocumentAddress = () => profile.hideAddressOnDocs ? "" : profile.address || "";
+const qClient = getClientById(quote.clientId);
+const currencyCode = quote.currencyCode || getClientCurrencyCode(qClient);
+const money = (value) => formatCurrencyByCode(value, currencyCode);
+const businessName = escapeHtml(getDocumentBusinessName());
+const businessAddress = escapeHtml(getDocumentAddress());
+const clientName = escapeHtml(qClient?.name || "");
+const businessEmail = escapeHtml(profile.email || "");
+const businessPhone = escapeHtml(profile.phone || "");
+const businessAbn = escapeHtml(profile.abn || "");
+const clientDetails =
+  qClient?.includeAddressDetails && qClient?.addressDetails
+    ? `<div style="margin-top:6px; color:#475569;">${nl2br(qClient.addressDetails)}</div>`
+    : "";
+const notesHtml = quote.comments
+  ? `<div style="margin-top:20px; padding:16px; background:#F8FAFC; border:1px solid #E2E8F0; border-radius:12px;">${nl2br(quote.comments)}</div>`
+  : "";
+const quoteLineItems = (quote.lineItems && quote.lineItems.length > 0)
+  ? quote.lineItems
+  : [{ description: quote.description || "Professional services", quantity: quote.quantity || 1, unitPrice: safeNumber(quote.subtotal) / Math.max(1, safeNumber(quote.quantity || 1)), rowGst: quote.gst, rowTotal: quote.total }];
+
+return `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Quote ${quote.quoteNumber || ""}</title>
+</head>
+<body style="margin:0; padding:24px; background:#F8FAFC; font-family:Arial, sans-serif; color:#14202B;">
+  <div style="max-width:760px; margin:0 auto; background:#FFFFFF; border:1px solid #E2E8F0; border-radius:18px; padding:28px;">
+    ${profile.logoDataUrl
+      ? `<div style="margin-bottom:16px;"><img src="${profile.logoDataUrl}" alt="Logo" style="max-height:${LOGO_PREVIEW_MAX_HEIGHT}px; max-width:${LOGO_PREVIEW_MAX_WIDTH}px; object-fit:contain;" /></div>`
+      : ""
+    }
+    <div style="display:flex; justify-content:space-between; gap:16px; flex-wrap:wrap; border-bottom:1px solid #E2E8F0; padding-bottom:18px;">
+      <div>
+        <div style="font-size:30px; font-weight:900; color:#6A1B9A;">QUOTE</div>
+        <div style="margin-top:8px; font-weight:700;">${businessName}</div>
+        <div style="font-size:13px; color:#475569; margin-top:4px;">${businessAddress || ""}</div>
+        <div style="font-size:13px; color:#475569; margin-top:4px;">${businessEmail}${quote.hidePhoneNumber ? "" : ` | ${businessPhone}`}</div>
+        <div style="font-size:13px; color:#475569; margin-top:4px;">ABN: ${businessAbn}</div>
+      </div>
+      <div style="text-align:right; font-size:14px; color:#14202B;">
+        <div><strong>Quote ref:</strong> ${quote.quoteNumber || ""}</div>
+        <div style="margin-top:6px;"><strong>Quote date:</strong> ${formatDateAU(quote.quoteDate)}</div>
+        <div style="margin-top:6px;"><strong>Expiry date:</strong> ${formatDateAU(quote.expiryDate)}</div>
+      </div>
+    </div>
+
+    <div style="margin-top:20px;">
+      <div style="font-weight:700;">${clientName}</div>
+      ${clientDetails}
+    </div>
+
+    <table style="width:100%; border-collapse:collapse; margin-top:24px;">
+      <thead>
+        <tr>
+          <th style="text-align:left; padding:10px; border-bottom:1px solid #E2E8F0; color:#64748B;">Description</th>
+          <th style="text-align:left; padding:10px; border-bottom:1px solid #E2E8F0; color:#64748B;">Qty</th>
+          <th style="text-align:right; padding:10px; border-bottom:1px solid #E2E8F0; color:#64748B;">Unit Price</th>
+          <th style="text-align:right; padding:10px; border-bottom:1px solid #E2E8F0; color:#64748B;">GST</th>
+          <th style="text-align:right; padding:10px; border-bottom:1px solid #E2E8F0; color:#64748B;">Total (excl. GST)</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${quoteLineItems.map((item) => {
+          const qty = safeNumber(item.quantity || item.qty || 1);
+          const unit = safeNumber(item.unitPrice || item.unit || 0);
+          const rowSub = unit * qty;
+          const rowGst = safeNumber(item.rowGst != null ? item.rowGst : ((item.gstType || "GST on Income (10%)") === "GST on Income (10%)" ? rowSub * 0.1 : 0));
+          return `<tr>
+          <td style="padding:10px; border-bottom:1px solid #E2E8F0;">${escapeHtml(item.description || "Professional services")}</td>
+          <td style="padding:10px; border-bottom:1px solid #E2E8F0;">${qty}</td>
+          <td style="padding:10px; border-bottom:1px solid #E2E8F0; text-align:right;">${money(unit)}</td>
+          <td style="padding:10px; border-bottom:1px solid #E2E8F0; text-align:right;">${money(rowGst)}</td>
+          <td style="padding:10px; border-bottom:1px solid #E2E8F0; text-align:right;">${money(rowSub)}</td>
+        </tr>`;
+        }).join("")}
+      </tbody>
+    </table>
+
+    <div style="max-width:360px; margin:24px 0 0 auto;">
+      <div style="display:flex; justify-content:space-between; padding:6px 0;"><span>Subtotal (excl GST):</span><span>${money(quote.subtotal)}</span></div>
+      <div style="display:flex; justify-content:space-between; padding:6px 0;"><span>Total GST:</span><span>${money(quote.gst)}</span></div>
+      <div style="display:flex; justify-content:space-between; padding:6px 0; font-weight:800; color:#006D6D;"><span>Total estimate:</span><span>${money(quote.total)}</span></div>
+    </div>
+
+    ${notesHtml}
+
+    <div style="margin-top:24px; font-size:12px; color:#64748B; line-height:1.6;">
+      This is a quote only and not a tax invoice.
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
+function buildInvoiceHtml(invoice, stripeCheckoutUrl = "", options = {}, ctx = {}) {
+  const { profile, clients } = ctx;
+  const getClientById = (id) => clients.find((c) => c.id === safeNumber(id));
+  const clientIsGstExempt = (id) => Boolean(getClientById(id)?.outsideAustraliaOrGstExempt);
+  const gstAppliesToClient = (id) => Boolean(profile.gstRegistered) && !clientIsGstExempt(id);
+  const getDocumentBusinessName = () => profile.hideLegalNameOnDocs || !profile.legalBusinessName ? profile.businessName : profile.legalBusinessName;
+  const getDocumentAddress = () => profile.hideAddressOnDocs ? "" : profile.address || "";
+const { allowEmail = false } = options;
+const previewClient = getClientById(invoice.clientId);
+const currencyCode = invoice.currencyCode || getClientCurrencyCode(previewClient);
+const money = (value) => formatCurrencyByCode(value, currencyCode);
+const feeAmount =
+  invoice.feeAmount != null
+    ? safeNumber(invoice.feeAmount)
+    : calculateAdjustmentValues({
+      subtotal: safeNumber(invoice.subtotal),
+      total: safeNumber(invoice.total),
+      client: previewClient,
+      profile,
+    }).feeAmount;
+const taxWithheld =
+  invoice.taxWithheld != null
+    ? safeNumber(invoice.taxWithheld)
+    : calculateAdjustmentValues({
+      subtotal: safeNumber(invoice.subtotal),
+      total: safeNumber(invoice.total),
+      client: previewClient,
+      profile,
+    }).taxWithheld;
+const netExpected =
+  invoice.netExpected != null
+    ? safeNumber(invoice.netExpected)
+    : calculateAdjustmentValues({
+      subtotal: safeNumber(invoice.subtotal),
+      total: safeNumber(invoice.total),
+      client: previewClient,
+      profile,
+    }).netExpected;
+const gstStatus =
+  invoice.gstStatus ||
+  (clientIsGstExempt(invoice.clientId)
+    ? "GST not applicable"
+    : safeNumber(invoice.gst) > 0
+      ? "GST applies"
+      : "GST free");
+const purchaseOrderReference = escapeHtml(invoice.purchaseOrderReference || "");
+const purchaseOrderBlock =
+  previewClient?.hasPurchaseOrder && purchaseOrderReference
+    ? `<div style="margin-top:10px; font-size:14px; color:#555;"><strong>PO / Reference:</strong> ${purchaseOrderReference}</div>`
+    : "";
+const businessName = escapeHtml(getDocumentBusinessName());
+const businessAddress = escapeHtml(getDocumentAddress());
+const clientName = escapeHtml(previewClient?.name || "");
+const clientEmail = escapeHtml(previewClient?.email || "");
+const businessEmail = escapeHtml(profile.email || "");
+const businessPhone = escapeHtml(profile.phone || "");
+const businessAbn = escapeHtml(profile.abn || "");
+const paymentReference = escapeHtml(invoice.paymentReference || invoice.invoiceNumber || "");
+
+const clientDetails =
+  previewClient?.includeAddressDetails && previewClient?.addressDetails
+    ? `<div style="margin-top:6px; color:#555;">
+          ${nl2br(previewClient.addressDetails)}
+        </div>`
+    : "";
+return `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Invoice Preview</title>
+<style>
+body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
+.header { display:flex; justify-content:space-between; border-bottom:2px solid #eee; padding-bottom:20px; }
+.title { font-size:34px; font-weight:900; color:#6A1B9A; }
+.right { text-align:right; }
+.section { margin-top:24px; }
+table { width:100%; border-collapse: collapse; margin-top:20px; }
+th, td { padding:12px; border-bottom:1px solid #ddd; font-size:14px; }
+th { text-align:left; color:#64748B; }
+.totals { margin-top:20px; width:360px; margin-left:auto; }
+.totals div { display:flex; justify-content:space-between; padding:6px 0; }
+.total { font-size:20px; font-weight:800; color:#006D6D; }
+.payment { margin-top:30px; padding-top:20px; border-top:1px solid #ddd; }
+.footer { margin-top:40px; font-size:12px; color:#666; display:flex; justify-content:space-between; }
+.print-toolbar { margin-bottom: 24px; display:flex !important; justify-content:space-between; align-items:center; gap:16px; }
+.toolbar-actions { display:flex; gap:10px; flex-wrap:wrap; }
+.preview-status { font-size:13px; color:#64748B; }
+.print-button { background:#6A1B9A; color:#fff; border:none; border-radius:10px; padding:10px 16px; font-weight:700; cursor:pointer; text-decoration:none; display:inline-block; }
+.email-button { background:#006D6D; color:#fff; border:none; border-radius:10px; padding:10px 16px; font-weight:700; cursor:pointer; }
+@media print {
+  .print-toolbar { display:none !important; }
+  body { padding: 0; }
+}
+</style>
+</head>
+<body>
+
+<div class="print-toolbar">
+<div id="preview-email-status" class="preview-status"></div>
+<div class="toolbar-actions">
+  ${allowEmail ? `<button id="preview-email-button" class="email-button" onclick="window.opener && window.opener.sendInvoiceFromPreview && window.opener.sendInvoiceFromPreview(${JSON.stringify(invoice.id)}, window)">Email Invoice</button>` : ""}
+  <a href="javascript:void(0)" class="print-button" onclick="window.print()">Print / Download PDF</a>
+</div>
+</div>
+
+<div class="header">
+<div>
+  ${profile.logoDataUrl
+    ? `<div style="margin-bottom:12px;"><img src="${profile.logoDataUrl}" alt="Logo" style="max-height:${LOGO_DOCUMENT_MAX_HEIGHT}px; max-width:${LOGO_DOCUMENT_MAX_WIDTH}px; object-fit:contain;" /></div>`
+    : ""
+  }
+  <div class="title">TAX INVOICE</div>
+  <div style="margin-top:10px; font-weight:700;">${businessName}</div>
+  <div style="font-size:14px; color:#555;">${businessAddress || ""}</div>
+  <div style="font-size:14px; color:#555;">${businessEmail}${invoice.hidePhoneNumber ? "" : ` | ${businessPhone}`}</div>
+  <div style="font-size:14px; color:#555;">ABN: ${businessAbn}</div>
+</div>
+
+<div class="right">
+  <div><strong>Invoice #:</strong> ${invoice.invoiceNumber || ""}</div>
+  <div><strong>Date:</strong> ${formatDateAU(invoice.invoiceDate)}</div>
+  <div><strong>Due:</strong> ${formatDateAU(invoice.dueDate)}</div>
+</div>
+</div>
+
+<div class="section">
+<strong>Billed To:</strong><br/>
+${clientName}<br/>
+${clientEmail}
+${clientDetails}
+${purchaseOrderBlock}
+</div>
+
+<table>
+<thead>
+  <tr>
+    <th>Description</th>
+    <th>Qty</th>
+    <th class="right">Unit Price</th>
+    <th class="right">GST</th>
+    <th class="right">Total</th>
+  </tr>
+</thead>
+<tbody>
+  ${(invoice.lineItems && invoice.lineItems.length > 0
+    ? invoice.lineItems
+    : [{ description: invoice.description || "Professional services", quantity: invoice.quantity || 1, unitPrice: safeNumber(invoice.subtotal) / Math.max(1, safeNumber(invoice.quantity || 1)), rowGst: invoice.gst, rowTotal: invoice.total }]
+  ).map((item) => {
+    const qty = safeNumber(item.quantity || item.qty || 1);
+    const unit = safeNumber(item.unitPrice || item.unit || 0);
+    const rowSub = unit * qty;
+    const rowGst = safeNumber(item.rowGst != null ? item.rowGst : ((item.gstType || "GST on Income (10%)") === "GST on Income (10%)" ? rowSub * 0.1 : 0));
+    const rowTotal = rowSub + rowGst;
+    return `<tr>
+    <td>${escapeHtml(item.description || "Service")}</td>
+    <td>${qty}</td>
+    <td class="right">${money(unit)}</td>
+    <td class="right">${money(rowGst)}</td>
+    <td class="right">${money(rowTotal)}</td>
+  </tr>`;
+  }).join("")}
+</tbody>
+</table>
+
+<div class="totals">
+<div><span>Subtotal (ex GST)</span><span>${money(invoice.subtotal)}</span></div>
+<div><span>GST</span><span>${money(invoice.gst)}</span></div>
+<div><span>GST status</span><span>${gstStatus}</span></div>
+<div><span>Less fees</span><span>${money(feeAmount)}</span></div>
+<div><span>Less tax withheld</span><span>${money(taxWithheld)}</span></div>
+<div class="total"><span>Amount Due</span><span>${money(invoice.total)}</span></div>
+<div class="total"><span>Net expected</span><span>${money(netExpected)}</span></div>
+</div>
+
+<div class="payment">
+<strong>Please make payment to:</strong>
+<div style="margin-top:10px; font-size:14px;">
+  ${profile.bankName ? `<div><strong>Account Name:</strong> ${profile.bankName}</div>` : ""}
+  ${profile.bsb ? `<div><strong>BSB:</strong> ${profile.bsb}</div>` : ""}
+  ${profile.accountNumber ? `<div><strong>Account Number:</strong> ${profile.accountNumber}</div>` : ""}
+  ${profile.payId ? `<div><strong>PayID:</strong> ${profile.payId}</div>` : ""}
+</div>
+<div style="margin-top:10px; font-size:13px; color:#555;">
+  Please use reference: ${paymentReference}
+</div>
+${stripeCheckoutUrl || profile.paypalPaymentLink
+    ? `<div style="margin-top:16px; padding:14px; border:1px solid #E2E8F0; border-radius:12px; background:#F7F6F5;">
+        <div style="font-weight:700; color:#14202B; margin-bottom:8px;">Pay Online</div>
+        <div style="font-size:13px; color:#555; margin-bottom:10px;">Choose your preferred payment method below.</div>
+        ${stripeCheckoutUrl
+      ? `<a href="${stripeCheckoutUrl}" target="_blank" rel="noreferrer" style="display:inline-block; margin-right:10px; background:#6A1B9A; color:#FFFFFF; text-decoration:none; padding:10px 16px; border-radius:10px; font-weight:700;">Pay with Card</a>`
+      : ""
+    }
+        ${profile.paypalPaymentLink
+      ? `<a href="${profile.paypalPaymentLink}" target="_blank" rel="noreferrer" style="display:inline-block; background:#0070BA; color:#FFFFFF; text-decoration:none; padding:10px 16px; border-radius:10px; font-weight:700;">Pay with PayPal</a>`
+      : ""
+    }
+      </div>`
+    : ""
+  }
+</div>
+
+<div class="footer">
+<div>For any queries please contact ${profile.businessName || "Your business"}</div>
+<div>Private & Confidential</div>
+</div>
+
+<script>
+  document.getElementById('print-btn') && document.getElementById('print-btn').addEventListener('click', function() { window.print(); });
+</script>
+</body>
+</html>`;
+}
+
+function openBlobUrlInWindow(w, blob) {
+const url = URL.createObjectURL(blob);
+try {
+  if (w.location.origin === "null") {
+    try {
+      URL.revokeObjectURL(w.location.href);
+    } catch (error) {
+      console.warn("Could not revoke previous preview URL", error);
+    }
+  }
+} catch (error) {
+  console.warn("Could not inspect previous preview URL", error);
+}
+w.location.href = url;
+const revoke = () => {
+  try {
+    URL.revokeObjectURL(url);
+  } catch (error) {
+    console.warn("Could not revoke preview URL", error);
+  }
+};
+try {
+  w.addEventListener("beforeunload", revoke, { once: true });
+} catch (error) {
+  console.warn("Preview cleanup listener failed", error);
+}
+setTimeout(revoke, 60000);
+try {
+  w.focus();
+} catch (error) {
+  console.warn("Preview window focus failed", error);
+}
+}
+
+function writeInvoicePreviewToWindow(w, invoice, stripeCheckoutUrl = "", options = {}, ctx = {}) {
+const html = buildInvoiceHtml(invoice, stripeCheckoutUrl, options, ctx);
+const blob = new Blob([html], { type: "text/html" });
+openBlobUrlInWindow(w, blob);
+}
+
+
 export default function AccountingPortalPrototype() {
   const { toasts, toast, removeToast } = useToast();
   const { confirm, modal: confirmModal } = useConfirm();
@@ -1630,7 +2132,6 @@ export default function AccountingPortalPrototype() {
   const recurringShownRef = useRef(false);
   const [quoteWizardStep, setQuoteWizardStep] = useState(1);
   const [activePage, setActivePage] = useState("dashboard");
-  const [activeFinancialTile, setActiveFinancialTile] = useState("profit_loss");
   const [showQuickAddMenu, setShowQuickAddMenu] = useState(false);
   const [showMobileWizard, setShowMobileWizard] = useState(false);
   const [isMobileViewport, setIsMobileViewport] = useState(() => (typeof window !== "undefined" ? window.innerWidth <= 768 : false));
@@ -2576,255 +3077,6 @@ export default function AccountingPortalPrototype() {
       setImportRows([]);
       setImportError("");
     } catch (err) { toast.error(err.message || "Import failed"); }
-  };
-
-  const escapeCsvValue = (value) => {
-    const stringValue = value == null ? "" : String(value);
-    if (/[",\n]/.test(stringValue)) {
-      return `"${stringValue.replace(/"/g, '""')}"`;
-    }
-    return stringValue;
-  };
-
-  const downloadCsvFile = (filename, headers, rows) => {
-    const csvRows = [headers.map(escapeCsvValue).join(",")]
-      .concat(rows.map((row) => row.map(escapeCsvValue).join(",")));
-    const blob = new Blob([csvRows.join("\n")], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  };
-
-  const exportClientsCsv = () => {
-    downloadCsvFile(
-      "clients.csv",
-      [
-        "Client",
-        "Business Name",
-        "Contact Person",
-        "Email",
-        "Phone",
-        "Address",
-        "ABN",
-        "Currency",
-        "Work Type",
-        "Fees Deducted",
-        "Deducts Tax Prior",
-        "Short Term Rental Income",
-        "Purchase Order Required",
-      ],
-      clients.map((client) => [
-        client.name || "",
-        client.businessName || "",
-        client.contactPerson || "",
-        client.email || "",
-        client.phone || "",
-        client.addressDetails || client.address || "",
-        client.abn || "",
-        client.defaultCurrency || "AUD $",
-        client.workType || "",
-        client.feesDeducted ? "Yes" : "No",
-        client.deductsTaxPrior ? "Yes" : "No",
-        client.shortTermRentalIncome ? "Yes" : "No",
-        client.hasPurchaseOrder ? "Yes" : "No",
-      ])
-    );
-    toast.success("Clients CSV exported");
-  };
-
-  const exportInvoicesCsv = () => {
-    downloadCsvFile(
-      "invoices.csv",
-      [
-        "Invoice Number",
-        "Client",
-        "Invoice Date",
-        "Due Date",
-        "Status",
-        "Currency",
-        "Subtotal",
-        "GST",
-        "Total",
-        "Comments",
-        "Purchase Order Reference",
-        "Payment Reference",
-        "Paid At",
-        "Paid Via",
-        "Recurring",
-      ],
-      invoices.map((invoice) => [
-        invoice.invoiceNumber || "",
-        getClientName(invoice.clientId),
-        invoice.invoiceDate || "",
-        invoice.dueDate || "",
-        invoice.status || "Draft",
-        invoice.currencyCode || getClientCurrencyCode(getClientById(invoice.clientId)),
-        safeNumber(invoice.subtotal).toFixed(2),
-        safeNumber(invoice.gst).toFixed(2),
-        safeNumber(invoice.total).toFixed(2),
-        invoice.comments || "",
-        invoice.purchaseOrderReference || "",
-        invoice.paymentReference || "",
-        invoice.paidAt || "",
-        invoice.paidVia || "",
-        invoice.recurs || "Never",
-      ])
-    );
-    toast.success("Invoices CSV exported");
-  };
-
-  const exportQuotesCsv = () => {
-    downloadCsvFile(
-      "quotes.csv",
-      [
-        "Quote Number",
-        "Client",
-        "Quote Date",
-        "Expiry Date",
-        "Status",
-        "Currency",
-        "Subtotal",
-        "GST",
-        "Total",
-        "Comments",
-      ],
-      quotes.map((quote) => [
-        quote.quoteNumber || "",
-        getClientName(quote.clientId),
-        quote.quoteDate || "",
-        quote.expiryDate || "",
-        quote.status || "Draft",
-        quote.currencyCode || getClientCurrencyCode(getClientById(quote.clientId)),
-        safeNumber(quote.subtotal).toFixed(2),
-        safeNumber(quote.gst).toFixed(2),
-        safeNumber(quote.total).toFixed(2),
-        quote.comments || "",
-      ])
-    );
-    toast.success("Quotes CSV exported");
-  };
-
-  const exportBillsCsv = () => {
-    const todayKey = todayLocal();
-    const sevenDayKey = addDays(todayKey, 7);
-    const billRows = expenses.map((item) => {
-      const dueDate = item.dueDate || item.date || "";
-      const isPaid = Boolean(item.isPaid);
-      let status = "Unpaid";
-      if (isPaid) status = "Paid";
-      else if (dueDate && dueDate < todayKey) status = "Overdue";
-      else if (dueDate && dueDate <= sevenDayKey) status = "Due soon";
-      return {
-        ...item,
-        dueDate,
-        status,
-      };
-    });
-
-    downloadCsvFile(
-      "bills-payables.csv",
-      [
-        "Supplier",
-        "Category",
-        "Bill Date",
-        "Due Date",
-        "Amount",
-        "GST",
-        "Status",
-        "Description",
-        "Expense Type",
-        "Paid At",
-      ],
-      billRows.map((bill) => [
-        bill.supplier || "",
-        bill.category || "",
-        bill.date || "",
-        bill.dueDate || "",
-        safeNumber(bill.amount).toFixed(2),
-        safeNumber(bill.gst).toFixed(2),
-        bill.status || "Unpaid",
-        bill.description || "",
-        bill.expenseType || "",
-        bill.paidAt || "",
-      ])
-    );
-    toast.success("Bills / Payables CSV exported");
-  };
-
-  const exportExpensesCsv = () => {
-    downloadCsvFile(
-      "expenses.csv",
-      [
-        "Date",
-        "Due Date",
-        "Supplier",
-        "Category",
-        "Description",
-        "Amount",
-        "GST",
-        "Expense Type",
-        "Work Type",
-        "Receipt File Name",
-        "Receipt URL",
-      ],
-      expenses.map((expense) => [
-        expense.date || "",
-        expense.dueDate || expense.date || "",
-        expense.supplier || "",
-        expense.category || "",
-        expense.description || "",
-        safeNumber(expense.amount).toFixed(2),
-        safeNumber(expense.gst).toFixed(2),
-        expense.expenseType || "",
-        expense.workType || "",
-        expense.receiptFileName || "",
-        expense.receiptUrl || "",
-      ])
-    );
-    toast.success("Expenses CSV exported");
-  };
-
-  const exportServicesCsv = () => {
-    downloadCsvFile(
-      "services.csv",
-      ["Service", "GST Type", "Price", "GST", "Total"],
-      services.map((service) => [
-        service.name || "",
-        service.gstType || "",
-        safeNumber(service.price).toFixed(2),
-        safeNumber(service.gst).toFixed(2),
-        safeNumber(service.total || service.price).toFixed(2),
-      ])
-    );
-    toast.success("Services CSV exported");
-  };
-
-  const exportIncomeSourcesCsv = () => {
-    downloadCsvFile(
-      "income-sources.csv",
-      [
-        "Name",
-        "Income Type",
-        "Before Tax",
-        "Frequency",
-        "Started After 1 Jul 2025",
-        "Fixed End Date",
-      ],
-      incomeSources.map((item) => [
-        item.name || "",
-        item.incomeType || "",
-        safeNumber(item.beforeTax).toFixed(2),
-        item.frequency || "",
-        item.startedAfterDate ? "Yes" : "No",
-        item.hasEndDate ? "Yes" : "No",
-      ])
-    );
-    toast.success("Income Sources CSV exported");
   };
 
   const confirmRecurring = async () => {
@@ -5299,250 +5551,138 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       );
     };
     const renderFinancialInsights = () => {
-    const reportTitle =
-      activeFinancialTile === "profit_loss"
-        ? "Statement of Profit or Loss"
-        : activeFinancialTile === "cash_movement"
-          ? "Cash Movement Statement"
-          : activeFinancialTile === "gst_position"
-            ? "GST Position Statement"
-            : "Revenue Summary Statement";
-    const reportSubtitle =
-      activeFinancialTile === "profit_loss"
-        ? "Prepared from portal activity currently recorded in your invoices and expenses."
-        : activeFinancialTile === "cash_movement"
-          ? "Prepared from paid invoices, tax reserves, GST balances and recorded expenses."
-          : activeFinancialTile === "gst_position"
-            ? "Prepared from GST collected on invoices and GST credits recorded on expenses."
-            : "Prepared from paid client revenue and recent monthly trends recorded in the portal.";
-    const statementRows =
-      activeFinancialTile === "profit_loss"
-        ? [
-            { label: "Income", value: totals.incomeExGst, strong: true },
-            { label: "Less: Expenses", value: -totals.totalExpenses },
-            { label: "Operating surplus / (deficit)", value: totals.incomeExGst - totals.totalExpenses, strong: true },
-            { label: "Less: Estimated tax reserve", value: -totals.estimatedTax },
-            { label: "Net result after tax reserve", value: totals.incomeExGst - totals.totalExpenses - totals.estimatedTax, strong: true },
-          ]
-        : activeFinancialTile === "cash_movement"
-          ? [
-              { label: "Cash received from paid invoices", value: totals.paidIncome, strong: true },
-              { label: "Less: GST payable", value: -totals.gstPayable },
-              { label: "Less: Estimated tax reserve", value: -totals.estimatedTax },
-              { label: "Less: Platform fees", value: -totals.totalFees },
-              { label: "Less: Expenses paid / recorded", value: -totals.totalExpenses },
-              { label: `Less: Subscription (${currency(totals.monthlySubscriptionCost)}/mo)`, value: -totals.monthlySubscriptionCost },
-              { label: "Closing safe-to-spend balance", value: totals.safeToSpend, strong: true },
-            ]
-          : activeFinancialTile === "gst_position"
-            ? [
-                { label: "GST collected on invoices", value: totals.gstCollected, strong: true },
-                { label: "Less: GST credits on expenses", value: -totals.gstOnExpenses },
-                { label: "Net GST payable / (refundable)", value: totals.gstPayable, strong: true },
-              ]
-            : [
-                { label: "Average monthly paid revenue", value: financialInsights.averageMonthlyRevenue, strong: true },
-                { label: "Top client revenue share", value: financialInsights.topClientShare, suffix: "%" },
-                { label: "Top three client revenue share", value: financialInsights.topThreeClientShare, suffix: "%" },
-                { label: "Revenue volatility", value: financialInsights.averageVolatility, suffix: "%" },
-              ];
-    const rightColumnRows =
-      activeFinancialTile === "profit_loss"
-        ? [
-            ["Gross invoiced", currency(totals.totalIncome)],
-            ["GST collected", currency(totals.gstCollected)],
-            ["Income ex GST", currency(totals.incomeExGst)],
-            ["Expense ratio", `${financialInsights.expenseRatio.toFixed(1)}%`],
-          ]
-        : activeFinancialTile === "cash_movement"
-          ? [
-              ["Paid income", currency(totals.paidIncome)],
-              ["GST payable", currency(totals.gstPayable)],
-              ["Tax reserve", currency(totals.estimatedTax)],
-              ["You keep", `${Math.max(financialInsights.usableCashRatio, 0).toFixed(1)}%`],
-            ]
-          : activeFinancialTile === "gst_position"
-            ? [
-                ["GST registration", profile.gstRegistered ? "Registered" : "Not registered"],
-                ["GST collected", currency(totals.gstCollected)],
-                ["GST credits", currency(totals.gstOnExpenses)],
-                ["Net GST", currency(totals.gstPayable)],
-              ]
-            : [
-                ["Average monthly revenue", currency(financialInsights.averageMonthlyRevenue)],
-                ["Best month", `${financialInsights.bestMonth?.label || "—"} · ${currency(financialInsights.bestMonth?.revenue || 0)}`],
-                ["Worst month", `${financialInsights.worstMonth?.label || "—"} · ${currency(financialInsights.worstMonth?.revenue || 0)}`],
-                ["Average invoice", currency(financialInsights.averageInvoiceValue)],
-              ];
+      const insightCards = [
+        { title: "Average monthly revenue", value: currency(financialInsights.averageMonthlyRevenue), subtitle: "Average paid revenue across the months currently shown.", accent: colours.navy },
+        { title: "Revenue change", value: `${financialInsights.revenueChangePct >= 0 ? "+" : ""}${financialInsights.revenueChangePct.toFixed(1)}%`, subtitle: "Movement versus the previous month.", accent: colours.teal },
+        { title: "Expense ratio", value: `${financialInsights.expenseRatio.toFixed(1)}%`, subtitle: "Recorded expenses as a share of paid income.", accent: colours.purple },
+        { title: "Revenue volatility", value: `${financialInsights.averageVolatility.toFixed(1)}%`, subtitle: "Average month-to-month movement across recent months.", accent: colours.navy },
+      ];
 
-    return (
-    <div style={{ display: "grid", gap: 20 }}>
-      <SectionCard title="Financial reports" right={<div style={{ fontSize: 12, color: colours.muted }}>Formal statement style</div>}>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-            gap: 16,
-          }}
-        >
-          <ActionHubCard
-            icon="📈"
-            title="Profit & loss"
-            description="Standard income less expenses style report."
-            buttonLabel={activeFinancialTile === "profit_loss" ? "Showing report" : "View report"}
-            onClick={() => setActiveFinancialTile("profit_loss")}
-            tone={colours.purple}
-          />
-          <ActionHubCard
-            icon="💧"
-            title="Cash movement"
-            description="Cash in, deductions, and closing usable balance."
-            buttonLabel={activeFinancialTile === "cash_movement" ? "Showing report" : "View report"}
-            onClick={() => setActiveFinancialTile("cash_movement")}
-            tone={colours.teal}
-          />
-          <ActionHubCard
-            icon="🧾"
-            title="GST position"
-            description="GST collected, GST credits, and net GST result."
-            buttonLabel={activeFinancialTile === "gst_position" ? "Showing report" : "View report"}
-            onClick={() => setActiveFinancialTile("gst_position")}
-            tone={colours.navy}
-          />
-          <ActionHubCard
-            icon="📊"
-            title="Revenue summary"
-            description="Revenue concentration and consistency summary."
-            buttonLabel={activeFinancialTile === "revenue_summary" ? "Showing report" : "View report"}
-            onClick={() => setActiveFinancialTile("revenue_summary")}
-            tone={colours.purple}
-          />
-        </div>
-      </SectionCard>
+      return (
+        <div style={{ display: "grid", gap: 20 }}>
+          <DashboardHero
+            title="Financial Insights"
+            subtitle="A lighter analysis page that focuses on interpretation and key financial movement using the live portal data."
+            highlight={`${financialInsights.healthScore.toFixed(0)}/100`}
+          >
+            <InsightChip label="Health" value={financialInsights.healthLabel} />
+            <InsightChip label="Top 3 client share" value={`${financialInsights.topThreeClientShare.toFixed(1)}%`} />
+            <InsightChip label="You keep" value={`${Math.max(financialInsights.usableCashRatio, 0).toFixed(1)}%`} />
+          </DashboardHero>
 
-      <div style={{ ...cardStyle, padding: 0, overflow: "hidden" }}>
-        <div style={{ padding: "28px 30px 20px", borderBottom: `1px solid ${colours.border}`, background: colours.white }}>
-          <div style={{ fontSize: 13, letterSpacing: 1.1, textTransform: "uppercase", fontWeight: 800, color: colours.muted }}>
-            Financial Statement
-          </div>
-          <div style={{ fontSize: 30, fontWeight: 900, color: colours.text, marginTop: 8 }}>{reportTitle}</div>
-          <div style={{ fontSize: 14, color: colours.muted, marginTop: 8, lineHeight: 1.7 }}>{reportSubtitle}</div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12, marginTop: 18, fontSize: 13 }}>
-            <div><strong>Entity:</strong> {profile.businessName || "Your business"}</div>
-            <div><strong>Prepared on:</strong> {formatDateAU(todayLocal())}</div>
-            <div><strong>Basis:</strong> Internal portal records</div>
-          </div>
-        </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.25fr) minmax(280px, 0.75fr)", gap: 0 }}>
-          <div style={{ padding: "24px 30px 28px", borderRight: `1px solid ${colours.border}` }}>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead>
-                <tr>
-                  <th style={{ textAlign: "left", padding: "0 0 12px", fontSize: 12, textTransform: "uppercase", letterSpacing: 0.8, color: colours.muted, borderBottom: `1px solid ${colours.border}` }}>Particulars</th>
-                  <th style={{ textAlign: "right", padding: "0 0 12px", fontSize: 12, textTransform: "uppercase", letterSpacing: 0.8, color: colours.muted, borderBottom: `1px solid ${colours.border}` }}>Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                {statementRows.map((row) => {
-                  const displayValue = row.suffix ? `${safeNumber(row.value).toFixed(1)}${row.suffix}` : currency(row.value);
-                  return (
-                    <tr key={row.label}>
-                      <td style={{ padding: "14px 0", fontSize: 15, fontWeight: row.strong ? 800 : 500, color: colours.text, borderBottom: `1px solid ${colours.border}` }}>{row.label}</td>
-                      <td style={{ padding: "14px 0", textAlign: "right", fontSize: 15, fontWeight: row.strong ? 800 : 600, color: colours.text, borderBottom: `1px solid ${colours.border}` }}>{displayValue}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-
-            <div style={{ marginTop: 22, fontSize: 13, color: colours.muted, lineHeight: 1.8 }}>
-              <strong style={{ color: colours.text }}>Notes:</strong>
-              <div>• Figures are generated from the invoices, paid invoices, expenses, GST settings, and client allocations currently stored in the portal.</div>
-              {activeFinancialTile === "profit_loss" && <div>• This statement is presented on a management-reporting basis rather than a statutory accounting basis.</div>}
-              {activeFinancialTile === "cash_movement" && <div>• Safe-to-spend reflects paid income after GST, estimated tax, fees, expenses, and current subscription cost.</div>}
-              {activeFinancialTile === "gst_position" && <div>• GST payable is shown net of GST credits recorded on expenses.</div>}
-              {activeFinancialTile === "revenue_summary" && <div>• Client concentration percentages are based on paid revenue currently attributed to each client.</div>}
-            </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16 }}>
+            {insightCards.map((card) => (
+              <MetricCard key={card.title} title={card.title} value={card.value} subtitle={card.subtitle} accent={card.accent} />
+            ))}
           </div>
 
-          <div style={{ padding: "24px 26px 28px", background: "#FCFCFD" }}>
-            <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: 0.8, fontWeight: 800, color: colours.muted, marginBottom: 14 }}>
-              Supporting details
-            </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 20 }}>
+            <SectionCard title="Revenue reliability" right={<div style={{ fontSize: 12, color: colours.muted }}>Best, worst, and recent movement</div>}>
+              {monthlyFinance.length ? (
+                <div style={{ display: "grid", gap: 16 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
+                    <div style={{ ...cardStyle, padding: 14, background: colours.bg }}>
+                      <div style={{ fontSize: 12, fontWeight: 800, textTransform: "uppercase", color: colours.muted }}>Best month</div>
+                      <div style={{ fontSize: 16, fontWeight: 800, color: colours.text, marginTop: 6 }}>{financialInsights.bestMonth?.label || "—"}</div>
+                      <div style={{ fontSize: 13, color: colours.muted, marginTop: 6 }}>{currency(financialInsights.bestMonth?.revenue || 0)}</div>
+                    </div>
+                    <div style={{ ...cardStyle, padding: 14, background: colours.bg }}>
+                      <div style={{ fontSize: 12, fontWeight: 800, textTransform: "uppercase", color: colours.muted }}>Worst month</div>
+                      <div style={{ fontSize: 16, fontWeight: 800, color: colours.text, marginTop: 6 }}>{financialInsights.worstMonth?.label || "—"}</div>
+                      <div style={{ fontSize: 13, color: colours.muted, marginTop: 6 }}>{currency(financialInsights.worstMonth?.revenue || 0)}</div>
+                    </div>
+                    <div style={{ ...cardStyle, padding: 14, background: colours.bg }}>
+                      <div style={{ fontSize: 12, fontWeight: 800, textTransform: "uppercase", color: colours.muted }}>Average invoice</div>
+                      <div style={{ fontSize: 16, fontWeight: 800, color: colours.text, marginTop: 6 }}>{currency(financialInsights.averageInvoiceValue)}</div>
+                      <div style={{ fontSize: 13, color: colours.muted, marginTop: 6 }}>Across all invoices in the portal.</div>
+                    </div>
+                  </div>
+
+                  {monthlyFinance.map((month, index) => {
+                    const maxRevenue = Math.max(...monthlyFinance.map((item) => safeNumber(item.revenue)), 0);
+                    const width = maxRevenue > 0 ? (safeNumber(month.revenue) / maxRevenue) * 100 : 0;
+                    const previous = index > 0 ? safeNumber(monthlyFinance[index - 1].revenue) : 0;
+                    const change = previous > 0 ? ((safeNumber(month.revenue) - previous) / previous) * 100 : 0;
+                    return (
+                      <div key={month.monthKey} style={{ display: "grid", gap: 6 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: colours.text }}>{month.label}</div>
+                          <div style={{ fontSize: 12, color: colours.muted }}>
+                            {index === 0 ? "Starting point" : `${change >= 0 ? "+" : ""}${change.toFixed(1)}% vs prior month`}
+                          </div>
+                        </div>
+                        <div style={{ height: 12, borderRadius: 999, background: colours.bg, overflow: "hidden" }}>
+                          <div style={{ width: `${Math.max(width, safeNumber(month.revenue) ? 8 : 0)}%`, height: "100%", borderRadius: 999, background: `linear-gradient(90deg, ${colours.teal} 0%, ${colours.navy} 100%)` }} />
+                        </div>
+                        <div style={{ fontSize: 13, color: colours.text }}>{currency(month.revenue)} paid revenue</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div style={{ fontSize: 14, color: colours.muted }}>Add paid invoices to see revenue reliability insights.</div>
+              )}
+            </SectionCard>
+
+            <WaterfallCard
+              title="Cash efficiency"
+              rows={[
+                { label: "Paid income", value: totals.paidIncome },
+                { label: "Less GST payable", value: -totals.gstPayable },
+                { label: "Less tax reserve", value: -totals.estimatedTax },
+                { label: "Less expenses", value: -totals.totalExpenses },
+                { label: "Safe to spend", value: totals.safeToSpend },
+              ]}
+            />
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 20 }}>
+            <SectionCard title="Client risk" right={<div style={{ fontSize: 12, color: colours.muted }}>Concentration view</div>}>
+              <div style={{ display: "grid", gap: 14 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12 }}>
+                  <div style={{ ...cardStyle, padding: 14, background: colours.bg }}>
+                    <div style={{ fontSize: 12, fontWeight: 800, textTransform: "uppercase", color: colours.muted }}>Top client share</div>
+                    <div style={{ fontSize: 22, fontWeight: 900, color: colours.text, marginTop: 6 }}>{financialInsights.topClientShare.toFixed(1)}%</div>
+                  </div>
+                  <div style={{ ...cardStyle, padding: 14, background: colours.bg }}>
+                    <div style={{ fontSize: 12, fontWeight: 800, textTransform: "uppercase", color: colours.muted }}>Top 3 clients</div>
+                    <div style={{ fontSize: 22, fontWeight: 900, color: colours.text, marginTop: 6 }}>{financialInsights.topThreeClientShare.toFixed(1)}%</div>
+                  </div>
+                </div>
+                <TrendBarsCard title="Top clients" subtitle="Highest paid revenue contributors" data={clientRevenueRows.slice(0, 4)} valueKey="value" formatValue={(value) => currency(value)} accent={colours.teal} emptyText="No paid client revenue yet." />
+              </div>
+            </SectionCard>
+
+            <SectionCard title="Expense behaviour" right={<div style={{ fontSize: 12, color: colours.muted }}>Largest categories and recent change</div>}>
+              <div style={{ display: "grid", gap: 14 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12 }}>
+                  <div style={{ ...cardStyle, padding: 14, background: colours.bg }}>
+                    <div style={{ fontSize: 12, fontWeight: 800, textTransform: "uppercase", color: colours.muted }}>Latest expense move</div>
+                    <div style={{ fontSize: 22, fontWeight: 900, color: colours.text, marginTop: 6 }}>{`${financialInsights.expenseChangePct >= 0 ? "+" : ""}${financialInsights.expenseChangePct.toFixed(1)}%`}</div>
+                  </div>
+                  <div style={{ ...cardStyle, padding: 14, background: colours.bg }}>
+                    <div style={{ fontSize: 12, fontWeight: 800, textTransform: "uppercase", color: colours.muted }}>Largest category</div>
+                    <div style={{ fontSize: 16, fontWeight: 800, color: colours.text, marginTop: 6 }}>{financialInsights.largestExpenseCategory?.label || "—"}</div>
+                    <div style={{ fontSize: 13, color: colours.muted, marginTop: 6 }}>{currency(financialInsights.largestExpenseCategory?.value || 0)}</div>
+                  </div>
+                </div>
+                <TrendBarsCard title="Expense categories" subtitle="Largest recorded categories" data={expenseCategoryRows.slice(0, 5)} valueKey="value" formatValue={(value) => currency(value)} accent={colours.purple} emptyText="No expenses recorded yet." />
+              </div>
+            </SectionCard>
+          </div>
+
+          <SectionCard title="Simple alerts" right={<div style={{ fontSize: 12, color: colours.muted }}>Automatic observations</div>}>
             <div style={{ display: "grid", gap: 12 }}>
-              {rightColumnRows.map(([label, value]) => (
-                <div key={label} style={{ paddingBottom: 12, borderBottom: `1px solid ${colours.border}` }}>
-                  <div style={{ fontSize: 12, textTransform: "uppercase", color: colours.muted, fontWeight: 800 }}>{label}</div>
-                  <div style={{ fontSize: 16, color: colours.text, fontWeight: 800, marginTop: 6 }}>{value}</div>
+              {financialInsights.alerts.map((alert, index) => (
+                <div key={index} style={{ ...cardStyle, padding: 14, background: colours.bg, borderLeft: `4px solid ${index === 0 && alert.includes("No immediate") ? colours.teal : colours.purple}` }}>
+                  <div style={{ fontSize: 14, color: colours.text, lineHeight: 1.6 }}>{alert}</div>
                 </div>
               ))}
             </div>
-
-            {activeFinancialTile === "revenue_summary" && (
-              <div style={{ marginTop: 22 }}>
-                <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: 0.8, fontWeight: 800, color: colours.muted, marginBottom: 10 }}>
-                  Top clients
-                </div>
-                <div style={{ display: "grid", gap: 10 }}>
-                  {clientRevenueRows.slice(0, 5).map((row) => (
-                    <div key={row.label} style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 14, color: colours.text }}>
-                      <span>{row.label}</span>
-                      <strong>{currency(row.value)}</strong>
-                    </div>
-                  ))}
-                  {!clientRevenueRows.length && <div style={{ fontSize: 13, color: colours.muted }}>No paid client revenue yet.</div>}
-                </div>
-              </div>
-            )}
-
-            {activeFinancialTile === "profit_loss" && (
-              <div style={{ marginTop: 22 }}>
-                <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: 0.8, fontWeight: 800, color: colours.muted, marginBottom: 10 }}>
-                  Largest expense categories
-                </div>
-                <div style={{ display: "grid", gap: 10 }}>
-                  {expenseCategoryRows.slice(0, 5).map((row) => (
-                    <div key={row.label} style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 14, color: colours.text }}>
-                      <span>{row.label}</span>
-                      <strong>{currency(row.value)}</strong>
-                    </div>
-                  ))}
-                  {!expenseCategoryRows.length && <div style={{ fontSize: 13, color: colours.muted }}>No expenses recorded yet.</div>}
-                </div>
-              </div>
-            )}
-          </div>
+          </SectionCard>
         </div>
-      </div>
-
-      {activeFinancialTile === "revenue_summary" && monthlyFinance.length > 0 && (
-        <SectionCard title="Monthly revenue schedule" right={<div style={{ fontSize: 12, color: colours.muted }}>Recent paid revenue periods</div>}>
-          <DataTable
-            columns={[
-              { key: "label", label: "Period" },
-              { key: "revenue", label: "Paid revenue", render: (v) => currency(v) },
-              { key: "expenses", label: "Expenses", render: (v) => currency(v) },
-              { key: "safeToSpend", label: "Safe to spend", render: (v) => currency(v) },
-            ]}
-            rows={monthlyFinance}
-          />
-        </SectionCard>
-      )}
-
-      <SectionCard title="Automatic observations" right={<div style={{ fontSize: 12, color: colours.muted }}>Report commentary</div>}>
-        <div style={{ display: "grid", gap: 12 }}>
-          {financialInsights.alerts.map((alert, index) => (
-            <div key={index} style={{ padding: "14px 16px", border: `1px solid ${colours.border}`, borderRadius: 12, background: colours.white, fontSize: 14, color: colours.text, lineHeight: 1.7 }}>
-              {alert}
-            </div>
-          ))}
-        </div>
-      </SectionCard>
-    </div>
-    );
+      );
     };
-
     const renderClients = () => {
     const activeClients = clients.filter((c) => {
       const clientInvoices = invoices.filter((inv) => String(inv.clientId) === String(c.id));
@@ -5792,7 +5932,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
         </div>
       </SectionCard>
 
-      <SectionCard title="Client List" right={<button style={buttonSecondary} onClick={exportClientsCsv}>Export CSV</button>}>
+      <SectionCard title="Client List">
         <DataTable
           emptyState={{ icon: "👥", title: "No clients yet", message: "Add your first client above to start creating invoices and quotes." }}
           columns={[
@@ -6207,7 +6347,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
           )}
         </SectionCard>
 
-        <SectionCard title="Invoice List" right={<button style={buttonSecondary} onClick={exportInvoicesCsv}>Export CSV</button>}>
+        <SectionCard title="Invoice List">
           <DataTable
             emptyState={{ icon: "🧾", title: "No invoices yet", message: "Create your first invoice using the form above. Invoices can be emailed as a PDF with a Stripe payment link." }}
             columns={[
@@ -6937,7 +7077,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
           )}
         </SectionCard>
 
-        <SectionCard title="Quote List" right={<button style={buttonSecondary} onClick={exportQuotesCsv}>Export CSV</button>}>
+        <SectionCard title="Quote List">
           <DataTable
             emptyState={{ icon: "📋", title: "No quotes yet", message: "Create your first quote using the form above. Quotes can be converted to invoices once accepted." }}
             columns={[
@@ -7290,147 +7430,576 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     );
     };
 
-
     const renderServices = () => {
-      const filteredServices = services.filter((service) =>
-        String(service.name || "").toLowerCase().includes(serviceSearch.toLowerCase())
-      );
-      const totalServiceValue = services.reduce((sum, svc) => sum + safeNumber(svc.total || svc.price), 0);
-      const gstServices = services.filter((svc) => svc.gstType === "GST on Income (10%)");
-      const gstFreeServices = services.filter((svc) => svc.gstType !== "GST on Income (10%)");
-      const avgPrice = services.length ? totalServiceValue / services.length : 0;
-      const topServices = [...services]
-        .sort((a, b) => safeNumber(b.total || b.price) - safeNumber(a.total || a.price))
-        .slice(0, 5)
-        .map((svc) => ({
-          label: String(svc.name || "Service").slice(0, 18),
-          value: safeNumber(svc.total || svc.price),
-        }));
-
-      return (
-        <div style={{ display: "grid", gap: 20 }}>
-          <DashboardHero
-            title="Services"
-            subtitle="Manage your service catalogue, GST settings and pricing for invoices and quotes."
-            highlight={currency(totalServiceValue)}
-          >
-            <InsightChip label="Services" value={String(services.length)} />
-            <InsightChip label="GST services" value={String(gstServices.length)} />
-            <InsightChip label="GST free" value={String(gstFreeServices.length)} />
-          </DashboardHero>
-
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16 }}>
-            <MetricCard title="Total catalogue value" value={currency(totalServiceValue)} subtitle="Combined total of all saved services." accent={colours.purple} />
-            <MetricCard title="Average price" value={currency(avgPrice)} subtitle="Average price across your service list." accent={colours.teal} />
-            <MetricCard title="GST on income" value={String(gstServices.length)} subtitle="Services charging GST." accent={colours.navy} />
-            <MetricCard title="GST free" value={String(gstFreeServices.length)} subtitle="Services marked GST free." accent={colours.purple} />
+    const filteredServices = services.filter((service) =>
+      service.name.toLowerCase().includes(serviceSearch.toLowerCase())
+    );
+    const totalServiceValue = services.reduce((s, svc) => s + safeNumber(svc.total || svc.price), 0);
+    const gstServices = services.filter((s) => s.gstType === "GST on Income (10%)");
+    const gstFreeServices = services.filter((s) => s.gstType !== "GST on Income (10%)");
+    const avgPrice = services.length > 0 ? services.reduce((s, svc) => s + safeNumber(svc.price), 0) / services.length : 0;
+    const topServices = [...services].sort((a, b) => safeNumber(b.price) - safeNumber(a.price)).slice(0, 6).map((s) => ({ label: s.name?.slice(0, 8) || "—", value: safeNumber(s.price) }));
+    return (
+      <div style={{ display: "grid", gap: 20 }}>
+        <DashboardHero title="Services" subtitle="Manage your service catalogue. Services auto-populate into invoices and quotes." highlight={String(services.length)}>
+          <InsightChip label="GST applicable" value={String(gstServices.length)} />
+          <InsightChip label="GST free" value={String(gstFreeServices.length)} />
+          <InsightChip label="Avg price" value={currency(avgPrice)} />
+        </DashboardHero>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16 }}>
+          <MetricCard title="Total services" value={String(services.length)} subtitle="Services in your catalogue." accent={colours.navy} />
+          <MetricCard title="GST applicable" value={String(gstServices.length)} subtitle="Services with 10% GST." accent={colours.teal} />
+          <MetricCard title="GST free" value={String(gstFreeServices.length)} subtitle="Exempt or input-taxed services." accent={colours.purple} />
+          <MetricCard title="Average price" value={currency(avgPrice)} subtitle="Mean price across all services." accent={colours.navy} />
+          <div style={{ ...cardStyle, padding: 18, gridColumn: "span 2" }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: colours.muted, textTransform: "uppercase", marginBottom: 10 }}>Top services by price</div>
+            <MiniBarChart data={topServices} height={90} accent={colours.teal} />
           </div>
-
-          <TrendBarsCard
-            title="Top priced services"
-            subtitle="Highest value services in your catalogue"
-            data={topServices}
-            valueKey="value"
-            formatValue={(value) => currency(value)}
-            accent={colours.teal}
-            emptyText="No services saved yet."
-          />
-
-          <SectionCard
-            title={editingServiceId ? "Edit service" : "Add service"}
-            right={
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <input
-                  style={{ ...inputStyle, minWidth: 220 }}
-                  placeholder="Search services"
-                  value={serviceSearch}
-                  onChange={(e) => setServiceSearch(e.target.value)}
-                />
-                <button style={buttonSecondary} onClick={exportServicesCsv}>Export CSV</button>
-              </div>
-            }
-          >
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16 }}>
-              <div>
-                <label style={labelStyle}>Service name</label>
-                <input
-                  style={inputStyle}
-                  value={serviceForm.name}
-                  onChange={(e) => setServiceNameAndMaybePrice(e.target.value)}
-                  placeholder="e.g. Monthly bookkeeping"
-                />
-              </div>
-              <div>
-                <label style={labelStyle}>GST type</label>
-                <select
-                  style={inputStyle}
-                  value={serviceForm.gstType}
-                  onChange={(e) => setServiceGstTypeAndRecalc(e.target.value)}
-                >
-                  {GST_TYPE_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label style={labelStyle}>Price</label>
-                <input
-                  style={inputStyle}
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={serviceForm.price}
-                  onChange={(e) => setServicePriceAndRecalc(e.target.value)}
-                  placeholder="0.00"
-                />
-              </div>
-              <div>
-                <label style={labelStyle}>GST</label>
-                <input style={inputStyle} value={currency(serviceForm.gst)} readOnly />
-              </div>
-              <div>
-                <label style={labelStyle}>Total</label>
-                <input style={inputStyle} value={currency(serviceForm.total)} readOnly />
-              </div>
-            </div>
-
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 16, flexWrap: "wrap" }}>
-              <button style={buttonSecondary} onClick={resetServiceForm}>Clear</button>
-              <button
-                style={{ ...buttonPrimary, opacity: savingService ? 0.6 : 1 }}
-                disabled={savingService}
-                onClick={saveService}
-              >
-                {savingService ? "Saving..." : editingServiceId ? "Save Changes" : "Save Service"}
+        </div>
+        <SectionCard
+          title="Services"
+          right={
+            <div style={{ display: "flex", gap: 10 }}>
+              <input
+                style={{ ...inputStyle, minWidth: 220 }}
+                placeholder="Search services"
+                value={serviceSearch}
+                onChange={(e) => setServiceSearch(e.target.value)}
+              />
+              <button style={buttonPrimary} onClick={openNewServiceModal}>
+                New Service
               </button>
             </div>
-          </SectionCard>
+          }
+        >
+          <DataTable
+            emptyState={{ icon: "⚙️", title: "No services yet", message: "Add services to your catalogue and they will auto-populate into new invoices and quotes." }}
+            columns={[
+              { key: "name", label: "Service" },
+              { key: "gstType", label: "GST Type" },
+              { key: "price", label: "Price", render: (v) => currency(v) },
+              { key: "gst", label: "GST", render: (v) => currency(v) },
+              { key: "total", label: "Total", render: (v) => currency(v) },
+              {
+                key: "actions",
+                label: "",
+                render: (_, row) => (
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button style={buttonSecondary} onClick={() => openEditServiceModal(row)}>
+                      Edit
+                    </button>
+                    <button style={buttonSecondary} onClick={() => deleteService(row.id)}>
+                      Delete
+                    </button>
+                  </div>
+                ),
+              },
+            ]}
+            rows={filteredServices}
+          />
+        </SectionCard>
 
-          <SectionCard title="Service list">
-            <DataTable
-              emptyState={{ icon: "🛠️", title: "No services yet", message: "Save your first service to reuse it in invoices and quotes." }}
-              columns={[
-                { key: "name", label: "Service" },
-                { key: "gstType", label: "GST type" },
-                { key: "price", label: "Price", render: (value) => currency(value) },
-                { key: "gst", label: "GST", render: (value) => currency(value) },
-                { key: "total", label: "Total", render: (value, row) => currency(value || row.price) },
-                {
-                  key: "actions",
-                  label: "Actions",
-                  render: (_, row) => (
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      <button style={buttonSecondary} onClick={() => editService(row)}>Edit</button>
-                      <button style={buttonSecondary} onClick={() => deleteService(row.id)}>Delete</button>
-                    </div>
-                  ),
-                },
-              ]}
-              rows={filteredServices}
-            />
-          </SectionCard>
+        {showServiceModal && (
+          <div
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: "rgba(0,0,0,0.28)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 2000,
+              padding: 16,
+            }}
+          >
+            <div
+              style={{
+                width: "100%",
+                maxWidth: 520,
+                background: colours.white,
+                borderRadius: 12,
+                boxShadow: "0 20px 40px rgba(0,0,0,0.2)",
+                overflow: "hidden",
+              }}
+            >
+              <div style={{ padding: 20, borderBottom: `1px solid ${colours.border}` }}>
+                <div style={{ fontWeight: 800, fontSize: 18, color: colours.text }}>
+                  {editingServiceId ? "Edit Service" : "New Service"}
+                </div>
+              </div>
+
+              <div style={{ padding: 20, display: "grid", gap: 16 }}>
+                <div>
+                  <label style={labelStyle}>Service Name</label>
+                  <input
+                    style={inputStyle}
+                    value={serviceForm.name}
+                    onChange={(e) => handleServiceFormChange("name", e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <label style={labelStyle}>GST Type</label>
+                  <select
+                    style={inputStyle}
+                    value={serviceForm.gstType}
+                    onChange={(e) => handleServiceFormChange("gstType", e.target.value)}
+                  >
+                    <option value="">Select...</option>
+                    <option value="GST on Income (10%)">GST on Income (10%)</option>
+                    <option value="GST Free">GST Free</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={labelStyle}>Price</label>
+                  <input
+                    style={inputStyle}
+                    value={serviceForm.price}
+                    onChange={(e) => handleServiceFormChange("price", e.target.value)}
+                  />
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                  <div>
+                    <label style={labelStyle}>GST</label>
+                    <input style={inputStyle} value={serviceForm.gst} readOnly />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Total</label>
+                    <input style={inputStyle} value={serviceForm.total} readOnly />
+                  </div>
+                </div>
+              </div>
+
+              <div
+                style={{
+                  display: "flex",
+                  gap: 10,
+                  justifyContent: "space-between",
+                  padding: 20,
+                  borderTop: `1px solid ${colours.border}`,
+                }}
+              >
+                <button
+                  style={buttonSecondary}
+                  onClick={() => {
+                    setShowServiceModal(false);
+                    resetServiceForm();
+                  }}
+                >
+                  Cancel
+                </button>
+                <button style={buttonPrimary} onClick={saveService}>
+                  Save Service
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+    };
+
+
+    const renderBillsPayables = () => {
+    const todayKey = todayLocal();
+    const sevenDayKey = addDays(todayKey, 7);
+
+    const billRows = expenses.map((item) => {
+      const dueDate = item.dueDate || item.date || "";
+      const isPaid = Boolean(item.isPaid);
+      let status = "Unpaid";
+      if (isPaid) status = "Paid";
+      else if (dueDate && dueDate < todayKey) status = "Overdue";
+      else if (dueDate && dueDate <= sevenDayKey) status = "Due soon";
+      return {
+        ...item,
+        dueDate,
+        status,
+      };
+    });
+
+    const unpaidBills = billRows.filter((item) => !item.isPaid);
+    const overdueBills = billRows.filter((item) => item.status === "Overdue");
+    const dueSoonBills = billRows.filter((item) => item.status === "Due soon");
+    const totalPayable = unpaidBills.reduce((sum, item) => sum + safeNumber(item.amount), 0);
+
+    const supplierTotalsMap = unpaidBills.reduce((acc, item) => {
+      const key = item.supplier || "Unknown supplier";
+      acc[key] = (acc[key] || 0) + safeNumber(item.amount);
+      return acc;
+    }, {});
+    const topSuppliers = Object.entries(supplierTotalsMap)
+      .map(([label, value]) => ({ label, value }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 5);
+
+    return (
+      <div style={{ display: "grid", gap: 20 }}>
+        <DashboardHero
+          title="Bills and payables"
+          subtitle="Track supplier bills, what is due soon, what is overdue, and what is already paid using your existing expense data."
+          highlight={currency(totalPayable)}
+        >
+          <InsightChip label="Due soon" value={`${dueSoonBills.length} bill${dueSoonBills.length === 1 ? "" : "s"}`} />
+          <InsightChip label="Overdue" value={`${overdueBills.length} bill${overdueBills.length === 1 ? "" : "s"}`} />
+          <InsightChip label="Paid" value={`${billRows.filter((item) => item.isPaid).length} bill${billRows.filter((item) => item.isPaid).length === 1 ? "" : "s"}`} />
+        </DashboardHero>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+            gap: 16,
+          }}
+        >
+          <MetricCard title="Total payable" value={currency(totalPayable)} subtitle="All unpaid supplier bills." accent={colours.purple} />
+          <MetricCard title="Due in 7 days" value={currency(dueSoonBills.reduce((sum, item) => sum + safeNumber(item.amount), 0))} subtitle="Bills requiring attention soon." accent={colours.teal} />
+          <MetricCard title="Overdue" value={currency(overdueBills.reduce((sum, item) => sum + safeNumber(item.amount), 0))} subtitle="Bills past their due date." accent={colours.navy} />
+          <MetricCard title="Bills recorded" value={String(billRows.length)} subtitle="All supplier bills from your expense records." accent={colours.purple} />
         </div>
-      );
+
+        <TrendBarsCard
+          title="Top suppliers"
+          subtitle="Largest unpaid commitments by supplier"
+          data={topSuppliers}
+          valueKey="value"
+          formatValue={(value) => currency(value)}
+          accent={colours.teal}
+          emptyText="No unpaid supplier bills yet."
+        />
+
+        <SectionCard title="Enter Supplier Bill">
+          {/* ── Wizard progress bar ── */}
+          <div style={{ display: "flex", alignItems: "center", marginBottom: 28 }}>
+            {["Supplier", "Details", "Line Items", "Review & Save"].map((label, i) => {
+              const step = i + 1;
+              const active = billWizardStep === step;
+              const done = billWizardStep > step;
+              return (
+                <React.Fragment key={step}>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, cursor: done ? "pointer" : "default" }}
+                    onClick={() => done && setBillWizardStep(step)}>
+                    <div style={{ width: 32, height: 32, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 13,
+                      background: done ? colours.teal : active ? colours.purple : colours.border,
+                      color: done || active ? "#fff" : colours.muted, transition: "all 0.2s" }}>
+                      {done ? "✓" : step}
+                    </div>
+                    <div style={{ fontSize: 11, fontWeight: active ? 800 : 500, color: active ? colours.purple : done ? colours.teal : colours.muted, whiteSpace: "nowrap" }}>{label}</div>
+                  </div>
+                  {i < 3 && <div style={{ flex: 1, height: 2, background: done ? colours.teal : colours.border, margin: "0 6px", marginBottom: 18, transition: "background 0.2s" }} />}
+                </React.Fragment>
+              );
+            })}
+          </div>
+
+          {/* Step 1: Supplier */}
+          {billWizardStep === 1 && (
+            <div style={{ display: "grid", gap: 20 }}>
+              <div>
+                <label style={labelStyle}>Supplier Name</label>
+                <input style={{ ...inputStyle, fontSize: 15 }} value={expenseForm.supplier}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    const match = suppliers.find((s) => s.name.toLowerCase() === val.toLowerCase());
+                    setExpenseForm((prev) => ({ ...prev, supplier: val,
+                      supplierEmail: match?.email || prev.supplierEmail || "",
+                      supplierPhone: match?.phone || prev.supplierPhone || "",
+                      supplierAddress: match?.address || prev.supplierAddress || "",
+                      supplierAbn: match?.abn || prev.supplierAbn || "",
+                    }));
+                  }}
+                  placeholder="Type or select a supplier..." list="known-suppliers-list" />
+                <datalist id="known-suppliers-list">
+                  {knownSuppliers.map((s) => <option key={s} value={s} />)}
+                </datalist>
+                {knownSuppliers.length > 0 && (
+                  <div style={{ fontSize: 12, color: colours.muted, marginTop: 6 }}>
+                    Recent:{" "}
+                    {knownSuppliers.slice(0, 5).map((s, i) => {
+                      const match = suppliers.find((sup) => sup.name === s);
+                      return (
+                        <button key={s} onClick={() => setExpenseForm((prev) => ({ ...prev, supplier: s,
+                          supplierEmail: match?.email || "",
+                          supplierPhone: match?.phone || "",
+                          supplierAddress: match?.address || "",
+                          supplierAbn: match?.abn || "",
+                        }))}
+                          style={{ background: expenseForm.supplier === s ? colours.purple : colours.lightPurple, color: expenseForm.supplier === s ? "#fff" : colours.purple, border: "none", borderRadius: 8, padding: "3px 10px", fontSize: 12, cursor: "pointer", marginLeft: i > 0 ? 6 : 4, fontWeight: 600 }}>
+                          {s}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                {expenseForm.supplier && suppliers.find((s) => s.name.toLowerCase() === expenseForm.supplier.toLowerCase()) && (() => {
+                  const sup = suppliers.find((s) => s.name.toLowerCase() === expenseForm.supplier.toLowerCase());
+                  return (
+                    <div style={{ ...cardStyle, padding: 14, background: colours.lightPurple, marginTop: 12, display: "grid", gap: 4 }}>
+                      <div style={{ fontSize: 11, fontWeight: 800, color: colours.muted, textTransform: "uppercase", marginBottom: 4 }}>Supplier Details</div>
+                      {sup.contactPerson && <div style={{ fontSize: 13, color: colours.text }}>👤 {sup.contactPerson}</div>}
+                      {sup.email && <div style={{ fontSize: 13, color: colours.text }}>✉ {sup.email}</div>}
+                      {sup.phone && <div style={{ fontSize: 13, color: colours.text }}>📞 {sup.phone}</div>}
+                      {sup.address && <div style={{ fontSize: 13, color: colours.muted }}>{sup.address}</div>}
+                      {sup.abn && <div style={{ fontSize: 13, color: colours.muted }}>ABN: {sup.abn}</div>}
+                    </div>
+                  );
+                })()}
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
+                <button style={{ ...buttonSecondary, fontSize: 13 }} onClick={() => { setSupplierForm({ name: expenseForm.supplier, email: "", phone: "", address: "", abn: "", contactPerson: "", notes: "" }); setEditingSupplierId(null); setShowSupplierModal(true); }}>
+                  + Save supplier details
+                </button>
+                <button style={{ ...buttonPrimary, opacity: expenseForm.supplier.trim() ? 1 : 0.4 }}
+                  disabled={!expenseForm.supplier.trim()}
+                  onClick={() => setBillWizardStep(2)}>Next: Details →</button>
+              </div>
+            </div>
+          )}
+
+          {/* Step 2: Details */}
+          {billWizardStep === 2 && (
+            <div style={{ display: "grid", gap: 20 }}>
+              <div style={{ ...cardStyle, padding: 14, background: colours.lightPurple }}>
+                <div style={{ fontSize: 12, fontWeight: 800, color: colours.muted, textTransform: "uppercase", marginBottom: 4 }}>Supplier</div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: colours.text }}>{expenseForm.supplier}</div>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16 }}>
+                <div>
+                  <label style={labelStyle}>Bill Date</label>
+                  <input type="date" style={inputStyle} value={expenseForm.date}
+                    onChange={(e) => setExpenseForm((prev) => ({ ...prev, date: e.target.value, dueDate: addDaysEOM(e.target.value) }))} />
+                </div>
+                <div>
+                  <label style={labelStyle}>Due Date (EOM + 30 days)</label>
+                  <input type="date" style={inputStyle} value={expenseForm.dueDate || expenseForm.date}
+                    onChange={(e) => setExpenseForm((prev) => ({ ...prev, dueDate: e.target.value }))} />
+                </div>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8 }}>
+                <button style={buttonSecondary} onClick={() => setBillWizardStep(1)}>← Back</button>
+                <button style={buttonPrimary} onClick={() => setBillWizardStep(3)}>Next: Line Items →</button>
+              </div>
+            </div>
+          )}
+
+          {/* Step 3: Line Items */}
+          {billWizardStep === 3 && (
+            <div style={{ display: "grid", gap: 16 }}>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 620 }}>
+                  <thead>
+                    <tr style={{ background: colours.bg }}>
+                      {["Description", "Category", "Amount (incl GST)", "GST Incl?", "GST Credit", ""].map((h) => (
+                        <th key={h} style={{ padding: "10px 8px", textAlign: "left", fontSize: 12, fontWeight: 700, color: colours.muted, borderBottom: `1px solid ${colours.border}` }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {billLineItems.map((item, idx) => {
+                      const amt = safeNumber(item.amount);
+                      const gstCredit = item.gstIncl === "yes" ? amt / 11 : 0;
+                      return (
+                        <tr key={item.id} style={{ borderBottom: `1px solid ${colours.border}` }}>
+                          <td style={{ padding: "8px 6px", minWidth: 180 }}>
+                            <input style={{ ...inputStyle, fontSize: 13 }} value={item.description}
+                              onChange={(e) => setBillLineItems((prev) => prev.map((l, i) => i === idx ? { ...l, description: e.target.value } : l))}
+                              placeholder="Description" />
+                          </td>
+                          <td style={{ padding: "8px 6px", width: 160 }}>
+                            <select style={{ ...inputStyle, fontSize: 13 }} value={item.category}
+                              onChange={(e) => setBillLineItems((prev) => prev.map((l, i) => i === idx ? { ...l, category: e.target.value } : l))}>
+                              <option value="">Select...</option>
+                              {expenseCategories.map((cat) => <option key={cat} value={cat}>{cat}</option>)}
+                            </select>
+                          </td>
+                          <td style={{ padding: "8px 6px", width: 130 }}>
+                            <input type="number" min="0" step="0.01" style={{ ...inputStyle, fontSize: 13 }} value={item.amount}
+                              onChange={(e) => setBillLineItems((prev) => prev.map((l, i) => i === idx ? { ...l, amount: e.target.value } : l))}
+                              placeholder="0.00" />
+                          </td>
+                          <td style={{ padding: "8px 6px", width: 90 }}>
+                            <select style={{ ...inputStyle, fontSize: 13 }} value={item.gstIncl}
+                              onChange={(e) => setBillLineItems((prev) => prev.map((l, i) => i === idx ? { ...l, gstIncl: e.target.value } : l))}>
+                              <option value="yes">Yes</option>
+                              <option value="no">No</option>
+                            </select>
+                          </td>
+                          <td style={{ padding: "8px 6px", width: 100, fontSize: 13, color: colours.muted, textAlign: "right" }}>{currency(gstCredit)}</td>
+                          <td style={{ padding: "8px 6px", width: 40 }}>
+                            {billLineItems.length > 1 && (
+                              <button onClick={() => setBillLineItems((prev) => prev.filter((_, i) => i !== idx))}
+                                style={{ background: "none", border: "none", cursor: "pointer", color: colours.muted, fontSize: 18, lineHeight: 1 }}>×</button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                <button onClick={() => setBillLineItems((prev) => [...prev, blankBillLine()])}
+                  style={{ ...buttonSecondary, fontSize: 13, padding: "7px 14px" }}>+ Add line</button>
+                <span style={{ fontSize: 13, color: colours.muted }}>{billLineItems.length} line{billLineItems.length !== 1 ? "s" : ""}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8 }}>
+                <button style={buttonSecondary} onClick={() => setBillWizardStep(2)}>← Back</button>
+                <button style={buttonPrimary} onClick={() => setBillWizardStep(4)}>Next: Review →</button>
+              </div>
+            </div>
+          )}
+
+          {/* Step 4: Review & Save */}
+          {billWizardStep === 4 && (() => {
+            const totalAmt = billLineItems.reduce((s, l) => s + safeNumber(l.amount), 0);
+            const totalGst = billLineItems.reduce((s, l) => s + (l.gstIncl === "yes" ? safeNumber(l.amount) / 11 : 0), 0);
+            return (
+              <div style={{ display: "grid", gap: 20 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
+                  <div style={{ ...cardStyle, padding: 16, background: colours.lightPurple }}>
+                    <div style={{ fontSize: 11, fontWeight: 800, color: colours.muted, textTransform: "uppercase", marginBottom: 8 }}>Supplier</div>
+                    <div style={{ fontSize: 15, fontWeight: 800, color: colours.text }}>{expenseForm.supplier}</div>
+                  </div>
+                  <div style={{ ...cardStyle, padding: 16, background: colours.lightTeal }}>
+                    <div style={{ fontSize: 11, fontWeight: 800, color: colours.muted, textTransform: "uppercase", marginBottom: 8 }}>Dates</div>
+                    <div style={{ fontSize: 13, color: colours.text }}>Bill date: {formatDateAU(expenseForm.date)}</div>
+                    <div style={{ fontSize: 13, color: colours.text, marginTop: 4 }}>Due: {formatDateAU(expenseForm.dueDate)}</div>
+                  </div>
+                </div>
+                <div style={{ ...cardStyle, padding: 16 }}>
+                  <div style={{ fontSize: 12, fontWeight: 800, color: colours.muted, textTransform: "uppercase", marginBottom: 12 }}>Line Items</div>
+                  {billLineItems.filter(l => l.description || l.amount).map((item, idx) => (
+                    <div key={idx} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: `1px solid ${colours.border}`, fontSize: 14 }}>
+                      <div>
+                        <span style={{ fontWeight: 600 }}>{item.description || "—"}</span>
+                        {item.category && <span style={{ color: colours.muted, marginLeft: 8, fontSize: 12 }}>{item.category}</span>}
+                      </div>
+                      <div style={{ textAlign: "right" }}>
+                        <strong>{currency(safeNumber(item.amount))}</strong>
+                        {item.gstIncl === "yes" && <div style={{ fontSize: 11, color: colours.teal }}>GST: {currency(safeNumber(item.amount) / 11)}</div>}
+                      </div>
+                    </div>
+                  ))}
+                  <div style={{ marginTop: 16, borderTop: `2px solid ${colours.border}`, paddingTop: 12, display: "grid", gap: 6 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14 }}><span style={{ color: colours.muted }}>GST credit (claimable)</span><span style={{ color: colours.teal, fontWeight: 700 }}>{currency(totalGst)}</span></div>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 18, fontWeight: 800, color: colours.purple, marginTop: 6 }}><span>Total Bill</span><span>{currency(totalAmt)}</span></div>
+                  </div>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, marginTop: 8 }}>
+                  <button style={buttonSecondary} onClick={() => setBillWizardStep(3)}>← Back</button>
+                  <div style={{ display: "flex", gap: 10 }}>
+                    <button style={buttonSecondary} onClick={() => {
+                      setExpenseForm({ date: todayLocal(), dueDate: addDaysEOM(todayLocal()), supplier: "", category: "", description: "", amount: "", expenseType: "", workType: profile.workType, receiptFileName: "", receiptUrl: "" });
+                      setBillLineItems([blankBillLine()]);
+                      setBillWizardStep(1);
+                    }}>Clear</button>
+                    <button style={buttonPrimary} disabled={savingBill} onClick={async () => {
+                      if (!expenseForm.supplier) { toast.warning("Supplier name is required"); return; }
+                      if (totalAmt <= 0) { toast.warning("Add at least one line with an amount"); return; }
+                      setSavingBill(true);
+                      const primaryCategory = billLineItems.find((l) => l.category)?.category || "Other";
+                      const combinedDesc = billLineItems.map((l) => l.description).filter(Boolean).join("; ");
+                      const payload = {
+                        ...expenseForm,
+                        category: primaryCategory,
+                        description: combinedDesc,
+                        amount: totalAmt,
+                        gst: totalGst,
+                        billLineItems,
+                        expenseType: "Bill / Payable",
+                      };
+                      try {
+                        const saved = await upsertRecordInDatabase(SUPABASE_TABLES.expenses, payload);
+                        setExpenses((prev) => [...prev, saved]);
+                        toast.success("Bill saved!");
+                        setExpenseForm({ date: todayLocal(), dueDate: addDaysEOM(todayLocal()), supplier: "", category: "", description: "", amount: "", expenseType: "", workType: profile.workType, receiptFileName: "", receiptUrl: "" });
+                        setBillLineItems([blankBillLine()]);
+                        setBillWizardStep(1);
+                      } catch (err) {
+                        toast.error(err.message || "Save failed");
+                      } finally {
+                        setSavingBill(false);
+                      }
+                    }}>{savingBill ? "Saving..." : "Save Bill ✓"}</button>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+        </SectionCard>
+
+
+        <SectionCard title="Supplier Directory" right={
+          <div style={{ display: "flex", gap: 8 }}>
+            <button style={buttonSecondary} onClick={() => { setImportType("suppliers"); setImportRows([]); setImportError(""); setShowImportModal(true); }}>⬆ Import</button>
+            <button style={buttonPrimary} onClick={() => { setSupplierForm({ name: "", email: "", phone: "", address: "", abn: "", contactPerson: "", notes: "" }); setEditingSupplierId(null); setShowSupplierModal(true); }}>+ Add Supplier</button>
+          </div>
+        }>
+          <DataTable
+            emptyState={{ icon: "🏢", title: "No suppliers yet", message: "Save supplier details here so they auto-fill when you enter bills. Name, email, phone, address and ABN all stored." }}
+            columns={[
+              { key: "name", label: "Supplier" },
+              { key: "contactPerson", label: "Contact" },
+              { key: "email", label: "Email" },
+              { key: "phone", label: "Phone" },
+              { key: "abn", label: "ABN" },
+              { key: "actions", label: "", render: (_, row) => (
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button style={buttonSecondary} onClick={() => { setSupplierForm({ name: row.name || "", email: row.email || "", phone: row.phone || "", address: row.address || "", abn: row.abn || "", contactPerson: row.contactPerson || "", notes: row.notes || "" }); setEditingSupplierId(row.id); setShowSupplierModal(true); }}>Edit</button>
+                  <button style={buttonSecondary} onClick={() => deleteSupplier(row.id)}>Delete</button>
+                </div>
+              )},
+            ]}
+            rows={suppliers}
+          />
+        </SectionCard>
+
+        <SectionCard title="Bills list" right={<div style={{ fontSize: 12, color: colours.muted }}>Based on expense records</div>}>
+          <DataTable
+            emptyState={{ icon: "📄", title: "No bills yet", message: "Bills and payables you record will appear here. Use the form above to add your first bill." }}
+            columns={[
+              { key: "supplier", label: "Supplier" },
+              { key: "category", label: "Category" },
+              { key: "date", label: "Bill date", render: (value) => formatDateAU(value) },
+              { key: "dueDate", label: "Due date", render: (value) => formatDateAU(value) },
+              { key: "amount", label: "Amount", render: (value) => currency(value) },
+              { key: "status", label: "Status", render: (v, row) => (
+                <span style={{
+                  display: "inline-block", padding: "3px 10px", borderRadius: 20, fontSize: 12, fontWeight: 700,
+                  background: row.type === "credit_note" ? "#F5ECFB" : v === "Paid" ? "#dcfce7" : v === "Overdue" ? "#FEF2F2" : v === "Due soon" ? "#FFF7ED" : "#f1f5f9",
+                  color: row.type === "credit_note" ? colours.purple : v === "Paid" ? "#16a34a" : v === "Overdue" ? "#991B1B" : v === "Due soon" ? "#92400E" : "#64748b",
+                }}>
+                  {row.type === "credit_note" ? "CN" : v}
+                </span>
+              )},
+              {
+                key: "actions",
+                label: "Actions",
+                render: (_, row) => (
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    {row.isPaid ? (
+                      <button style={buttonSecondary} onClick={() => markBillUnpaid(row)}>Mark Unpaid</button>
+                    ) : (
+                      <button style={buttonPrimary} onClick={() => markBillPaid(row)}>Mark Paid</button>
+                    )}
+                    <button style={buttonSecondary} onClick={() => openExpenseEditor(row)}>View / Edit</button>
+                    {row.type !== "credit_note" && (
+                      <button style={{ ...buttonSecondary, color: colours.purple, borderColor: colours.purple }}
+                        onClick={() => { setCreditNoteSource(row); setCreditNoteForm({ amount: "", reason: "", date: todayLocal() }); setShowAPCreditNoteModal(true); }}>
+                        Credit Note
+                      </button>
+                    )}
+                  </div>
+                ),
+              },
+            ]}
+            rows={billRows}
+          />
+        </SectionCard>
+      </div>
+    );
     };
 
     const renderExpenses = () => {
@@ -7587,7 +8156,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
               Remove Receipt
             </button>
           </div>
-        ) : null}
+        ) : <EmptyState icon="📁" title="No documents yet" message="Upload receipts, contracts and generated PDFs here. All documents are stored securely against your account." />}
 
         <div style={{ marginTop: 18 }}>
           <button style={buttonPrimary} onClick={saveExpense}>
@@ -7596,7 +8165,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
         </div>
       </SectionCard>
 
-      <SectionCard title="Expense List" right={<button style={buttonSecondary} onClick={exportExpensesCsv}>Export CSV</button>}>
+      <SectionCard title="Expense List">
         <DataTable
           emptyState={{ icon: "💸", title: "No expenses yet", message: "Record your first expense using the form above. GST credits are calculated automatically and your Safe to Spend updates in real time." }}
           columns={[
@@ -7665,7 +8234,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
           <MiniBarChart data={typeData} height={90} accent={colours.teal} />
         </div>
       </div>
-      <SectionCard title="Income Sources" right={<div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}><button style={buttonSecondary} onClick={exportIncomeSourcesCsv}>Export CSV</button><button style={buttonPrimary} onClick={() => setShowIncomeSourceModal(true)}>New Income Source</button></div>}>
+      <SectionCard title="Income Sources" right={<button style={buttonPrimary} onClick={() => setShowIncomeSourceModal(true)}>New Income Source</button>}>
         <DataTable
           emptyState={{ icon: "💰", title: "No income sources yet", message: "Add your income sources for your ATO export — employment, freelance, rental income and other earnings.", action: { label: "Add income source", onClick: () => {} } }}
           columns={[
@@ -7970,19 +8539,6 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       </div>
     </div>
     );
-
-    const renderATOTaxForm = () => {
-      return (
-        <ATOTaxFormPage
-          profile={profile}
-          invoices={invoices}
-          expenses={expenses}
-          incomeSources={incomeSources}
-          getClientById={getClientById}
-        />
-      );
-    };
-
     const renderBASReport = () => {
       // ── GST registration check ──────────────────────────────────
       if (!profile.gstRegistered) {
@@ -8988,7 +9544,6 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
             {activePage === "income sources" && renderIncomeSources()}
             {activePage === "documents" && renderDocuments()}
             {activePage === "bas report" && renderBASReport()}
-            {activePage === "ato tax form" && renderATOTaxForm()}
             {activePage === "settings" && renderSettings()}
             </div>
           </div>
