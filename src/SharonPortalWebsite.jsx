@@ -199,6 +199,7 @@ const navItems = [
   "income sources",
   "documents",
   "bas report",
+  "ato tax form",
   "settings",
 ];
 
@@ -213,7 +214,7 @@ const navSections = [
   },
   {
     title: "Admin",
-    items: ["bas report", "settings"],
+    items: ["bas report", "ato tax form", "settings"],
   },
 ];
 
@@ -229,6 +230,7 @@ const navLabels = {
   "income sources": "Income Sources",
   documents: "Documents",
   "bas report": "BAS Report",
+  "ato tax form": "ATO Tax Form",
   settings: "Settings",
 };
 
@@ -2123,6 +2125,22 @@ export default function AccountingPortalPrototype() {
   const [quoteClientSearch, setQuoteClientSearch] = useState("");
   const [clientSearch, setClientSearch] = useState("");
   const [selectedClientId, setSelectedClientId] = useState(null);
+  // ATO Tax Form state
+  const [atoTab, setAtoTab] = useState("income");
+  const [atoManualIncome, setAtoManualIncome] = useState([]);
+  const [atoManualExpenses, setAtoManualExpenses] = useState([]);
+  const [atoIncForm, setAtoIncForm] = useState({ date: "", type: "Salary/Wages", payer: "", gross: "", withheld: "", franked: "", franking: "", abn: "" });
+  const [atoExpForm, setAtoExpForm] = useState({ date: "", type: "Work-related", supplier: "", amount: "", gstIncl: "yes" });
+  const [itrYear, setItrYear] = useState("2025–26");
+  const [itrResidency, setItrResidency] = useState("Resident");
+  const [itrHelp, setItrHelp] = useState("No");
+  const [itrMlsFamily, setItrMlsFamily] = useState("single");
+  const [itrMlsChildren, setItrMlsChildren] = useState(0);
+  const [itrMlsCover, setItrMlsCover] = useState("yes");
+  const [itrSapto, setItrSapto] = useState("none");
+  const [itrMedicare, setItrMedicare] = useState("yes");
+  const [itrFields, setItrFields] = useState({ i_salary:"",i_payg:"",i_paygi:"",i_business:"",i_interest:"",i_franked:"",i_fc:"",i_cg:"",i_other:"",i_foreign:"",i_foreign_tax:"",d_work:"",d_car:"",d_home:"",d_gifts:"",d_agent:"",d_other:"",adj_net_inv:"",adj_rfba:"",adj_resc:"",adj_exempt_foreign:"",cgt_proceeds:"",cgt_cost:"",cgt_losses:"" });
+  const [cgtDiscount, setCgtDiscount] = useState("yes");
   const [supplierForm, setSupplierForm] = useState({ name: "", email: "", phone: "", address: "", abn: "", contactPerson: "", notes: "" });
   const [editingSupplierId, setEditingSupplierId] = useState(null);
   const [invoiceAlerts, setInvoiceAlerts] = useState([]);
@@ -5108,65 +5126,6 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     writeQuotePreviewToWindow(w, previewQuote, { allowEmail: true });
     };
 
-    const exportToATOForm = () => {
-      const classifyIncomeType = (src) => {
-        const raw = String(src?.incomeType || "").toLowerCase();
-        if (raw.includes("casual") || raw.includes("salary") || raw.includes("wage")) return "Salary/Wages";
-        if (raw.includes("business") || raw.includes("sole trader")) return "Business (sole trader)";
-        if (raw.includes("interest")) return "Interest";
-        if (raw.includes("dividend")) return "Dividends";
-        if (raw.includes("foreign")) return "Other";
-        return "Other";
-      };
-
-      const incomeRecords = invoices
-        .filter((inv) => inv.status === "Paid")
-        .map((inv) => {
-          const client = getClientById(inv.clientId);
-          return {
-            date: inv.paidAt ? inv.paidAt.slice(0, 10) : (inv.invoiceDate || ""),
-            type: "Business (sole trader)",
-            payer: client?.name || client?.businessName || inv.clientName || "",
-            gross: safeNumber(inv.total),
-            withheld: safeNumber(inv.taxWithheld || 0),
-            franked: 0,
-            franking: 0,
-            abn: client?.abn || "",
-          };
-        });
-
-      incomeSources.forEach((src) => {
-        const beforeTax = safeNumber(src.beforeTax);
-        if (beforeTax <= 0) return;
-        const incomeType = classifyIncomeType(src);
-        incomeRecords.push({
-          date: todayLocal(),
-          type: incomeType,
-          payer: src.name || "",
-          gross: beforeTax,
-          withheld: safeNumber(src.taxWithheld || 0),
-          franked: incomeType === "Dividends" ? beforeTax : 0,
-          franking: safeNumber(src.frankingCredit || 0),
-          abn: "",
-        });
-      });
-
-      const expenseRecords = expenses.map((exp) => ({
-        date: exp.date || "",
-        type: exp.category || exp.expenseType || "Other",
-        supplier: exp.supplier || exp.description || "",
-        amount: safeNumber(exp.amount),
-        gstIncl: exp.gstIncluded !== false ? "yes" : "no",
-      }));
-
-      const atoState = { income: incomeRecords, expenses: expenseRecords };
-      const encoded = encodeURIComponent(JSON.stringify(atoState));
-      const atoBaseUrl = profile?.atoExportUrl
-        || (typeof import.meta !== "undefined" && import.meta.env?.VITE_ATO_EXPORT_URL)
-        || "https://www.sharonogier.com/australian-ato-tax-form.html";
-      window.open(`${atoBaseUrl}#import=${encoded}`, "_blank");
-    };
-
     const monthlyFinance = useMemo(() => {
       const bucket = new Map();
       const ensureBucket = (key) => {
@@ -5736,11 +5695,6 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
                 gap: 14,
               }}
             >
-              <div style={{ ...cardStyle, padding: 16, background: colours.bg }}>
-                <div style={{ fontSize: 12, fontWeight: 800, textTransform: "uppercase", color: colours.muted }}>ATO export</div>
-                <div style={{ fontSize: 14, color: colours.text, lineHeight: 1.6, marginTop: 8 }}>Send paid invoice and expense data straight into the tax form page with the current portal records.</div>
-                <button style={{ ...buttonPrimary, marginTop: 14 }} onClick={exportToATOForm}>Export to ATO Tax Form</button>
-              </div>
               <div style={{ ...cardStyle, padding: 16, background: colours.bg }}>
                 <div style={{ fontSize: 12, fontWeight: 800, textTransform: "uppercase", color: colours.muted }}>Supabase sync</div>
                 <div style={{ fontSize: 14, color: colours.text, lineHeight: 1.6, marginTop: 8 }}>Your dashboard reflects the same SaaS entities already saved in Supabase: invoices, expenses, clients, services, income sources, and documents.</div>
@@ -9445,6 +9399,493 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       );
     };
 
+    const renderATOTaxForm = () => {
+    // ── Helpers ──────────────────────────────────────────────────
+    const GST_RATE = 0.10;
+    const fmt = (n) => (Number(n) || 0).toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const fmtDollar = (n) => "$" + fmt(n);
+    const nn = (v) => Number(v) || 0;
+    const sumKey = (arr, key) => (arr || []).reduce((s, x) => s + nn(x[key]), 0);
+    const netOfGST = (amount, gstIncl) => { const A = nn(amount); return gstIncl === "yes" ? A / (1 + GST_RATE) : A; };
+    const isBusinessIncome = (x) => (x.type || "").toLowerCase().includes("business");
+
+    // ── Derive income records from portal invoices + income sources ─
+    const classifyType = (src) => {
+      const raw = String(src?.incomeType || "").toLowerCase();
+      if (raw.includes("casual") || raw.includes("salary") || raw.includes("wage")) return "Salary/Wages";
+      if (raw.includes("business") || raw.includes("sole trader") || raw.includes("financial")) return "Business (sole trader)";
+      if (raw.includes("interest")) return "Interest";
+      if (raw.includes("dividend")) return "Dividends";
+      return "Other";
+    };
+
+    const portalIncomeRecords = invoices
+      .filter((inv) => inv.status === "Paid")
+      .map((inv) => {
+        const client = clients.find((c) => c.id === safeNumber(inv.clientId));
+        return {
+          date: inv.paidAt ? inv.paidAt.slice(0, 10) : (inv.invoiceDate || ""),
+          type: "Business (sole trader)",
+          payer: client?.name || client?.businessName || "",
+          gross: safeNumber(inv.total),
+          withheld: safeNumber(inv.taxWithheld || 0),
+          franked: 0, franking: 0,
+          abn: client?.abn || "",
+          source: "portal",
+        };
+      });
+    incomeSources.forEach((src) => {
+      if (safeNumber(src.beforeTax) <= 0) return;
+      portalIncomeRecords.push({
+        date: todayLocal(),
+        type: classifyType(src),
+        payer: src.name || "",
+        gross: safeNumber(src.beforeTax),
+        withheld: safeNumber(src.taxWithheld || 0),
+        franked: classifyType(src) === "Dividends" ? safeNumber(src.beforeTax) : 0,
+        franking: safeNumber(src.frankingCredit || 0),
+        abn: "", source: "portal",
+      });
+    });
+
+    const portalExpenseRecords = expenses.map((exp) => ({
+      date: exp.date || "",
+      type: exp.category || exp.expenseType || "Work-related",
+      supplier: exp.supplier || exp.description || "",
+      amount: safeNumber(exp.amount),
+      gstIncl: exp.gstIncluded !== false ? "yes" : "no",
+      source: "portal",
+    }));
+
+    const allIncome = [...portalIncomeRecords, ...atoManualIncome];
+    const allExpenses = [...portalExpenseRecords, ...atoManualExpenses];
+    const setF = (k, v) => setItrFields((p) => ({ ...p, [k]: v }));
+
+    // ── ATO tax scales ────────────────────────────────────────────
+    const atoTaxResident = (t) => {
+      t = nn(t);
+      if (t <= 18200) return 0;
+      if (t <= 45000) return (t - 18200) * 0.19;
+      if (t <= 120000) return 5092 + (t - 45000) * 0.325;
+      if (t <= 180000) return 29467 + (t - 120000) * 0.37;
+      return 51667 + (t - 180000) * 0.45;
+    };
+    const atoTaxNonResident = (t) => {
+      t = nn(t);
+      if (t <= 120000) return t * 0.325;
+      if (t <= 180000) return 39000 + (t - 120000) * 0.37;
+      return 61200 + (t - 180000) * 0.45;
+    };
+    const lito = (t, isRes) => { if (!isRes) return 0; t = nn(t); if (t <= 37500) return 700; if (t <= 45000) return 700 - 0.05 * (t - 37500); if (t <= 66667) return 325 - 0.015 * (t - 45000); return 0; };
+    const sapto = (t) => { const s = itrSapto; if (s === "none") return 0; t = nn(t); const [max, thr, cut] = s === "single" ? [2230,34919,52759] : s === "couple" ? [1602,30994,43810] : [2040,33732,50052]; if (t <= thr) return max; if (t >= cut) return 0; return Math.max(0, max - 0.125*(t-thr)); };
+    const helpRepayment = (ri) => {
+      if (itrHelp !== "Yes") return 0;
+      const RI = nn(ri);
+      if (RI <= 54435) return 0; if (RI <= 62738) return RI*0.01; if (RI <= 68152) return RI*0.02;
+      if (RI <= 72207) return RI*0.025; if (RI <= 75866) return RI*0.03; if (RI <= 79768) return RI*0.035;
+      if (RI <= 83955) return RI*0.04; if (RI <= 88487) return RI*0.045; if (RI <= 93308) return RI*0.05;
+      if (RI <= 98471) return RI*0.055; if (RI <= 103004) return RI*0.06; if (RI <= 107978) return RI*0.065;
+      if (RI <= 113337) return RI*0.07; if (RI <= 119122) return RI*0.075; if (RI <= 125370) return RI*0.08;
+      if (RI <= 132120) return RI*0.085; if (RI <= 139414) return RI*0.09; if (RI <= 147296) return RI*0.095;
+      return RI*0.10;
+    };
+    const mlsSurcharge = (ri) => {
+      if (itrResidency !== "Resident" || itrMlsCover === "yes") return 0;
+      let base = itrMlsFamily === "family" ? 194000 : 97000;
+      if (itrMlsFamily === "family" && itrMlsChildren > 1) base += (itrMlsChildren - 1) * 1500;
+      const RI = nn(ri); if (RI <= base) return 0;
+      return RI * (RI > base*1.5 ? 0.015 : RI > base*1.25 ? 0.0125 : 0.01);
+    };
+
+    // ── GST calcs ─────────────────────────────────────────────────
+    const g1  = allIncome.filter(isBusinessIncome).reduce((s,x) => s+nn(x.gross), 0);
+    const b1a = allIncome.filter(isBusinessIncome).reduce((s,x) => s+(nn(x.gross)*GST_RATE)/(1+GST_RATE), 0);
+    const g10 = allExpenses.filter(x => nn(x.amount) >= 1000).reduce((s,x) => s+nn(x.amount), 0);
+    const g11 = allExpenses.filter(x => nn(x.amount) < 1000).reduce((s,x) => s+nn(x.amount), 0);
+    const b1b = allExpenses.reduce((s,x) => x.gstIncl==="yes" ? s+(nn(x.amount)*GST_RATE)/(1+GST_RATE) : s, 0);
+    const gstNet = b1a - b1b;
+
+    // ── Tax summary ───────────────────────────────────────────────
+    const totalInc = sumKey(allIncome, "gross");
+    const totalWh  = sumKey(allIncome, "withheld");
+    const totalFC  = sumKey(allIncome, "franking");
+    const deductible = allExpenses.filter(x => (x.type||"").toLowerCase() !== "capital item").reduce((s,x) => s+netOfGST(x.amount,x.gstIncl), 0);
+    const taxableSummary = Math.max(0, totalInc - deductible);
+    const taxGrossSummary = atoTaxResident(taxableSummary);
+    const taxAfterFC = Math.max(0, taxGrossSummary - totalFC);
+    const levySummary = itrMedicare === "yes" ? taxableSummary * 0.02 : 0;
+    const balanceSummary = taxAfterFC + levySummary - totalWh;
+
+    // ── ITR calcs ─────────────────────────────────────────────────
+    const I = { salary:nn(itrFields.i_salary), payg:nn(itrFields.i_payg), paygi:nn(itrFields.i_paygi), business:nn(itrFields.i_business), interest:nn(itrFields.i_interest), franked:nn(itrFields.i_franked), fc:nn(itrFields.i_fc), cg:nn(itrFields.i_cg), other:nn(itrFields.i_other), foreign:nn(itrFields.i_foreign), foreignTax:nn(itrFields.i_foreign_tax) };
+    const D = { work:nn(itrFields.d_work), car:nn(itrFields.d_car), home:nn(itrFields.d_home), gifts:nn(itrFields.d_gifts), agent:nn(itrFields.d_agent), other:nn(itrFields.d_other) };
+    const itrAssessable = I.salary + I.business + I.interest + I.franked + I.cg + I.other + I.foreign;
+    const itrDeductions = D.work + D.car + D.home + D.gifts + D.agent + D.other;
+    const adj = nn(itrFields.adj_net_inv)+nn(itrFields.adj_rfba)+nn(itrFields.adj_resc)+nn(itrFields.adj_exempt_foreign);
+    const itrTaxable = Math.max(0, itrAssessable - itrDeductions);
+    const isResident = itrResidency === "Resident";
+    const itrTaxGross = isResident ? atoTaxResident(itrTaxable) : atoTaxNonResident(itrTaxable);
+    const repIncome = itrTaxable + adj;
+    const itrLevy = (itrMedicare === "yes" && isResident) ? itrTaxable * 0.02 : 0;
+    const itrMLS = mlsSurcharge(repIncome);
+    const itrHELP = helpRepayment(repIncome);
+    const foreignOffset = Math.min(I.foreignTax, itrTaxGross);
+    const itrLITO = lito(itrTaxable, isResident);
+    const itrSAPTO = sapto(itrTaxable);
+    const totalOffsets = I.fc + foreignOffset + itrLITO + itrSAPTO;
+    const itrTaxAfterOffsets = Math.max(0, itrTaxGross - totalOffsets);
+    const itrBalance = itrTaxAfterOffsets + itrLevy + itrMLS + itrHELP - I.payg - I.paygi;
+
+    // ── Pull from ledgers into ITR ────────────────────────────────
+    const pullFromLedgers = () => {
+      // ── Income from Income Ledger tab ─────────────────────────
+      const wages    = allIncome.filter(x => { const t=(x.type||"").toLowerCase(); return t.includes("salary")||t.includes("wage")||t.includes("casual")||t.includes("government allowance"); }).reduce((s,x)=>s+nn(x.gross),0);
+      const biz      = allIncome.filter(x => (x.type||"").toLowerCase().includes("business")).reduce((s,x)=>s+nn(x.gross),0);
+      const interest = allIncome.filter(x => (x.type||"").toLowerCase().includes("interest")).reduce((s,x)=>s+nn(x.gross),0);
+      const foreign  = allIncome.filter(x => { const t=(x.type||"").toLowerCase(); return t.includes("outside australia")||t.includes("foreign"); }).reduce((s,x)=>s+nn(x.gross),0);
+      const divGross = allIncome.filter(x => (x.type||"").toLowerCase().includes("dividend")).reduce((s,x)=>s+nn(x.gross),0);
+      const payg     = sumKey(allIncome,"withheld");
+      const franked  = sumKey(allIncome,"franked") || divGross;
+      const fc       = sumKey(allIncome,"franking");
+      const mapped   = wages+biz+interest+foreign+divGross;
+      const other    = Math.max(0, sumKey(allIncome,"gross")-mapped);
+
+      // ── Deductions from Expense Ledger tab ────────────────────
+      // Work-related: all non-capital expenses net of GST
+      const workDed   = allExpenses.filter(x => { const t=(x.type||"").toLowerCase(); return t.includes("work")||t.includes("office")||t.includes("subscription")||t.includes("software")||t.includes("telephone")||t.includes("printing")||t.includes("stationery"); }).reduce((s,x)=>s+netOfGST(x.amount,x.gstIncl),0);
+      const carDed    = allExpenses.filter(x => { const t=(x.type||"").toLowerCase(); return t.includes("motor")||t.includes("car")||t.includes("vehicle")||t.includes("travel"); }).reduce((s,x)=>s+netOfGST(x.amount,x.gstIncl),0);
+      const homeDed   = allExpenses.filter(x => (x.type||"").toLowerCase().includes("rent")).reduce((s,x)=>s+netOfGST(x.amount,x.gstIncl),0);
+      const otherDed  = allExpenses.filter(x => { const t=(x.type||"").toLowerCase(); return t!=="capital item" && !t.includes("work") && !t.includes("office") && !t.includes("motor") && !t.includes("car") && !t.includes("vehicle") && !t.includes("travel") && !t.includes("rent") && !t.includes("subscription") && !t.includes("software") && !t.includes("telephone") && !t.includes("printing") && !t.includes("stationery"); }).reduce((s,x)=>s+netOfGST(x.amount,x.gstIncl),0);
+
+      // ── GST / BAS tab → PAYG instalments proxy ────────────────
+      // If net GST is positive, that's what's been paying toward BAS — populate as PAYG instalment hint
+      const estimatedPaygi = Math.max(0, b1a - b1b);
+
+      setItrFields(p => ({
+        ...p,
+        i_salary:    wages    || "",
+        i_business:  biz      || "",
+        i_interest:  interest || "",
+        i_foreign:   foreign  || "",
+        i_franked:   franked  || "",
+        i_fc:        fc       || "",
+        i_other:     other    || "",
+        i_payg:      payg     || "",
+        i_paygi:     p.i_paygi || (estimatedPaygi > 0 ? estimatedPaygi.toFixed(2) : ""),
+        d_work:      workDed  || "",
+        d_car:       carDed   || "",
+        d_home:      homeDed  || "",
+        d_other:     otherDed || "",
+      }));
+
+      // Switch to ITR tab so user sees the result
+      setAtoTab("itr");
+      toast.success("ITR populated from all ledger tabs. Review and adjust fields as needed.");
+    };
+
+    // ── Styles ────────────────────────────────────────────────────
+    const tabBtn = (id) => ({ padding:"9px 16px", border:"none", cursor:"pointer", fontWeight:700, fontSize:13, borderBottom: atoTab===id ? `3px solid ${colours.purple}` : "3px solid transparent", background:"transparent", color: atoTab===id ? colours.purple : colours.muted, transition:"color 0.15s" });
+    const sectionBox = { ...cardStyle, padding:18, marginBottom:0 };
+    const row2 = { display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))", gap:12 };
+    const calcRow = (label, val, bold, color) => (
+      <div key={label} style={{ display:"flex", justifyContent:"space-between", padding:"7px 0", borderBottom:`1px solid ${colours.border}`, fontSize:14 }}>
+        <span style={{ color: bold ? colours.text : colours.muted, fontWeight: bold ? 800 : 400 }}>{label}</span>
+        <strong style={{ color: color || colours.text }}>{val}</strong>
+      </div>
+    );
+
+    return (
+      <div style={{ display:"grid", gap:20 }}>
+        <DashboardHero title="ATO Tax Form" subtitle="Income tax and BAS worksheet populated directly from your portal data. All calculations are indicative — review before lodging." highlight={`${currency(itrTaxable)} taxable`}>
+          <InsightChip label="Total income" value={currency(totalInc)} />
+          <InsightChip label="GST net payable" value={currency(gstNet)} />
+          <InsightChip label="Est. balance" value={currency(itrBalance)} />
+        </DashboardHero>
+
+        {/* Tab bar */}
+        <div style={{ ...cardStyle, padding:"0 4px" }}>
+          <div style={{ display:"flex", flexWrap:"wrap", borderBottom:`1px solid ${colours.border}` }}>
+            {[["income","Income Ledger"],["expenses","Expense Ledger"],["gst","GST (BAS)"],["bas","BAS Summary"],["summary","Tax Summary"],["itr","ITR 2025–26"]].map(([id,label]) => (
+              <button key={id} style={tabBtn(id)} onClick={() => setAtoTab(id)}>{label}</button>
+            ))}
+          </div>
+        </div>
+
+        {/* ── INCOME TAB ── */}
+        {atoTab === "income" && (
+          <div style={{ display:"grid", gap:16 }}>
+            <SectionCard title="Add Income Record">
+              <div style={row2}>
+                <div><label style={labelStyle}>Date</label><input type="date" style={inputStyle} value={atoIncForm.date} onChange={e=>setAtoIncForm(p=>({...p,date:e.target.value}))} /></div>
+                <div><label style={labelStyle}>Type</label>
+                  <select style={inputStyle} value={atoIncForm.type} onChange={e=>setAtoIncForm(p=>({...p,type:e.target.value}))}>
+                    {["Salary/Wages","Government allowance","Business (sole trader)","Interest","Dividends","Other"].map(t=><option key={t}>{t}</option>)}
+                  </select>
+                </div>
+                <div><label style={labelStyle}>Payer</label><input style={inputStyle} value={atoIncForm.payer} onChange={e=>setAtoIncForm(p=>({...p,payer:e.target.value}))} placeholder="Employer/Client" /></div>
+                <div><label style={labelStyle}>Gross ($)</label><input type="number" style={inputStyle} value={atoIncForm.gross} onChange={e=>setAtoIncForm(p=>({...p,gross:e.target.value}))} /></div>
+                <div><label style={labelStyle}>Tax withheld ($)</label><input type="number" style={inputStyle} value={atoIncForm.withheld} onChange={e=>setAtoIncForm(p=>({...p,withheld:e.target.value}))} /></div>
+                <div><label style={labelStyle}>Franked ($)</label><input type="number" style={inputStyle} value={atoIncForm.franked} onChange={e=>setAtoIncForm(p=>({...p,franked:e.target.value}))} /></div>
+                <div><label style={labelStyle}>Franking credit ($)</label><input type="number" style={inputStyle} value={atoIncForm.franking} onChange={e=>setAtoIncForm(p=>({...p,franking:e.target.value}))} /></div>
+                <div><label style={labelStyle}>ABN</label><input style={inputStyle} value={atoIncForm.abn} onChange={e=>setAtoIncForm(p=>({...p,abn:e.target.value}))} /></div>
+              </div>
+              <div style={{ marginTop:12 }}>
+                <button style={buttonPrimary} onClick={() => {
+                  if (!atoIncForm.date || nn(atoIncForm.gross) <= 0) { toast.warning("Date and gross amount required"); return; }
+                  setAtoManualIncome(p => [...p, { ...atoIncForm, gross:nn(atoIncForm.gross), withheld:nn(atoIncForm.withheld), franked:nn(atoIncForm.franked), franking:nn(atoIncForm.franking), source:"manual" }]);
+                  setAtoIncForm(p => ({ ...p, payer:"", gross:"", withheld:"", franked:"", franking:"", abn:"" }));
+                }}>Add Record</button>
+              </div>
+            </SectionCard>
+            <SectionCard title={`Income Records (${allIncome.length})`}>
+              <div style={{ overflowX:"auto" }}>
+                <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
+                  <thead><tr style={{ background:colours.bg }}>{["Date","Type","Payer","Gross","Withheld","Franked","FC","ABN","Source",""].map(h=><th key={h} style={{ padding:"8px 10px", textAlign:"left", borderBottom:`2px solid ${colours.border}`, fontWeight:700 }}>{h}</th>)}</tr></thead>
+                  <tbody>
+                    {allIncome.map((r,i) => (
+                      <tr key={i} style={{ borderBottom:`1px solid ${colours.border}`, background: r.source==="manual" ? colours.lightPurple : "#fff" }}>
+                        <td style={{ padding:"7px 10px" }}>{r.date}</td>
+                        <td style={{ padding:"7px 10px" }}>{r.type}</td>
+                        <td style={{ padding:"7px 10px" }}>{r.payer}</td>
+                        <td style={{ padding:"7px 10px", textAlign:"right" }}>{fmtDollar(r.gross)}</td>
+                        <td style={{ padding:"7px 10px", textAlign:"right" }}>{fmtDollar(r.withheld)}</td>
+                        <td style={{ padding:"7px 10px", textAlign:"right" }}>{fmtDollar(r.franked)}</td>
+                        <td style={{ padding:"7px 10px", textAlign:"right" }}>{fmtDollar(r.franking)}</td>
+                        <td style={{ padding:"7px 10px" }}>{r.abn}</td>
+                        <td style={{ padding:"7px 10px", fontSize:11 }}><span style={{ background: r.source==="portal" ? colours.lightTeal : colours.lightPurple, color: r.source==="portal" ? colours.teal : colours.purple, padding:"2px 7px", borderRadius:8, fontWeight:700 }}>{r.source==="portal" ? "Portal" : "Manual"}</span></td>
+                        <td style={{ padding:"7px 10px" }}>{r.source==="manual" && <button style={{ ...buttonSecondary, fontSize:12, padding:"3px 8px", color:"#dc2626", borderColor:"#dc2626" }} onClick={() => setAtoManualIncome(p=>p.filter((_,j)=>j!==(i-portalIncomeRecords.length)))}>Delete</button>}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr style={{ background:colours.bg, fontWeight:700 }}>
+                      <td colSpan={3} style={{ padding:"8px 10px", textAlign:"right" }}>Totals:</td>
+                      <td style={{ padding:"8px 10px", textAlign:"right" }}>{fmtDollar(sumKey(allIncome,"gross"))}</td>
+                      <td style={{ padding:"8px 10px", textAlign:"right" }}>{fmtDollar(sumKey(allIncome,"withheld"))}</td>
+                      <td style={{ padding:"8px 10px", textAlign:"right" }}>{fmtDollar(sumKey(allIncome,"franked"))}</td>
+                      <td style={{ padding:"8px 10px", textAlign:"right" }}>{fmtDollar(sumKey(allIncome,"franking"))}</td>
+                      <td colSpan={3}></td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+              <div style={{ fontSize:12, color:colours.muted, marginTop:10 }}>Portal records are auto-populated from paid invoices and income sources. Add manual records for any income not in the portal.</div>
+            </SectionCard>
+          </div>
+        )}
+
+        {/* ── EXPENSES TAB ── */}
+        {atoTab === "expenses" && (
+          <div style={{ display:"grid", gap:16 }}>
+            <SectionCard title="Add Expense Record">
+              <div style={row2}>
+                <div><label style={labelStyle}>Date</label><input type="date" style={inputStyle} value={atoExpForm.date} onChange={e=>setAtoExpForm(p=>({...p,date:e.target.value}))} /></div>
+                <div><label style={labelStyle}>Type</label>
+                  <select style={inputStyle} value={atoExpForm.type} onChange={e=>setAtoExpForm(p=>({...p,type:e.target.value}))}>
+                    {["Work-related","Capital item","Office supplies","Motor vehicle","Home office","Other"].map(t=><option key={t}>{t}</option>)}
+                  </select>
+                </div>
+                <div><label style={labelStyle}>Supplier</label><input style={inputStyle} value={atoExpForm.supplier} onChange={e=>setAtoExpForm(p=>({...p,supplier:e.target.value}))} /></div>
+                <div><label style={labelStyle}>Amount ($)</label><input type="number" style={inputStyle} value={atoExpForm.amount} onChange={e=>setAtoExpForm(p=>({...p,amount:e.target.value}))} /></div>
+                <div><label style={labelStyle}>GST included?</label>
+                  <select style={inputStyle} value={atoExpForm.gstIncl} onChange={e=>setAtoExpForm(p=>({...p,gstIncl:e.target.value}))}>
+                    <option value="yes">Yes</option><option value="no">No</option>
+                  </select>
+                </div>
+              </div>
+              <div style={{ marginTop:12 }}>
+                <button style={buttonPrimary} onClick={() => {
+                  if (!atoExpForm.date || nn(atoExpForm.amount) <= 0) { toast.warning("Date and amount required"); return; }
+                  setAtoManualExpenses(p => [...p, { ...atoExpForm, amount:nn(atoExpForm.amount), source:"manual" }]);
+                  setAtoExpForm(p => ({ ...p, supplier:"", amount:"" }));
+                }}>Add Expense</button>
+              </div>
+            </SectionCard>
+            <SectionCard title={`Expense Records (${allExpenses.length})`}>
+              <div style={{ overflowX:"auto" }}>
+                <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
+                  <thead><tr style={{ background:colours.bg }}>{["Date","Type","Supplier","Amount","GST Incl","Source",""].map(h=><th key={h} style={{ padding:"8px 10px", textAlign:"left", borderBottom:`2px solid ${colours.border}`, fontWeight:700 }}>{h}</th>)}</tr></thead>
+                  <tbody>
+                    {allExpenses.map((r,i) => (
+                      <tr key={i} style={{ borderBottom:`1px solid ${colours.border}`, background: r.source==="manual" ? colours.lightPurple : "#fff" }}>
+                        <td style={{ padding:"7px 10px" }}>{r.date}</td>
+                        <td style={{ padding:"7px 10px" }}>{r.type}</td>
+                        <td style={{ padding:"7px 10px" }}>{r.supplier}</td>
+                        <td style={{ padding:"7px 10px", textAlign:"right" }}>{fmtDollar(r.amount)}</td>
+                        <td style={{ padding:"7px 10px" }}>{r.gstIncl}</td>
+                        <td style={{ padding:"7px 10px", fontSize:11 }}><span style={{ background: r.source==="portal" ? colours.lightTeal : colours.lightPurple, color: r.source==="portal" ? colours.teal : colours.purple, padding:"2px 7px", borderRadius:8, fontWeight:700 }}>{r.source==="portal" ? "Portal" : "Manual"}</span></td>
+                        <td style={{ padding:"7px 10px" }}>{r.source==="manual" && <button style={{ ...buttonSecondary, fontSize:12, padding:"3px 8px", color:"#dc2626", borderColor:"#dc2626" }} onClick={() => setAtoManualExpenses(p=>p.filter((_,j)=>j!==(i-portalExpenseRecords.length)))}>Delete</button>}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div style={{ fontSize:12, color:colours.muted, marginTop:10 }}>Capital items (≥$1,000) are excluded from deductions in the tax worksheet but included in G10 BAS calculations.</div>
+            </SectionCard>
+          </div>
+        )}
+
+        {/* ── GST TAB ── */}
+        {atoTab === "gst" && (
+          <SectionCard title="GST (BAS) Summary">
+            <div style={{ display:"grid", gap:8, maxWidth:600 }}>
+              {[["G1 — Total sales (incl GST) — Business income only", fmtDollar(g1), false],["G10 — Capital purchases (≥ $1,000)", fmtDollar(g10), false],["G11 — Non-capital purchases (< $1,000)", fmtDollar(g11), false],["1A — GST on sales (payable)", fmtDollar(b1a), false, colours.purple],["1B — GST on purchases (credits)", fmtDollar(b1b), false, colours.teal],["Net GST payable (1A − 1B)", fmtDollar(gstNet), true, gstNet >= 0 ? "#dc2626" : "#16a34a"]].map(([label,val,bold,color])=>calcRow(label,val,bold,color))}
+            </div>
+            <div style={{ fontSize:12, color:colours.muted, marginTop:14 }}>Only Business (sole trader) income counts toward G1. GST credits only where GST included = Yes.</div>
+          </SectionCard>
+        )}
+
+        {/* ── BAS SUMMARY TAB ── */}
+        {atoTab === "bas" && (
+          <div style={{ display:"grid", gap:16 }}>
+            <SectionCard title="Period & Entity">
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))", gap:12 }}>
+                <div><label style={labelStyle}>Business name</label><input style={{ ...inputStyle, background:colours.bg }} value={profile.businessName || "Sharon's Accounting Service"} readOnly /></div>
+                <div><label style={labelStyle}>ABN</label><input style={{ ...inputStyle, background:colours.bg }} value={profile.abn || "44869154258"} readOnly /></div>
+                <div><label style={labelStyle}>Period</label><input style={inputStyle} placeholder="e.g. Q2 2025–26 (Oct–Dec 2025)" /></div>
+              </div>
+            </SectionCard>
+            <SectionCard title="GST Summary">
+              <div style={{ display:"grid", gap:8, maxWidth:600 }}>
+                {[["G1 — Total sales (incl GST)", fmtDollar(g1)],["G10 — Capital purchases (incl GST)", fmtDollar(g10)],["G11 — Non-capital purchases (incl GST)", fmtDollar(g11)],["1A — GST on sales (payable)", fmtDollar(b1a)],["1B — GST on purchases (credits)", fmtDollar(b1b)],["Net GST for this BAS (1A − 1B)", fmtDollar(gstNet)]].map(([l,v],i)=>calcRow(l,v,i===5,i===5?(gstNet>=0?"#dc2626":"#16a34a"):undefined))}
+              </div>
+            </SectionCard>
+            <SectionCard title="Declaration">
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))", gap:12 }}>
+                <div><label style={labelStyle}>Signed by (client)</label><input style={inputStyle} placeholder="Client name" /></div>
+                <div><label style={labelStyle}>Date</label><input type="date" style={inputStyle} defaultValue={todayLocal()} /></div>
+              </div>
+              <div style={{ fontSize:12, color:colours.muted, marginTop:10, lineHeight:1.6 }}>I declare that the information provided for the above Business Activity Statement is true and correct, and that I am authorised to make this declaration.</div>
+            </SectionCard>
+            <div style={{ display:"flex", justifyContent:"flex-end" }}>
+              <button style={buttonSecondary} onClick={() => window.print()}>🖨 Print / Save PDF</button>
+            </div>
+          </div>
+        )}
+
+        {/* ── TAX SUMMARY TAB ── */}
+        {atoTab === "summary" && (
+          <SectionCard title="Tax Summary — Indicative (ATO brackets)">
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))", gap:12, marginBottom:16 }}>
+              <div><label style={labelStyle}>Medicare Levy</label>
+                <select style={inputStyle} value={itrMedicare} onChange={e=>setItrMedicare(e.target.value)}>
+                  <option value="yes">Yes (2%)</option><option value="no">No</option>
+                </select>
+              </div>
+            </div>
+            <div style={{ display:"grid", gap:6, maxWidth:600 }}>
+              {calcRow("Total income", fmtDollar(totalInc), false)}
+              {calcRow("Less: deductible expenses", "−"+fmtDollar(deductible), false)}
+              {calcRow("Taxable income", fmtDollar(taxableSummary), true)}
+              {calcRow("Less: franking credits", "−"+fmtDollar(totalFC), false)}
+              {calcRow("Estimated income tax", fmtDollar(taxAfterFC), false)}
+              {calcRow("Medicare levy", fmtDollar(levySummary), false)}
+              {calcRow("Less: PAYG withheld", "−"+fmtDollar(totalWh), false)}
+              {calcRow("Net balance (payable + / refund −)", (balanceSummary>=0?fmtDollar(balanceSummary):"−"+fmtDollar(Math.abs(balanceSummary))), true, balanceSummary>0?"#dc2626":"#16a34a")}
+            </div>
+            <div style={{ fontSize:12, color:colours.muted, marginTop:14 }}>Indicative only. Based on resident tax brackets. Does not include all offsets or surcharges.</div>
+          </SectionCard>
+        )}
+
+        {/* ── ITR TAB ── */}
+        {atoTab === "itr" && (
+          <div style={{ display:"grid", gap:16 }}>
+            {/* ── Pull from all tabs banner ── */}
+            <div style={{ ...cardStyle, padding:20, background:`linear-gradient(135deg, ${colours.lightPurple} 0%, #EDE9FE 100%)`, border:`1px solid #E9D5FF`, display:"flex", alignItems:"center", justifyContent:"space-between", gap:16, flexWrap:"wrap" }}>
+              <div>
+                <div style={{ fontSize:16, fontWeight:800, color:colours.purple, marginBottom:4 }}>🗂 Populate ITR from all tabs</div>
+                <div style={{ fontSize:13, color:colours.text, lineHeight:1.6 }}>
+                  Pulls income from the <strong>Income Ledger</strong>, deductions from the <strong>Expense Ledger</strong>, and PAYG instalment estimate from the <strong>GST tab</strong>. Review and adjust any field manually after pulling.
+                </div>
+              </div>
+              <button
+                style={{ ...buttonPrimary, whiteSpace:"nowrap", padding:"12px 22px", fontSize:14, flexShrink:0 }}
+                onClick={pullFromLedgers}
+              >
+                ↓ Pull from All Tabs
+              </button>
+            </div>
+            <SectionCard title="General">
+              <div style={row2}>
+                <div><label style={labelStyle}>Year</label><select style={inputStyle} value={itrYear} onChange={e=>setItrYear(e.target.value)}><option>2025–26</option><option>2024–25</option></select></div>
+                <div><label style={labelStyle}>Residency</label><select style={inputStyle} value={itrResidency} onChange={e=>setItrResidency(e.target.value)}><option>Resident</option><option>Non-resident</option></select></div>
+                <div><label style={labelStyle}>HELP/HECS debt</label><select style={inputStyle} value={itrHelp} onChange={e=>setItrHelp(e.target.value)}><option>No</option><option>Yes</option></select></div>
+              </div>
+            </SectionCard>
+            <SectionCard title="Income (Assessable)">
+              <div style={row2}>
+                {[["i_salary","Salary/Wages ($)"],["i_payg","PAYG withheld ($)"],["i_paygi","PAYG instalments ($)"],["i_business","Business (sole trader) ($)"],["i_interest","Interest ($)"],["i_franked","Dividends — franked ($)"],["i_fc","Franking credits ($)"],["i_cg","Capital gains — net assessable ($)"],["i_other","Other income ($)"],["i_foreign","Foreign income (AUD) ($)"],["i_foreign_tax","Foreign tax paid ($)"]].map(([k,lab])=>(
+                  <div key={k}><label style={labelStyle}>{lab}</label><input type="number" style={inputStyle} value={itrFields[k]} onChange={e=>setF(k,e.target.value)} /></div>
+                ))}
+              </div>
+            </SectionCard>
+            <SectionCard title="Deductions">
+              <div style={row2}>
+                {[["d_work","Work-related ($)"],["d_car","Car — cents/km amount ($)"],["d_home","Home office ($)"],["d_gifts","Gifts/Donations ($)"],["d_agent","Tax agent fees ($)"],["d_other","Other deductions ($)"]].map(([k,lab])=>(
+                  <div key={k}><label style={labelStyle}>{lab}</label><input type="number" style={inputStyle} value={itrFields[k]} onChange={e=>setF(k,e.target.value)} /></div>
+                ))}
+              </div>
+            </SectionCard>
+            <SectionCard title="HELP / MLS Adjustments">
+              <div style={row2}>
+                {[["adj_net_inv","Net investment losses ($)"],["adj_rfba","Reportable fringe benefits ($)"],["adj_resc","Reportable employer super ($)"],["adj_exempt_foreign","Exempt foreign income ($)"]].map(([k,lab])=>(
+                  <div key={k}><label style={labelStyle}>{lab}</label><input type="number" style={inputStyle} value={itrFields[k]} onChange={e=>setF(k,e.target.value)} /></div>
+                ))}
+              </div>
+            </SectionCard>
+            <SectionCard title="CGT Helper">
+              <div style={row2}>
+                <div><label style={labelStyle}>Capital proceeds ($)</label><input type="number" style={inputStyle} value={itrFields.cgt_proceeds} onChange={e=>setF("cgt_proceeds",e.target.value)} /></div>
+                <div><label style={labelStyle}>Cost base ($)</label><input type="number" style={inputStyle} value={itrFields.cgt_cost} onChange={e=>setF("cgt_cost",e.target.value)} /></div>
+                <div><label style={labelStyle}>Current year losses ($)</label><input type="number" style={inputStyle} value={itrFields.cgt_losses} onChange={e=>setF("cgt_losses",e.target.value)} /></div>
+                <div><label style={labelStyle}>Held &gt; 12 months?</label><select style={inputStyle} value={cgtDiscount} onChange={e=>setCgtDiscount(e.target.value)}><option value="yes">Yes (50% discount)</option><option value="no">No</option></select></div>
+              </div>
+              <button style={{ ...buttonSecondary, marginTop:10 }} onClick={() => {
+                let gain = Math.max(0, nn(itrFields.cgt_proceeds) - nn(itrFields.cgt_cost));
+                let net = Math.max(0, gain - nn(itrFields.cgt_losses));
+                if (cgtDiscount === "yes") net = net * 0.5;
+                setF("i_cg", net ? net.toFixed(2) : "");
+              }}>Apply to "Capital gains — net assessable"</button>
+            </SectionCard>
+            <SectionCard title="Medicare Levy Surcharge Settings">
+              <div style={row2}>
+                <div><label style={labelStyle}>Family status for MLS</label><select style={inputStyle} value={itrMlsFamily} onChange={e=>setItrMlsFamily(e.target.value)}><option value="single">Single</option><option value="family">Family</option></select></div>
+                <div><label style={labelStyle}>Dependent children</label><input type="number" style={inputStyle} value={itrMlsChildren} min={0} onChange={e=>setItrMlsChildren(+e.target.value)} /></div>
+                <div><label style={labelStyle}>Private hospital cover (full year)?</label><select style={inputStyle} value={itrMlsCover} onChange={e=>setItrMlsCover(e.target.value)}><option value="yes">Yes</option><option value="no">No</option></select></div>
+                <div><label style={labelStyle}>SAPTO status</label><select style={inputStyle} value={itrSapto} onChange={e=>setItrSapto(e.target.value)}><option value="none">Not eligible</option><option value="single">Single</option><option value="couple">Couple (each)</option><option value="illness">Couple separated (illness)</option></select></div>
+              </div>
+            </SectionCard>
+            <SectionCard title="ITR Summary — 2025–26 (Indicative)">
+              <div style={{ display:"grid", gap:6, maxWidth:600 }}>
+                {calcRow("Total assessable income", fmtDollar(itrAssessable), false)}
+                {calcRow("Less: deductions", "−"+fmtDollar(itrDeductions), false)}
+                {calcRow("Taxable income", fmtDollar(itrTaxable), true)}
+                {calcRow("HELP/MLS repayment income", fmtDollar(repIncome), false)}
+                {calcRow("Income tax (ATO brackets)", fmtDollar(itrTaxAfterOffsets), false)}
+                {calcRow("Medicare levy", fmtDollar(itrLevy), false)}
+                {calcRow("Medicare levy surcharge", fmtDollar(itrMLS), false)}
+                {calcRow("HELP/HECS repayment", fmtDollar(itrHELP), false)}
+                {calcRow("Less: franking credits offset", "−"+fmtDollar(I.fc), false)}
+                {calcRow("Less: foreign income tax offset", "−"+fmtDollar(foreignOffset), false)}
+                {calcRow("Less: LITO", "−"+fmtDollar(itrLITO), false)}
+                {calcRow("Less: SAPTO", "−"+fmtDollar(itrSAPTO), false)}
+                {calcRow("Less: PAYG withheld", "−"+fmtDollar(I.payg), false)}
+                {calcRow("Less: PAYG instalments", "−"+fmtDollar(I.paygi), false)}
+                {calcRow("Net balance (payable + / refund −)", (itrBalance>=0?fmtDollar(itrBalance):"−"+fmtDollar(Math.abs(itrBalance))), true, itrBalance>0?"#dc2626":"#16a34a")}
+              </div>
+              <div style={{ display:"flex", justifyContent:"flex-end", gap:10, marginTop:16 }}>
+                <button style={buttonSecondary} onClick={() => window.print()}>🖨 Print / Save PDF</button>
+              </div>
+              <div style={{ fontSize:12, color:colours.muted, marginTop:10, lineHeight:1.6 }}>
+                <strong>⚠️ Indicative only.</strong> These calculations use simplified ATO brackets and may not reflect your exact tax position. Always review with a registered tax agent before lodging.
+              </div>
+            </SectionCard>
+          </div>
+        )}
+      </div>
+    );
+    };
+
     const renderSettings = () => (
     <div style={{ display: "grid", gap: 20 }}>
       <DashboardHero title="Settings" subtitle="Configure your business profile, financial settings, branding and security. Changes save to your Supabase database automatically." highlight={activeSettingsTab}>
@@ -10012,6 +10453,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
             {activePage === "income sources" && renderIncomeSources()}
             {activePage === "documents" && renderDocuments()}
             {activePage === "bas report" && renderBASReport()}
+            {activePage === "ato tax form" && renderATOTaxForm()}
             {activePage === "settings" && renderSettings()}
           </div>
         </main>
