@@ -12,7 +12,7 @@ import {
   initialQuotes, inputStyle, isValidEmail, labelStyle, makePaymentReference,
   navLabels, navSections, nextNumber, parseLocalDate, safeNumber,
   settingsTabs, summariseValidationErrors, todayLocal,
-} from './PortalConstants';
+} from './PortalHelpers';
 import {
   ActionHubCard, ActivityListCard, DashboardHero, DataTable, EmptyState,
   ExpenseTypeModal, IncomeSourceModal, InsightChip, MetricCard, MiniBarChart,

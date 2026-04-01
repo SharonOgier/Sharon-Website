@@ -35,7 +35,7 @@ import {
   getSubscriptionAccess,
   LOGO_PREVIEW_MAX_HEIGHT,
   LOGO_PREVIEW_MAX_WIDTH,
-} from './PortalConstants';
+} from './PortalHelpers';
 
 export function ToastContainer({ toasts, onRemove }) {
   if (!toasts.length) return null;
