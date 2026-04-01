@@ -2100,6 +2100,7 @@ export default function AccountingPortalPrototype() {
   const [savingIncomeSource, setSavingIncomeSource] = useState(false);
   const [savingDocumentEdits, setSavingDocumentEdits] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [fabOpen, setFabOpen] = useState(false);
   const [billWizardStep, setBillWizardStep] = useState(1);
   const [invoiceWizardStep, setInvoiceWizardStep] = useState(1);
   const [showARCreditNoteModal, setShowARCreditNoteModal] = useState(false);
@@ -10443,7 +10444,38 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
           </div>
         </div>
       )}
+      {/* ── Floating Action Button ── */}
+      {setupComplete && authUser && (
+        <div style={{ position: "fixed", bottom: 28, right: 28, zIndex: 9000, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 10 }}>
+          {fabOpen && (
+            <>
+              <button
+                onClick={() => { setActivePage("invoices"); setInvoiceWizardStep(1); setFabOpen(false); }}
+                style={{ display: "flex", alignItems: "center", gap: 10, background: colours.purple, color: "#fff", border: "none", borderRadius: 50, padding: "10px 18px 10px 14px", fontWeight: 700, fontSize: 14, cursor: "pointer", boxShadow: "0 4px 16px rgba(106,27,154,0.35)", whiteSpace: "nowrap" }}>
+                🧾 New Invoice
+              </button>
+              <button
+                onClick={() => { setActivePage("quotes"); setQuoteWizardStep(1); setFabOpen(false); }}
+                style={{ display: "flex", alignItems: "center", gap: 10, background: colours.teal, color: "#fff", border: "none", borderRadius: 50, padding: "10px 18px 10px 14px", fontWeight: 700, fontSize: 14, cursor: "pointer", boxShadow: "0 4px 16px rgba(0,128,128,0.3)", whiteSpace: "nowrap" }}>
+                💬 New Quote
+              </button>
+              <button
+                onClick={() => { setActivePage("expenses"); setFabOpen(false); }}
+                style={{ display: "flex", alignItems: "center", gap: 10, background: colours.navy, color: "#fff", border: "none", borderRadius: 50, padding: "10px 18px 10px 14px", fontWeight: 700, fontSize: 14, cursor: "pointer", boxShadow: "0 4px 16px rgba(15,23,42,0.3)", whiteSpace: "nowrap" }}>
+                💸 Add Expense
+              </button>
+            </>
+          )}
+          <button
+            onClick={() => setFabOpen((prev) => !prev)}
+            style={{ width: 52, height: 52, borderRadius: "50%", background: colours.purple, color: "#fff", border: "none", fontSize: 26, fontWeight: 300, cursor: "pointer", boxShadow: "0 4px 20px rgba(106,27,154,0.45)", display: "flex", alignItems: "center", justifyContent: "center", transition: "transform 0.2s", transform: fabOpen ? "rotate(45deg)" : "rotate(0deg)" }}
+            title="Quick actions"
+          >
+            +
+          </button>
+        </div>
+      )}
       <style>{`@keyframes toastIn { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }`}</style>
-    </div> 
+    </div>
     );
 }
