@@ -820,7 +820,7 @@ function DashboardHero({ title, subtitle, highlight, children }) {
         boxShadow: "0 18px 40px rgba(43, 47, 107, 0.18)",
       }}
     >
-      <div>
+      <div className="sas-hero-content" style={{ minWidth: 0 }}>
         <div
           style={{
             display: "inline-flex",
@@ -836,10 +836,11 @@ function DashboardHero({ title, subtitle, highlight, children }) {
         >
           Live financial reporting
         </div>
-        <div style={{ fontSize: 34, fontWeight: 900, lineHeight: 1.1, marginTop: 16 }}>{title}</div>
-        <div style={{ fontSize: 15, lineHeight: 1.6, opacity: 0.92, marginTop: 12, maxWidth: 780 }}>{subtitle}</div>
+        <div className="sas-hero-title" style={{ fontSize: 34, fontWeight: 900, lineHeight: 1.1, marginTop: 16, overflowWrap: "anywhere", wordBreak: "break-word" }}>{title}</div>
+        <div className="sas-hero-subtitle" style={{ fontSize: 15, lineHeight: 1.6, opacity: 0.92, marginTop: 12, maxWidth: 780 }}>{subtitle}</div>
       </div>
       <div
+        className="sas-hero-focus-card"
         style={{
           background: "rgba(255,255,255,0.14)",
           border: "1px solid rgba(255,255,255,0.16)",
@@ -849,13 +850,14 @@ function DashboardHero({ title, subtitle, highlight, children }) {
           gap: 16,
           alignContent: "space-between",
           minHeight: 200,
+          minWidth: 0,
         }}
       >
         <div>
           <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.6, opacity: 0.82 }}>
             Current focus
           </div>
-          <div style={{ fontSize: 30, fontWeight: 900, marginTop: 10 }}>{highlight}</div>
+          <div className="sas-hero-focus-value" style={{ fontSize: 30, fontWeight: 900, marginTop: 10, overflowWrap: "anywhere", wordBreak: "break-word" }}>{highlight}</div>
         </div>
         {children}
       </div>
@@ -9476,6 +9478,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
         .sas-main img { max-width: 100%; height: auto; }
         @media (max-width: 1024px) {
           .sas-dashboard-hero { grid-template-columns: 1fr !important; padding: 22px !important; }
+          .sas-dashboard-hero .sas-hero-focus-card { min-height: auto !important; }
           .sas-auth-landing { grid-template-columns: 1fr !important; }
         }
         @media (max-width: 768px) {
@@ -9490,9 +9493,15 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
           .sas-toasts { left: 12px; right: 12px; bottom: 12px; max-width: none !important; width: auto; }
           .sas-confirm-card { padding: 20px !important; border-radius: 16px !important; }
           .sas-section-card, .sas-summary-box, .sas-metric-card, .sas-action-card { padding: 16px !important; border-radius: 16px !important; }
-          .sas-dashboard-hero { border-radius: 18px !important; gap: 16px !important; }
-          .sas-dashboard-hero > div:first-child div[style*="font-size: 34px"] { font-size: 28px !important; }
+          .sas-dashboard-hero { border-radius: 18px !important; gap: 16px !important; padding: 20px !important; }
+          .sas-dashboard-hero .sas-hero-content { min-width: 0 !important; }
+          .sas-dashboard-hero .sas-hero-title { font-size: 26px !important; line-height: 1.14 !important; overflow-wrap: anywhere !important; word-break: break-word !important; }
+          .sas-dashboard-hero .sas-hero-subtitle { font-size: 15px !important; line-height: 1.55 !important; }
+          .sas-dashboard-hero .sas-hero-focus-card { padding: 16px !important; min-height: auto !important; }
+          .sas-dashboard-hero .sas-hero-focus-value { font-size: 24px !important; line-height: 1.1 !important; }
           .sas-insight-chip { padding: 10px 12px !important; }
+          .sas-insight-chip > div:first-child { min-width: 0; flex: 1; }
+          .sas-insight-chip > div:last-child { flex-shrink: 0; }
           .sas-stack-mobile { grid-template-columns: 1fr !important; }
           .sas-data-table { min-width: 640px !important; }
           .sas-auth-hero-title { font-size: 32px !important; }
