@@ -5,8 +5,6 @@ import MobileWizard from "./MobileWizard";
 import ATOTaxFormPage from "./ATOTaxFormPage";
 import { buildQuoteHtml, buildQuoteEmailHtml, buildInvoiceHtml, openBlobUrlInWindow, writeInvoicePreviewToWindow } from "./PortalDocumentBuilders";
 
-
-
 // ── Toast notification system ──────────────────────────────
 function ToastContainer({ toasts, onRemove }) {
   if (!toasts.length) return null;
@@ -1374,7 +1372,7 @@ function ExpenseTypeModal({
                     Remove
                   </button>
                 </div>
-              ) : <EmptyState icon="📁" title="No documents yet" message="Upload receipts, contracts and generated PDFs here. All documents are stored securely against your account." />}
+              ) : null}
             </div>
           )}
         </div>
@@ -8021,7 +8019,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
               Remove Receipt
             </button>
           </div>
-        ) : <EmptyState icon="📁" title="No documents yet" message="Upload receipts, contracts and generated PDFs here. All documents are stored securely against your account." />}
+        ) : null}
 
         <div style={{ marginTop: 18 }}>
           <button style={buttonPrimary} onClick={saveExpense}>
