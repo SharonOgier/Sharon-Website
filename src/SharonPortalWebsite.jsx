@@ -224,7 +224,7 @@ const navLabels = {
   services: "Services",
   expenses: "Expenses",
   "bills / payables": "Bills & Payables",
-  "income sources": "Income Sources",
+  "income sources": "Revenue Streams",
   documents: "Documents",
   "bas report": "BAS Report",
   settings: "Settings",
@@ -1899,7 +1899,7 @@ return `<!doctype html>
 <meta charset="utf-8" />
 <title>Invoice Preview</title>
 <style>
-body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
+body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; position: relative; }
 .header { display:flex; justify-content:space-between; border-bottom:2px solid #eee; padding-bottom:20px; }
 .title { font-size:34px; font-weight:900; color:#6A1B9A; }
 .right { text-align:right; }
@@ -1952,6 +1952,8 @@ th { text-align:left; color:#64748B; }
   <div><strong>Due:</strong> ${formatDateAU(invoice.dueDate)}</div>
 </div>
 </div>
+
+${invoice.status === "Paid" ? `<div style="position:absolute; top:46px; right:54px; transform:rotate(-12deg); border:4px solid #16A34A; color:#16A34A; border-radius:14px; padding:10px 18px; font-size:30px; font-weight:900; letter-spacing:1px; opacity:0.9;">PAID</div>` : ""}
 
 <div class="section">
 <strong>Billed To:</strong><br/>
@@ -2098,6 +2100,7 @@ export default function AccountingPortalPrototype() {
   const [savingIncomeSource, setSavingIncomeSource] = useState(false);
   const [savingDocumentEdits, setSavingDocumentEdits] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [billWizardStep, setBillWizardStep] = useState(1);
   const [invoiceWizardStep, setInvoiceWizardStep] = useState(1);
   const [showARCreditNoteModal, setShowARCreditNoteModal] = useState(false);
@@ -2346,6 +2349,110 @@ export default function AccountingPortalPrototype() {
   ]);
   const [expenseCategorySelection, setExpenseCategorySelection] = useState("");
   const [searchExpenseCategory, setSearchExpenseCategory] = useState("");
+
+  const getMostRecentClient = () => {
+    const ids = [...invoices, ...quotes]
+      .map((item) => safeNumber(item?.clientId))
+      .filter(Boolean);
+    if (!ids.length) return clients[0] || null;
+    const lastId = ids[ids.length - 1];
+    return getClientById(lastId) || clients[0] || null;
+  };
+
+  const getLastUsedService = () => services[services.length - 1] || null;
+
+  const applySmartDefaultsToInvoice = (clientId) => {
+    const selectedClient = getClientById(clientId);
+    if (!selectedClient) return;
+    const recentInvoice = [...invoices].reverse().find((item) => String(item.clientId) === String(clientId) && item.lineItems?.length);
+    const preferredLines = recentInvoice?.lineItems?.length
+      ? recentInvoice.lineItems.map((item) => ({
+          id: Date.now() + Math.random() + Math.random(),
+          description: item.description || "",
+          quantity: item.quantity || item.qty || 1,
+          unitPrice: item.unitPrice != null ? String(item.unitPrice) : "",
+          gstType: clientIsGstExempt(clientId) ? "GST Free" : (item.gstType || "GST on Income (10%)"),
+        }))
+      : null;
+    const lastService = getLastUsedService();
+
+    setInvoiceForm((prev) => {
+      const hasMeaningfulLines = (prev.lineItems || []).some((item) => item.description || item.unitPrice);
+      const fallbackLine = lastService ? [{
+        id: Date.now() + Math.random(),
+        description: lastService.name || "",
+        quantity: 1,
+        unitPrice: lastService.price != null ? String(lastService.price) : "",
+        gstType: clientIsGstExempt(clientId) ? "GST Free" : (lastService.gstType || "GST on Income (10%)"),
+      }] : prev.lineItems;
+
+      return {
+        ...prev,
+        clientId: String(clientId),
+        currencyCode: getClientCurrencyCode(selectedClient),
+        gstType: clientIsGstExempt(clientId) ? "GST Free" : prev.gstType,
+        purchaseOrderReference: selectedClient?.hasPurchaseOrder ? prev.purchaseOrderReference : "",
+        lineItems: hasMeaningfulLines ? prev.lineItems : (preferredLines || fallbackLine),
+      };
+    });
+    setInvClientSearch(selectedClient.name || "");
+  };
+
+  const applySmartDefaultsToQuote = (clientId) => {
+    const selectedClient = getClientById(clientId);
+    if (!selectedClient) return;
+    const recentQuote = [...quotes].reverse().find((item) => String(item.clientId) === String(clientId) && item.lineItems?.length);
+    const preferredLines = recentQuote?.lineItems?.length
+      ? recentQuote.lineItems.map((item) => ({
+          id: Date.now() + Math.random() + Math.random(),
+          description: item.description || "",
+          quantity: item.quantity || item.qty || 1,
+          unitPrice: item.unitPrice != null ? String(item.unitPrice) : "",
+          gstType: clientIsGstExempt(clientId) ? "GST Free" : (item.gstType || "GST on Income (10%)"),
+        }))
+      : null;
+    const lastService = getLastUsedService();
+
+    setQuoteForm((prev) => {
+      const hasMeaningfulLines = (prev.lineItems || []).some((item) => item.description || item.unitPrice);
+      const fallbackLine = lastService ? [{
+        id: Date.now() + Math.random(),
+        description: lastService.name || "",
+        quantity: 1,
+        unitPrice: lastService.price != null ? String(lastService.price) : "",
+        gstType: clientIsGstExempt(clientId) ? "GST Free" : (lastService.gstType || "GST on Income (10%)"),
+      }] : prev.lineItems;
+
+      return {
+        ...prev,
+        clientId: String(clientId),
+        currencyCode: getClientCurrencyCode(selectedClient),
+        gstType: clientIsGstExempt(clientId) ? "GST Free" : prev.gstType,
+        lineItems: hasMeaningfulLines ? prev.lineItems : (preferredLines || fallbackLine),
+      };
+    });
+    setQuoteClientSearch(selectedClient.name || "");
+  };
+
+
+
+  useEffect(() => {
+    if (invoiceForm.clientId || !clients.length) return;
+    const recentClient = getMostRecentClient();
+    if (recentClient) {
+      setInvoiceForm((prev) => ({ ...prev, clientId: String(recentClient.id), currencyCode: getClientCurrencyCode(recentClient) }));
+      setInvClientSearch(recentClient.name || "");
+    }
+  }, [clients.length]);
+
+  useEffect(() => {
+    if (quoteForm.clientId || !clients.length) return;
+    const recentClient = getMostRecentClient();
+    if (recentClient) {
+      setQuoteForm((prev) => ({ ...prev, clientId: String(recentClient.id), currencyCode: getClientCurrencyCode(recentClient) }));
+      setQuoteClientSearch(recentClient.name || "");
+    }
+  }, [clients.length]);
 
   const clearPortalForFreshSetup = () => {
     setProfile(initialProfile);
@@ -3629,7 +3736,7 @@ export default function AccountingPortalPrototype() {
 <meta charset="utf-8" />
 <title>Quote ${emailDocumentRecord?.quoteNumber || ""}</title>
 <style>
-body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
+body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; position: relative; }
 .card { border: 1px solid #E2E8F0; border-radius: 16px; padding: 24px; }
 .title { font-size: 32px; font-weight: 900; color: #6A1B9A; margin-bottom: 18px; }
 .row { margin: 8px 0; }
@@ -4034,7 +4141,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       setExpenses((prev) => prev.map((item) => (item.id === savedExpense.id ? savedExpense : item)));
       closeExpenseEditor();
       setSupabaseSyncStatus("Expense updated in Supabase database");
-      toast.success("Expense updated!");
+      toast.success(`Expense updated for ${expenseEditorForm?.supplier || expenseEditorForm?.description || "this item"}`);
     } catch (error) {
       console.error("EXPENSE EDIT SAVE ERROR:", error);
       setSupabaseSyncStatus(error.message || "Expense update failed");
@@ -4201,7 +4308,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     try {
       const savedInvoice = await upsertRecordInDatabase(SUPABASE_TABLES.invoices, payload);
       let nextInvoice = savedInvoice;
-      const saveMessage = "Invoice saved to Supabase database. Use Preview to print or download the PDF.";
+      const saveMessage = `Invoice ${invoiceNumber} saved successfully. Use Preview to print or download the PDF.`;
 
       setInvoices((prev) => [...prev, nextInvoice]);
       setInvoiceForm((prev) => ({
@@ -4282,7 +4389,8 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       setInvoices((prev) =>
         prev.map((invoice) => (invoice.id === invoiceEditorForm.id ? savedInvoice : invoice))
       );
-      setSupabaseSyncStatus("Invoice changes saved to Supabase database");
+      setSupabaseSyncStatus(`Invoice ${savedInvoice.invoiceNumber || invoiceEditorForm.invoiceNumber} updated successfully`);
+      toast.success(`Invoice ${savedInvoice.invoiceNumber || invoiceEditorForm.invoiceNumber} updated successfully`);
       closeInvoiceEditor();
     } catch (error) {
       console.error("INVOICE UPDATE ERROR:", error);
@@ -4335,7 +4443,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     try {
       const savedQuote = await upsertRecordInDatabase(SUPABASE_TABLES.quotes, payload);
       let nextQuote = savedQuote;
-      const saveMessage = "Quote saved to Supabase database. Use Preview to print or download the PDF.";
+      const saveMessage = `Quote ${quoteNumber} saved successfully. Use Preview to print or download the PDF.`;
 
       setQuotes((prev) => [...prev, nextQuote]);
       setQuoteForm((prev) => ({
@@ -4406,7 +4514,8 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       setQuotes((prev) =>
         prev.map((quote) => (quote.id === quoteEditorForm.id ? savedQuote : quote))
       );
-      setSupabaseSyncStatus("Quote changes saved to Supabase database");
+      setSupabaseSyncStatus(`Quote ${savedQuote.quoteNumber || quoteEditorForm.quoteNumber} updated successfully`);
+      toast.success(`Quote ${savedQuote.quoteNumber || quoteEditorForm.quoteNumber} updated successfully`);
       closeQuoteEditor();
     } catch (error) {
       console.error("QUOTE UPDATE ERROR:", error);
@@ -4649,7 +4758,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       });
       setSupabaseSyncStatus("Expense saved to Supabase database");
       setReceiptFile(null);
-      toast.success("Expense saved!");
+      toast.success(`Expense saved for ${expenseForm.supplier || expenseForm.description || "this item"}${expenseForm.amount ? ` — ${currency(expenseForm.amount)}` : ""}`);
     } catch (err) {
       console.error("SAVE ERROR:", err);
       setSupabaseSyncStatus(err.message || "Expense save failed");
@@ -6067,6 +6176,8 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
             <div style={{ display: "grid", gap: 20 }}>
               <div>
                 <label style={labelStyle}>Search or Select Client</label>
+                <div style={{ fontSize: 12, color: colours.muted, marginBottom: 8 }}>Start with a recent client or search to create a new quote faster.</div>
+                <div style={{ fontSize: 12, color: colours.muted, marginBottom: 8 }}>Smart default: the portal remembers your most recent client and can prefill recent line items.</div>
                 <input style={{ ...inputStyle, fontSize: 15 }} value={invClientSearch}
                   onChange={(e) => { setInvClientSearch(e.target.value); if (!e.target.value) setInvoiceForm((p) => ({ ...p, clientId: "" })); }}
                   placeholder="Type client name..." />
@@ -6074,7 +6185,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
                   <div style={{ border: `1px solid ${colours.border}`, borderRadius: 10, marginTop: 4, overflow: "hidden", maxHeight: 200, overflowY: "auto" }}>
                     {clients.filter((c) => c.name.toLowerCase().includes(invClientSearch.toLowerCase()) || (c.businessName || "").toLowerCase().includes(invClientSearch.toLowerCase()))
                       .map((c) => (
-                        <div key={c.id} onClick={() => { setInvoiceForm((p) => ({ ...p, clientId: String(c.id), currencyCode: getClientCurrencyCode(c) })); setInvClientSearch(c.name); }}
+                        <div key={c.id} onClick={() => { applySmartDefaultsToInvoice(String(c.id)); }}
                           style={{ padding: "10px 14px", cursor: "pointer", fontSize: 14, borderBottom: `1px solid ${colours.border}`, background: String(invoiceForm.clientId) === String(c.id) ? colours.lightPurple : "#fff" }}>
                           <strong>{c.name}</strong>{c.businessName ? <span style={{ color: colours.muted }}> — {c.businessName}</span> : ""}
                         </div>
@@ -6086,9 +6197,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
                 )}
                 {!invClientSearch && (
                   <select style={{ ...inputStyle, marginTop: 8 }} value={invoiceForm.clientId} onChange={(e) => {
-                    const sel = getClientById(e.target.value);
-                    setInvoiceForm((p) => ({ ...p, clientId: e.target.value, currencyCode: getClientCurrencyCode(sel) }));
-                    setInvClientSearch(sel?.name || "");
+                    applySmartDefaultsToInvoice(String(e.target.value));
                   }}>
                     <option value="">— or pick from list —</option>
                     {clients.map((c) => <option key={c.id} value={c.id}>{c.name}{c.businessName ? ` — ${c.businessName}` : ""}</option>)}
@@ -6821,7 +6930,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
                   <div style={{ border: `1px solid ${colours.border}`, borderRadius: 10, marginTop: 4, overflow: "hidden", maxHeight: 200, overflowY: "auto" }}>
                     {clients.filter((c) => c.name.toLowerCase().includes(quoteClientSearch.toLowerCase()) || (c.businessName || "").toLowerCase().includes(quoteClientSearch.toLowerCase()))
                       .map((c) => (
-                        <div key={c.id} onClick={() => { setQuoteForm((p) => ({ ...p, clientId: String(c.id), currencyCode: getClientCurrencyCode(c) })); setQuoteClientSearch(c.name); }}
+                        <div key={c.id} onClick={() => { applySmartDefaultsToQuote(String(c.id)); }}
                           style={{ padding: "10px 14px", cursor: "pointer", fontSize: 14, borderBottom: `1px solid ${colours.border}`, background: String(quoteForm.clientId) === String(c.id) ? colours.lightPurple : "#fff" }}>
                           <strong>{c.name}</strong>{c.businessName ? <span style={{ color: colours.muted }}> — {c.businessName}</span> : ""}
                         </div>
@@ -6833,9 +6942,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
                 )}
                 {!quoteClientSearch && (
                   <select style={{ ...inputStyle, marginTop: 8 }} value={quoteForm.clientId} onChange={(e) => {
-                    const sel = getClientById(e.target.value);
-                    setQuoteForm((p) => ({ ...p, clientId: e.target.value, currencyCode: getClientCurrencyCode(sel) }));
-                    setQuoteClientSearch(sel?.name || "");
+                    applySmartDefaultsToQuote(String(e.target.value));
                   }}>
                     <option value="">— or pick from list —</option>
                     {clients.map((c) => <option key={c.id} value={c.id}>{c.name}{c.businessName ? ` — ${c.businessName}` : ""}</option>)}
@@ -8229,7 +8336,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     const typeData = Object.entries(typeBreakdown).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([label, value]) => ({ label: label.slice(0, 10), value }));
     return (
     <div style={{ display: "grid", gap: 20 }}>
-      <DashboardHero title="Income Sources" subtitle="Track all personal and business income streams for tax reporting. Feeds directly into your ATO export." highlight={currency(annualised)}>
+      <DashboardHero title="Revenue Streams" subtitle="Track all personal and business income streams for tax reporting. Feeds directly into your ATO export." highlight={currency(annualised)}>
         <InsightChip label="Sources recorded" value={String(incomeSources.length)} />
         <InsightChip label="Total before tax" value={currency(totalBeforeTax)} />
         <InsightChip label="Annualised est." value={currency(annualised)} />
@@ -8244,7 +8351,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
           <MiniBarChart data={typeData} height={90} accent={colours.teal} />
         </div>
       </div>
-      <SectionCard title="Income Sources" right={<button style={buttonPrimary} onClick={() => setShowIncomeSourceModal(true)}>New Income Source</button>}>
+      <SectionCard title="Revenue Streams" right={<button style={buttonPrimary} onClick={() => setShowIncomeSourceModal(true)}>New Revenue Stream</button>}>
         <DataTable
           emptyState={{ icon: "💰", title: "No income sources yet", message: "Add your income sources for your ATO export — employment, freelance, rental income and other earnings.", action: { label: "Add income source", onClick: () => {} } }}
           columns={[
@@ -9417,6 +9524,33 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
             {activePage === "settings" && renderSettings()}
           </div>
         </main>
+      </div>
+
+
+      <div style={{ position: "fixed", right: 24, bottom: 24, zIndex: 99990, display: "grid", gap: 10 }}>
+        {quickAddOpen && (
+          <div style={{ ...cardStyle, padding: 12, display: "grid", gap: 8, minWidth: 220, boxShadow: "0 20px 40px rgba(15,23,42,0.16)" }}>
+            <button style={buttonSecondary} onClick={() => { setActivePage("invoices"); setInvoiceWizardStep(1); setQuickAddOpen(false); }}>+ New Invoice</button>
+            <button style={buttonSecondary} onClick={() => { setActivePage("quotes"); setQuoteWizardStep(1); setQuickAddOpen(false); }}>+ New Quote</button>
+            <button style={buttonSecondary} onClick={() => { setActivePage("expenses"); setQuickAddOpen(false); }}>+ New Expense</button>
+          </div>
+        )}
+        <button
+          onClick={() => setQuickAddOpen((prev) => !prev)}
+          style={{
+            ...buttonPrimary,
+            width: 62,
+            height: 62,
+            borderRadius: 999,
+            boxShadow: "0 20px 40px rgba(106,27,154,0.28)",
+            fontSize: 28,
+            padding: 0,
+            justifySelf: "end",
+          }}
+          title="Quick Add"
+        >
+          +
+        </button>
       </div>
 
       <ExpenseTypeModal
