@@ -201,6 +201,35 @@ const navItems = [
   "settings",
 ];
 
+const navSections = [
+  {
+    title: "Main",
+    items: ["dashboard", "financial insights", "invoices", "quotes", "expenses"],
+  },
+  {
+    title: "Workspace",
+    items: ["services", "bills / payables", "income sources", "documents"],
+  },
+  {
+    title: "Admin",
+    items: ["bas report", "settings"],
+  },
+];
+
+const navLabels = {
+  dashboard: "Home",
+  "financial insights": "Financial Insights",
+  invoices: "Invoices",
+  quotes: "Quotes",
+  services: "Services",
+  expenses: "Expenses",
+  "bills / payables": "Bills & Payables",
+  "income sources": "Income Sources",
+  documents: "Documents",
+  "bas report": "BAS Report",
+  settings: "Settings",
+};
+
 const settingsTabs = ["Profile", "Financial", "Branding", "Security"];
 
 const LOGO_DOCUMENT_MAX_HEIGHT = 140;
@@ -875,6 +904,45 @@ function MetricCard({ title, value, subtitle, accent = colours.purple }) {
         <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 0.2, color: colours.muted, textTransform: "uppercase" }}>{title}</div>
         <div style={{ fontSize: 30, fontWeight: 900, color: colours.text, marginTop: 10 }}>{value}</div>
         <div style={{ fontSize: 12, color: colours.muted, marginTop: 10, lineHeight: 1.5 }}>{subtitle}</div>
+      </div>
+    </div>
+  );
+}
+
+function ActionHubCard({ icon, title, description, buttonLabel, onClick, tone = colours.purple }) {
+  return (
+    <div
+      style={{
+        ...cardStyle,
+        padding: 20,
+        display: "grid",
+        gap: 12,
+        border: `1px solid ${colours.border}`,
+        minHeight: 196,
+      }}
+    >
+      <div
+        style={{
+          width: 48,
+          height: 48,
+          borderRadius: 14,
+          background: `${tone}18`,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: 24,
+        }}
+      >
+        {icon}
+      </div>
+      <div>
+        <div style={{ fontSize: 17, fontWeight: 800, color: colours.text }}>{title}</div>
+        <div style={{ fontSize: 13, color: colours.muted, lineHeight: 1.6, marginTop: 6 }}>{description}</div>
+      </div>
+      <div style={{ marginTop: "auto" }}>
+        <button onClick={onClick} style={{ ...buttonPrimary, background: tone, width: "100%" }}>
+          {buttonLabel}
+        </button>
       </div>
     </div>
   );
@@ -2060,7 +2128,7 @@ export default function AccountingPortalPrototype() {
   const [recurringSelected, setRecurringSelected] = useState([]);
   const recurringShownRef = useRef(false);
   const [quoteWizardStep, setQuoteWizardStep] = useState(1);
-  const [activePage, setActivePage] = useState("settings");
+  const [activePage, setActivePage] = useState("dashboard");
   const [activeSettingsTab, setActiveSettingsTab] = useState("Profile");
   const [authUser, setAuthUser] = useState(null);
   const [authMode, setAuthMode] = useState("signin");
@@ -5272,13 +5340,56 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       )}
       <DashboardHero
         title={profile.businessName || "My Portal"}
-        subtitle="Your dashboard now reads live from the SaaS records already stored in the portal. Paid invoices, expenses, GST, tax reserves, and client performance are summarised here automatically so reporting stays in one place."
+        subtitle="Start with the actions you use most. This home view keeps invoices, quotes, expenses and financial performance in one place so you can move quickly without hunting through the portal."
         highlight={currency(totals.safeToSpend)}
       >
         <InsightChip label="Collection rate" value={`${dashboardInsights.collectionRate.toFixed(1)}%`} />
         <InsightChip label="Subscription/mo" value={currency(totals.monthlySubscriptionCost)} />
         <InsightChip label="Safe to spend" value={currency(totals.safeToSpend)} />
       </DashboardHero>
+
+      <SectionCard title="Action hub" right={<div style={{ fontSize: 12, color: colours.muted }}>Most-used tasks first</div>}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+            gap: 16,
+          }}
+        >
+          <ActionHubCard
+            icon="🧾"
+            title="Create invoice"
+            description="Generate a new invoice quickly and move straight into the invoice workspace."
+            buttonLabel="Open invoices"
+            onClick={() => setActivePage("invoices")}
+            tone={colours.purple}
+          />
+          <ActionHubCard
+            icon="💬"
+            title="Create quote"
+            description="Prepare a quote for a client and convert it later when work is approved."
+            buttonLabel="Open quotes"
+            onClick={() => setActivePage("quotes")}
+            tone={colours.teal}
+          />
+          <ActionHubCard
+            icon="💸"
+            title="Add expense"
+            description="Capture a business expense, upload the receipt and keep your records current."
+            buttonLabel="Open expenses"
+            onClick={() => setActivePage("expenses")}
+            tone={colours.navy}
+          />
+          <ActionHubCard
+            icon="📊"
+            title="View insights"
+            description="Review cash flow, margins, tax reserves and other performance signals."
+            buttonLabel="Open insights"
+            onClick={() => setActivePage("financial insights")}
+            tone={colours.purple}
+          />
+        </div>
+      </SectionCard>
 
       <div
         style={{
@@ -9253,24 +9364,33 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
             Signed in as {authUser.email || "user"}
           </div>
 
-          <div style={{ display: "grid", gap: 8 }}>
-            {navItems.map((item) => (
-              <button
-                key={item}
-                onClick={() => { setActivePage(item); setSidebarOpen(false); }}
-                style={{
-                  textAlign: "left",
-                  border: "none",
-                  borderRadius: 12,
-                  padding: "12px 14px",
-                  cursor: "pointer",
-                  fontWeight: 700,
-                  background: activePage === item ? colours.lightPurple : "transparent",
-                  color: activePage === item ? colours.purple : colours.text,
-                }}
-              >
-                {item.charAt(0).toUpperCase() + item.slice(1)}
-              </button>
+          <div style={{ display: "grid", gap: 14 }}>
+            {navSections.map((section) => (
+              <div key={section.title} style={{ display: "grid", gap: 8 }}>
+                <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0.6, textTransform: "uppercase", color: colours.muted, padding: "0 6px" }}>
+                  {section.title}
+                </div>
+                <div style={{ display: "grid", gap: 8 }}>
+                  {section.items.map((item) => (
+                    <button
+                      key={item}
+                      onClick={() => { setActivePage(item); setSidebarOpen(false); }}
+                      style={{
+                        textAlign: "left",
+                        border: "none",
+                        borderRadius: 12,
+                        padding: "12px 14px",
+                        cursor: "pointer",
+                        fontWeight: 700,
+                        background: activePage === item ? colours.lightPurple : "transparent",
+                        color: activePage === item ? colours.purple : colours.text,
+                      }}
+                    >
+                      {navLabels[item] || (item.charAt(0).toUpperCase() + item.slice(1))}
+                    </button>
+                  ))}
+                </div>
+              </div>
             ))}
           </div>
 
