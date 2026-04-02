@@ -51,6 +51,20 @@ export default function DashboardPage(props) {
     getClientName = () => "",
   } = props;
 
+  const resolvedDashboardInsights = dashboardInsights || { collectionRate: 0 };
+  const resolvedMonthlyFinance = Array.isArray(monthlyFinance) ? monthlyFinance : [];
+  const resolvedClientRevenueRows = Array.isArray(clientRevenueRows) ? clientRevenueRows : [];
+  const resolvedExpenseCategoryRows = Array.isArray(expenseCategoryRows) ? expenseCategoryRows : [];
+  const resolvedInvoiceStatusRows = Array.isArray(invoiceStatusRows) ? invoiceStatusRows : [];
+  const resolvedRecentActivityRows = Array.isArray(recentActivityRows) ? recentActivityRows : [];
+  const resolvedButtonPrimary = buttonPrimary || {};
+  const resolvedButtonSecondary = buttonSecondary || {};
+  const resolvedExportToATOForm = typeof exportToATOForm === "function" ? exportToATOForm : () => {};
+  const resolvedRestorePortalStateFromSupabase = typeof restorePortalStateFromSupabase === "function" ? restorePortalStateFromSupabase : () => {};
+  const resolvedSaveAllCurrentStateToSupabase = typeof saveAllCurrentStateToSupabase === "function" ? saveAllCurrentStateToSupabase : () => {};
+  const resolvedSupabaseSyncStatus = supabaseSyncStatus || "";
+  const resolvedGetClientName = typeof getClientName === "function" ? getClientName : () => "";
+
       // ── Onboarding checklist ──────────────────────────────────────
       const onboardingSteps = [
         { label: "Add your business name", done: Boolean(profile.businessName), action: () => { setActivePage("settings"); setActiveSettingsTab("Profile"); } },
