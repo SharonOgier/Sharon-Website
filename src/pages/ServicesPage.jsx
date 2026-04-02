@@ -30,6 +30,7 @@ export default function ServicesPage(props) {
     SectionCard,
     DataTable,
     EmptyState,
+    MiniBarChart = () => null,
     GST_TYPE_OPTIONS,
     openNewServiceModal,
     openEditServiceModal,

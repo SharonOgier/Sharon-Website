@@ -20,6 +20,7 @@ export default function SetupWizardPage(props) {
     handleSignOut,
   } = props;
 
+  return (
     <div style={{ minHeight: "100vh", background: colours.bg, display: "grid", placeItems: "center", padding: 24 }}>
       <div style={{ ...cardStyle, width: "100%", maxWidth: 760, padding: 28 }}>
         <div style={{ fontSize: 30, fontWeight: 900, color: colours.text, marginBottom: 8 }}>Welcome to your portal setup</div>
@@ -45,5 +46,6 @@ export default function SetupWizardPage(props) {
         </div>
       </div>
     </div>
+  );
 
 }

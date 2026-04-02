@@ -40,6 +40,7 @@ export default function SettingsPage(props) {
     toast,
   } = props;
 
+  return (
     <div style={{ display: "grid", gap: 20 }}>
       <DashboardHero title="Settings" subtitle="Configure your business profile, financial settings, branding and security. Changes save to your Supabase database automatically." highlight={activeSettingsTab}>
         <InsightChip label="Business" value={profile.businessName || "Not set"} />
@@ -401,5 +402,6 @@ export default function SettingsPage(props) {
         )}
       </SectionCard>
     </div>
+  );
 
 }

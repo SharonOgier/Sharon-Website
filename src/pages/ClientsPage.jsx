@@ -7,59 +7,145 @@ import React, { useState, useMemo } from "react";
 
 export default function ClientsPage(props) {
   const {
-    profile,
-    clients,
-    invoices,
-    setActivePage,
-    confirm,
-    cardStyle,
-    colours,
-    currency,
-    safeNumber,
-    buttonPrimary,
-    buttonSecondary,
-    inputStyle,
-    labelStyle,
-    DashboardHero,
-    InsightChip,
-    MetricCard,
-    SectionCard,
-    DataTable,
-    EmptyState,
-    showClientModal,
-    setShowClientModal,
-    showImportModal,
-    setShowImportModal,
-    editingClientId,
-    setEditingClientId,
-    clientModalForm,
-    setClientModalForm,
-    importType,
-    setImportType,
-    importRows,
-    setImportRows,
-    importError,
-    setImportError,
-    invClientSearch,
-    setInvClientSearch,
-    saveClientFromModal,
-    deleteClient,
-    confirmImport,
-    downloadTemplate,
-    parseImportCSV,
-    openClientEditor,
-    blankClient,
+    profile = {},
+    clients = [],
+    invoices = [],
+    setActivePage = () => {},
+    confirm = null,
+    cardStyle = {},
+    colours = {},
+    currency = (v) => String(v ?? ""),
+    safeNumber = (v) => Number(v || 0),
+    buttonPrimary = {},
+    buttonSecondary = {},
+    inputStyle = {},
+    labelStyle = {},
+    DashboardHero = ({ children }) => <div>{children}</div>,
+    InsightChip = () => null,
+    MetricCard = () => null,
+    SectionCard = ({ title, children }) => <section><h3>{title}</h3>{children}</section>,
+    DataTable = ({ columns = [], rows = [], emptyState = null }) => {
+      if (!rows.length && emptyState) {
+        return <div>{emptyState.title || "No data"}</div>;
+      }
+      return (
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead>
+            <tr>{columns.map((c) => <th key={c.key || c.label} style={{ textAlign: "left", padding: 8 }}>{c.label}</th>)}</tr>
+          </thead>
+          <tbody>
+            {rows.map((row, idx) => (
+              <tr key={row.id ?? idx}>
+                {columns.map((c) => (
+                  <td key={c.key || c.label} style={{ padding: 8 }}>
+                    {c.render ? c.render(row[c.key], row) : row[c.key]}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      );
+    },
+    EmptyState = ({ icon, title, message }) => <div>{icon} {title} {message}</div>,
+    showClientModal = false,
+    setShowClientModal = () => {},
+    showImportModal = false,
+    setShowImportModal = () => {},
+    editingClientId = null,
+    setEditingClientId = () => {},
+    clientModalForm = {},
+    setClientModalForm = () => {},
+    importType = "clients",
+    setImportType = () => {},
+    importRows = [],
+    setImportRows = () => {},
+    importError = "",
+    setImportError = () => {},
+    invClientSearch = "",
+    setInvClientSearch = () => {},
+    blankClient = {},
+    clientForm: externalClientForm,
+    setClientForm: externalSetClientForm,
+    saveClientFromModal = () => {},
+    deleteClient = () => {},
+    confirmImport = () => {},
+    downloadTemplate = () => {},
+    parseImportCSV = () => ({ rows: [], error: "" }),
+    openClientEditor: externalOpenClientEditor,
+    clientEditorOpen: externalClientEditorOpen,
+    clientEditorForm: externalClientEditorForm,
+    setClientEditorForm: externalSetClientEditorForm,
+    closeClientEditor: externalCloseClientEditor,
+    saveClientEdits: externalSaveClientEdits,
+    saveClient: externalSaveClient,
+    todayLocal: externalTodayLocal,
   } = props;
 
-    const activeClients = clients.filter((c) => {
-      const clientInvoices = invoices.filter((inv) => String(inv.clientId) === String(c.id));
-      return clientInvoices.length > 0;
-    });
-    const gstExemptClients = clients.filter((c) => c.outsideAustraliaOrGstExempt);
-    const totalClientRevenue = invoices
-      .filter((inv) => inv.status === "Paid")
-      .reduce((sum, inv) => sum + safeNumber(inv.total), 0);
-    return (
+  const fallbackBlankClient = {
+    name: "",
+    businessName: "",
+    contactPerson: "",
+    email: "",
+    phone: "",
+    address: "",
+    addressDetails: "",
+    workType: "Financial / Management Accountant",
+    defaultCurrency: "AUD $",
+    recruiterUsed: false,
+    sendToClient: false,
+    sendToMe: false,
+    autoReminders: false,
+    includeAddressDetails: false,
+    sendReceipts: false,
+    outsideAustraliaOrGstExempt: false,
+    feesDeducted: false,
+    deductsTaxPrior: false,
+    shortTermRentalIncome: false,
+    hasPurchaseOrder: false,
+  };
+
+  const resolvedBlankClient = { ...fallbackBlankClient, ...(blankClient || {}) };
+  const [localClientForm, localSetClientForm] = useState({ ...resolvedBlankClient });
+  const clientForm = externalClientForm ?? localClientForm;
+  const setClientForm = externalSetClientForm ?? localSetClientForm;
+
+  const [localClientEditorOpen, localSetClientEditorOpen] = useState(false);
+  const [localClientEditorForm, localSetClientEditorForm] = useState(null);
+  const clientEditorOpen = typeof externalClientEditorOpen === "boolean" ? externalClientEditorOpen : localClientEditorOpen;
+  const clientEditorForm = externalClientEditorForm ?? localClientEditorForm;
+  const setClientEditorForm = externalSetClientEditorForm ?? localSetClientEditorForm;
+  const closeClientEditor = externalCloseClientEditor ?? (() => {
+    localSetClientEditorOpen(false);
+    localSetClientEditorForm(null);
+  });
+
+  const todayLocal = externalTodayLocal ?? (() => new Date().toISOString().slice(0, 10));
+
+  const saveClient = externalSaveClient ?? (() => {
+    if (typeof saveClientFromModal === "function") {
+      saveClientFromModal();
+    }
+  });
+
+  const openClientEditor = externalOpenClientEditor ?? ((row) => {
+    localSetClientEditorForm({ ...row });
+    localSetClientEditorOpen(true);
+  });
+
+  const saveClientEdits = externalSaveClientEdits ?? (() => {
+    closeClientEditor();
+  });
+
+  const activeClients = clients.filter((c) => {
+    const clientInvoices = invoices.filter((inv) => String(inv.clientId) === String(c.id));
+    return clientInvoices.length > 0;
+  });
+  const gstExemptClients = clients.filter((c) => c.outsideAustraliaOrGstExempt);
+  const totalClientRevenue = invoices
+    .filter((inv) => inv.status === "Paid")
+    .reduce((sum, inv) => sum + safeNumber(inv.total), 0);
+  return (
     <div style={{ display: "grid", gap: 20 }}>
       <DashboardHero
         title="Clients"
@@ -290,7 +376,7 @@ export default function ClientsPage(props) {
             justifyContent: "space-between",
           }}
         >
-          <button style={buttonSecondary} onClick={() => setClientForm(blankClient)}>
+          <button style={buttonSecondary} onClick={() => setClientForm(resolvedBlankClient)}>
             Cancel
           </button>
           <button style={buttonPrimary} onClick={saveClient}>
@@ -324,7 +410,7 @@ export default function ClientsPage(props) {
         />
 
         {clientEditorOpen && clientEditorForm ? (
-          <div style={{ marginTop: 20, ...cardStyle, padding: 20, border: `2px solid ${colours.lightPurple}` }}>
+          <div style={{ marginTop: 20, ...cardStyle, padding: 20, border: `2px solid ${colours.lightPurple || colours.purple || "#ddd"}` }}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", marginBottom: 16 }}>
               <h3 style={{ margin: 0, fontSize: 18 }}>View / Edit Client</h3>
               <button style={buttonSecondary} onClick={closeClientEditor}>Close</button>
@@ -348,9 +434,8 @@ export default function ClientsPage(props) {
               <button style={buttonPrimary} onClick={saveClientEdits}>Save Changes</button>
             </div>
           </div>
-        ) : <EmptyState icon="📁" title="No documents yet" message="Upload receipts, contracts and generated PDFs here. All documents are stored securely against your account." />}
+        ) : <EmptyState icon="👥" title="No client selected" message="Use View / Edit on a client row to open the client editor." />}
       </SectionCard>
     </div>
-    );
-
+  );
 }

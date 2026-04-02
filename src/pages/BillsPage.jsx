@@ -44,10 +44,12 @@ export default function BillsPage(props) {
     formatDateAU,
     safeNumber,
     todayLocal,
+    addDays = (date, days) => { const d = new Date(date); if (Number.isNaN(d.getTime())) return date; d.setDate(d.getDate() + Number(days || 0)); return d.toISOString().slice(0,10); },
     addDaysEOM,
     expenseCategories,
     GST_TYPE_OPTIONS,
     DashboardHero,
+    TrendBarsCard = () => null,
     InsightChip,
     MetricCard,
     SectionCard,
@@ -63,6 +65,7 @@ export default function BillsPage(props) {
     saveAPCreditNote,
     getClientName,
     totals,
+    knownSuppliers = Array.from(new Set((suppliers || []).map((s) => s?.name).filter(Boolean))),
   } = props;
 
     const todayKey = todayLocal();

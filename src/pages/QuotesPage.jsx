@@ -34,12 +34,14 @@ export default function QuotesPage(props) {
     addDays,
     formatCurrencyByCode,
     getClientCurrencyCode,
+    calculateAdjustmentValues = () => ({ feeAmount: 0, taxWithheld: 0, netExpected: 0 }),
     buttonPrimary,
     buttonSecondary,
     inputStyle,
     labelStyle,
     GST_TYPE_OPTIONS,
     DashboardHero,
+    MiniBarChart = () => null,
     InsightChip,
     MetricCard,
     SectionCard,
@@ -57,6 +59,13 @@ export default function QuotesPage(props) {
     gstAppliesToClient,
     calculateFormGst,
     computeLineItemTotals,
+    setClientModalForm = () => {},
+    setEditingClientId = () => {},
+    setShowClientModal = () => {},
+    setImportType = () => {},
+    setImportRows = () => {},
+    setImportError = () => {},
+    setShowImportModal = () => {},
   } = props;
 
     const quoteLines = computeLineItemTotals(quoteForm.lineItems || [], quoteForm.clientId);

@@ -39,12 +39,14 @@ export default function InvoicesPage(props) {
     addDays,
     formatCurrencyByCode,
     getClientCurrencyCode,
+    calculateAdjustmentValues = () => ({ feeAmount: 0, taxWithheld: 0, netExpected: 0 }),
     buttonPrimary,
     buttonSecondary,
     inputStyle,
     labelStyle,
     GST_TYPE_OPTIONS,
     DashboardHero,
+    MiniBarChart = () => null,
     InsightChip,
     MetricCard,
     SectionCard,
@@ -71,6 +73,13 @@ export default function InvoicesPage(props) {
     getDocumentAddress,
     invoiceAllocations,
     totals,
+    setClientModalForm = () => {},
+    setEditingClientId = () => {},
+    setShowClientModal = () => {},
+    setImportType = () => {},
+    setImportRows = () => {},
+    setImportError = () => {},
+    setShowImportModal = () => {},
   } = props;
 
     const invLines = computeLineItemTotals(invoiceForm.lineItems || [], invoiceForm.clientId);

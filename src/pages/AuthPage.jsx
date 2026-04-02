@@ -7,6 +7,7 @@ import React, { useState, useMemo } from "react";
 
 export default function AuthPage(props) {
   const {
+    profile = {},
     authMode,
     setAuthMode,
     authForm,
@@ -25,6 +26,7 @@ export default function AuthPage(props) {
     handlePasswordReset,
   } = props;
 
+  return (
     <div style={{ minHeight: "100vh", background: `linear-gradient(180deg, ${colours.bg} 0%, #EEF4FF 100%)`, padding: 24 }}>
       {showResetSentModal && (
         <div style={{ position: "fixed", inset: 0, zIndex: 99999, background: "rgba(15,23,42,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
@@ -198,5 +200,6 @@ export default function AuthPage(props) {
         </div>
       </div>
     </div>
+  );
 
 }

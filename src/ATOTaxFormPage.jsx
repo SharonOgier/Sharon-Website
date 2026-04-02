@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { safeNumber, todayLocal, formatDateAU, colours, cardStyle, labelStyle, inputStyle, buttonPrimary, buttonSecondary, currency } from "./PortalHelpers";
+import { safeNumber, todayLocal } from "./PortalHelpers";
 
 // ── Colours matching the HTML ─────────────────────────────────────────────────
 const TEAL   = "#006d6d";
@@ -77,7 +77,13 @@ function dlCSV(name,header,rows) {
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
-export default function ATOTaxFormPage({ profile, invoices, expenses, incomeSources, getClientById }) {
+export default function ATOTaxFormPage({
+  profile = {},
+  invoices = [],
+  expenses = [],
+  incomeSources = [],
+  getClientById = () => null,
+}) {
   const [tab, setTab] = useState("income");
 
   // Portal data mapped to ledger format

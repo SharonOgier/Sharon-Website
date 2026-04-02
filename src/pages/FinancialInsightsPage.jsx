@@ -31,6 +31,7 @@ export default function FinancialInsightsPage(props) {
     DataTable,
   } = props;
 
+  return (
     <div style={{ display: "grid", gap: 20 }}>
       <DashboardHero
         title="Financial Insights"
@@ -189,5 +190,6 @@ export default function FinancialInsightsPage(props) {
         </div>
       </SectionCard>
     </div>
+  );
 
 }

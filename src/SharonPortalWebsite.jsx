@@ -93,6 +93,7 @@ import SetupWizardPage      from "./pages/SetupWizardPage";
 import AuthPage             from "./pages/AuthPage";
 import BASReportPage        from "./pages/BASReportPage";
 import SettingsPage         from "./pages/SettingsPage";
+import ATOTaxFormPage       from "./ATOTaxFormPage";
 // ─────────────────────────────────────────────────────────────────────────────
 
 
@@ -3145,62 +3146,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     };
 
     const exportToATOForm = () => {
-      const classifyIncomeType = (src) => {
-        const raw = String(src?.incomeType || "").toLowerCase();
-        if (raw.includes("casual") || raw.includes("salary") || raw.includes("wage")) return "Salary/Wages";
-        if (raw.includes("business") || raw.includes("sole trader")) return "Business (sole trader)";
-        if (raw.includes("interest")) return "Interest";
-        if (raw.includes("dividend")) return "Dividends";
-        if (raw.includes("foreign")) return "Other";
-        return "Other";
-      };
-
-      const incomeRecords = invoices
-        .filter((inv) => inv.status === "Paid")
-        .map((inv) => {
-          const client = getClientById(inv.clientId);
-          return {
-            date: inv.paidAt ? inv.paidAt.slice(0, 10) : (inv.invoiceDate || ""),
-            type: "Business (sole trader)",
-            payer: client?.name || client?.businessName || inv.clientName || "",
-            gross: safeNumber(inv.total),
-            withheld: safeNumber(inv.taxWithheld || 0),
-            franked: 0,
-            franking: 0,
-            abn: client?.abn || "",
-          };
-        });
-
-      incomeSources.forEach((src) => {
-        const beforeTax = safeNumber(src.beforeTax);
-        if (beforeTax <= 0) return;
-        const incomeType = classifyIncomeType(src);
-        incomeRecords.push({
-          date: todayLocal(),
-          type: incomeType,
-          payer: src.name || "",
-          gross: beforeTax,
-          withheld: safeNumber(src.taxWithheld || 0),
-          franked: incomeType === "Dividends" ? beforeTax : 0,
-          franking: safeNumber(src.frankingCredit || 0),
-          abn: "",
-        });
-      });
-
-      const expenseRecords = expenses.map((exp) => ({
-        date: exp.date || "",
-        type: exp.category || exp.expenseType || "Other",
-        supplier: exp.supplier || exp.description || "",
-        amount: safeNumber(exp.amount),
-        gstIncl: exp.gstIncluded !== false ? "yes" : "no",
-      }));
-
-      const atoState = { income: incomeRecords, expenses: expenseRecords };
-      const encoded = encodeURIComponent(JSON.stringify(atoState));
-      const atoBaseUrl = profile?.atoExportUrl
-        || (typeof import.meta !== "undefined" && import.meta.env?.VITE_ATO_EXPORT_URL)
-        || "https://www.sharonogier.com/australian-ato-tax-form.html";
-      window.open(`${atoBaseUrl}#import=${encoded}`, "_blank");
+      setActivePage("ato tax form");
     };
 
     const monthlyFinance = useMemo(() => {
@@ -3823,6 +3769,10 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
               uploadDocument={uploadDocument} deleteDocument={deleteDocument}
               openDocumentEditor={openDocumentEditor} closeDocumentEditor={closeDocumentEditor}
               saveDocumentEdits={saveDocumentEdits}
+            />}
+            {activePage === "ato tax form" && <ATOTaxFormPage
+              profile={profile} invoices={invoices} expenses={expenses}
+              incomeSources={incomeSources} getClientById={getClientById}
             />}
             {activePage === "bas report" && <BASReportPage
               profile={profile} invoices={invoices} expenses={expenses}
