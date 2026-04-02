@@ -3511,6 +3511,43 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
         <TrendBarsCard title="Invoice status mix" subtitle="A quick collections snapshot" data={invoiceStatusRows} valueKey="value" formatValue={(value) => `${value} item${value === 1 ? "" : "s"}`} accent={colours.navy} emptyText="No invoices yet." />
       </div>
 
+      <SectionCard title="Financial reports" right={<div style={{ fontSize: 12, color: colours.muted }}>Tap any report to open it</div>}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16 }}>
+          <ActionHubCard
+            icon="📈"
+            title="Profit & loss"
+            description="Income less expenses — operating surplus or deficit after tax reserve."
+            buttonLabel="View report"
+            onClick={() => setActivePage("financial insights")}
+            tone={colours.purple}
+          />
+          <ActionHubCard
+            icon="💧"
+            title="Cash movement"
+            description="Cash received, GST deducted, tax reserved, fees and closing safe-to-spend."
+            buttonLabel="View report"
+            onClick={() => setActivePage("financial insights")}
+            tone={colours.teal}
+          />
+          <ActionHubCard
+            icon="🧾"
+            title="GST position"
+            description="GST collected on invoices less GST credits on expenses — net amount owing."
+            buttonLabel="View report"
+            onClick={() => setActivePage("financial insights")}
+            tone={colours.navy}
+          />
+          <ActionHubCard
+            icon="📊"
+            title="Revenue summary"
+            description="Client concentration, best and worst months, revenue volatility."
+            buttonLabel="View report"
+            onClick={() => setActivePage("financial insights")}
+            tone={colours.purple}
+          />
+        </div>
+      </SectionCard>
+
       <div
         style={{
           display: "grid",
