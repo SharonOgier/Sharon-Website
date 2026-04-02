@@ -32,6 +32,7 @@ import {
   DEFAULT_API_BASE_URL,
   getApiBaseUrl,
   DEFAULT_MONTHLY_SUBSCRIPTION,
+  SUPABASE_STORAGE_BUCKET,
   SUPABASE_TABLES,
   GST_TYPE_OPTIONS,
   expenseCategories,
@@ -66,6 +67,7 @@ import {
   formatMonthKey,
   formatMonthLabel,
   getSubscriptionAccess,
+  LOCKED_FEE_RATE_PERCENT,
 } from "./PortalHelpers";
 import {
   buildQuoteHtml,
@@ -75,13 +77,56 @@ import {
   writeInvoicePreviewToWindow,
 } from "./PortalDocumentBuilders";
 
-import {
-  LOCKED_FEE_RATE_PERCENT
-} from "./PortalHelpers";
 
 export default function AccountingPortalPrototype() {
   const { toasts, toast, removeToast } = useToast();
   const { confirm, modal: confirmModal } = useConfirm();
+
+  const MAX_RECEIPT_FILE_BYTES = 10 * 1024 * 1024;
+  const MAX_DOCUMENT_FILE_BYTES = 15 * 1024 * 1024;
+  const ALLOWED_RECEIPT_TYPES = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
+  const ALLOWED_DOCUMENT_TYPES = [
+    "application/pdf",
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "text/csv",
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ];
+
+  const getMimeTypeFromFile = (file) => {
+    const explicitType = String(file?.type || "").trim().toLowerCase();
+    if (explicitType) return explicitType;
+    const name = String(file?.name || "").toLowerCase();
+    if (name.endsWith(".pdf")) return "application/pdf";
+    if (name.endsWith(".jpg") || name.endsWith(".jpeg")) return "image/jpeg";
+    if (name.endsWith(".png")) return "image/png";
+    if (name.endsWith(".webp")) return "image/webp";
+    if (name.endsWith(".csv")) return "text/csv";
+    if (name.endsWith(".xls")) return "application/vnd.ms-excel";
+    if (name.endsWith(".xlsx")) return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    if (name.endsWith(".doc")) return "application/msword";
+    if (name.endsWith(".docx")) return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    return "";
+  };
+
+  const validateSelectedFile = (file, { allowedTypes, maxBytes, label }) => {
+    if (!file) throw new Error(`Please select a ${label.toLowerCase()} file first.`);
+    const mimeType = getMimeTypeFromFile(file);
+    if (!allowedTypes.includes(mimeType)) {
+      throw new Error(`${label} file type is not allowed.`);
+    }
+    if (safeNumber(file.size) <= 0) {
+      throw new Error(`${label} file appears to be empty.`);
+    }
+    if (safeNumber(file.size) > maxBytes) {
+      throw new Error(`${label} file is too large.`);
+    }
+    return mimeType;
+  };
   const [savingClient, setSavingClient] = useState(false);
   const [savingClientEdits, setSavingClientEdits] = useState(false);
   const [savingInvoice, setSavingInvoice] = useState(false);
@@ -356,14 +401,16 @@ export default function AccountingPortalPrototype() {
     setServices([]);
     setDocuments([]);
     setSuppliers([]);
-    window.localStorage.removeItem("sas_profile");
-    window.localStorage.removeItem("sas_clients");
-    window.localStorage.removeItem("sas_invoices");
-    window.localStorage.removeItem("sas_quotes");
-    window.localStorage.removeItem("sas_expenses");
-    window.localStorage.removeItem("sas_incomeSources");
-    window.localStorage.removeItem("sas_services");
-    window.localStorage.removeItem("sas_documents");
+    if (typeof window !== "undefined" && window.localStorage) {
+      window.localStorage.removeItem("sas_profile");
+      window.localStorage.removeItem("sas_clients");
+      window.localStorage.removeItem("sas_invoices");
+      window.localStorage.removeItem("sas_quotes");
+      window.localStorage.removeItem("sas_expenses");
+      window.localStorage.removeItem("sas_incomeSources");
+      window.localStorage.removeItem("sas_services");
+      window.localStorage.removeItem("sas_documents");
+    }
   };
 
   const buildWizardProfile = () => {
@@ -641,6 +688,12 @@ export default function AccountingPortalPrototype() {
       throw new Error("Supabase client not provided");
     }
 
+    validateSelectedFile(file, {
+      allowedTypes: ALLOWED_RECEIPT_TYPES,
+      maxBytes: MAX_RECEIPT_FILE_BYTES,
+      label: "Receipt",
+    });
+
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
     const today = todayLocal();
     const businessSlug = String(profile?.businessName || "portal").toLowerCase().replace(/[^a-z0-9]/g, "-").replace(/-+/g, "-").slice(0, 40);
@@ -666,6 +719,12 @@ export default function AccountingPortalPrototype() {
     if (!supabase) {
       throw new Error("Supabase client not provided");
     }
+
+    validateSelectedFile(file, {
+      allowedTypes: ALLOWED_DOCUMENT_TYPES,
+      maxBytes: MAX_DOCUMENT_FILE_BYTES,
+      label: "Document",
+    });
 
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
     const today = todayLocal();
@@ -873,7 +932,7 @@ export default function AccountingPortalPrototype() {
     try {
       isSigningOut.current = true;
       await supabase.auth.signOut();
-      Object.keys(localStorage).forEach((key) => { if (key.startsWith("sb-")) localStorage.removeItem(key); });
+      if (typeof window !== "undefined" && window.localStorage) { Object.keys(window.localStorage).forEach((key) => { if (key.startsWith("sb-")) window.localStorage.removeItem(key); }); }
       hasHydratedSupabaseState.current = false;
       setIsSupabaseRestoring(false);
       setAuthUser(null);

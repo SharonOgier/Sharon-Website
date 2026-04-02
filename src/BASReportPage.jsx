@@ -1,26 +1,28 @@
 import React from "react";
+import { buttonPrimary } from "./PortalHelpers";
 
 export default function BASReportPage(props) {
   const {
-    profile,
-    invoices,
-    expenses,
-    invoiceAllocations,
-    totals,
+    profile = {},
+    invoices = [],
+    expenses = [],
+    invoiceAllocations = [],
+    totals = {},
     basQuarter,
     setBasQuarter,
-    basNotes,
+    basNotes = {},
     setBasNotes,
-    cardStyle,
-    colours,
-    currency,
-    formatDateAU,
-    safeNumber,
+    cardStyle = {},
+    colours = {},
+    currency = (v) => v,
+    formatDateAU = (v) => v,
+    safeNumber = (v) => Number(v || 0),
     DEFAULT_MONTHLY_SUBSCRIPTION,
     DashboardHero,
     InsightChip,
     MetricCard,
-    SectionCard
+    SectionCard,
+    setActivePage = () => {},
   } = props;
       // ── GST registration check ──────────────────────────────────
       if (!profile.gstRegistered) {
