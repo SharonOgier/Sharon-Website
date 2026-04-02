@@ -291,6 +291,12 @@ const escapeHtml = (value) =>
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
 
+// Only allow genuine base64 image data URLs — prevents HTML/script injection via logo field
+const safeLogoDataUrl = (value) =>
+  typeof value === "string" && /^data:image\/(png|jpeg|jpg|gif|webp|svg\+xml);base64,[A-Za-z0-9+/=]+$/.test(value.trim())
+    ? value.trim()
+    : "";
+
 const nl2br = (value) => escapeHtml(value).replace(/\n/g, "<br/>");
 
 // Parse YYYY-MM-DD as LOCAL date (not UTC) — prevents day-shift in AU timezones
@@ -457,8 +463,8 @@ th { text-align:left; color:#667085; }
 
 <div class="header">
 <div>
-  ${profile.logoDataUrl
-    ? `<div style="margin-bottom:12px;"><img src="${profile.logoDataUrl}" alt="Logo" style="max-height:${LOGO_DOCUMENT_MAX_HEIGHT}px; max-width:${LOGO_DOCUMENT_MAX_WIDTH}px; object-fit:contain;" /></div>`
+  ${safeLogoDataUrl(profile.logoDataUrl)
+    ? `<div style="margin-bottom:12px;"><img src="${safeLogoDataUrl(profile.logoDataUrl)}" alt="Logo" style="max-height:${LOGO_DOCUMENT_MAX_HEIGHT}px; max-width:${LOGO_DOCUMENT_MAX_WIDTH}px; object-fit:contain;" /></div>`
     : ""
   }
   <div class="title">QUOTE</div>
@@ -562,8 +568,8 @@ return `<!doctype html>
 </head>
 <body style="margin:0; padding:24px; background:#F8FAFC; font-family:Arial, sans-serif; color:#14202B;">
   <div style="max-width:760px; margin:0 auto; background:#FFFFFF; border:1px solid #E2E8F0; border-radius:18px; padding:28px;">
-    ${profile.logoDataUrl
-      ? `<div style="margin-bottom:16px;"><img src="${profile.logoDataUrl}" alt="Logo" style="max-height:${LOGO_PREVIEW_MAX_HEIGHT}px; max-width:${LOGO_PREVIEW_MAX_WIDTH}px; object-fit:contain;" /></div>`
+    ${safeLogoDataUrl(profile.logoDataUrl)
+      ? `<div style="margin-bottom:16px;"><img src="${safeLogoDataUrl(profile.logoDataUrl)}" alt="Logo" style="max-height:${LOGO_PREVIEW_MAX_HEIGHT}px; max-width:${LOGO_PREVIEW_MAX_WIDTH}px; object-fit:contain;" /></div>`
       : ""
     }
     <div style="display:flex; justify-content:space-between; gap:16px; flex-wrap:wrap; border-bottom:1px solid #E2E8F0; padding-bottom:18px;">
@@ -736,8 +742,8 @@ th { text-align:left; color:#64748B; }
 
 <div class="header">
 <div>
-  ${profile.logoDataUrl
-    ? `<div style="margin-bottom:12px;"><img src="${profile.logoDataUrl}" alt="Logo" style="max-height:${LOGO_DOCUMENT_MAX_HEIGHT}px; max-width:${LOGO_DOCUMENT_MAX_WIDTH}px; object-fit:contain;" /></div>`
+  ${safeLogoDataUrl(profile.logoDataUrl)
+    ? `<div style="margin-bottom:12px;"><img src="${safeLogoDataUrl(profile.logoDataUrl)}" alt="Logo" style="max-height:${LOGO_DOCUMENT_MAX_HEIGHT}px; max-width:${LOGO_DOCUMENT_MAX_WIDTH}px; object-fit:contain;" /></div>`
     : ""
   }
   <div class="title">TAX INVOICE</div>

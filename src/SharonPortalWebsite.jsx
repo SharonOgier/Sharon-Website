@@ -6611,8 +6611,33 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     );
     
       // ── GST registration check ──────────────────────────────────
-      if (!profile.gstRegistered) {
-        return (
+  
+     const quarterOptions = [
+    { value: "0", label: "All activity" },
+    { value: "1", label: "Quarter 1 (Jul-Sep)" },
+    { value: "2", label: "Quarter 2 (Oct-Dec)" },
+    { value: "3", label: "Quarter 3 (Jan-Mar)" },
+    { value: "4", label: "Quarter 4 (Apr-Jun)" },
+  ];
+
+  if (!profile.gstRegistered) 
+    return (
+      <div style={{ ...cardStyle, padding: 32, textAlign: "center" }}>
+        GST is not enabled for this business.
+      </div>
+    );
+
+  return (
+    <div style={{ display: "grid", gap: 20 }}>
+      <DashboardHero
+        title="BAS Report"
+        subtitle="Business Activity Statement preparation for ATO lodgement."
+        highlight="N/A"
+      />
+    </div>
+  );
+
+         return (
           <div style={{ display: "grid", gap: 20 }}>
             <DashboardHero title="BAS Report" subtitle="Business Activity Statement preparation for ATO lodgement." highlight="N/A" />
             <div style={{ ...cardStyle, padding: 32, textAlign: "center" }}>
@@ -6625,7 +6650,6 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
             </div>
           </div>
         );
-      }
 
       // ── Quarter helpers ─────────────────────────────────────────
       const now = new Date();

@@ -1,5 +1,4 @@
 import React from "react";
-import { getSubscriptionAccess } from "./PortalCoreUI";
 
 const DEFAULT_MONTHLY_SUBSCRIPTION = 45;
 

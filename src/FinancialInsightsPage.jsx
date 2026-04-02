@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 
 export default function FinancialInsightsPage(props) {
   const {
@@ -14,99 +14,108 @@ export default function FinancialInsightsPage(props) {
     currency,
     formatDateAU,
     safeNumber,
+    todayLocal,
     DashboardHero,
     InsightChip,
     MetricCard,
     TrendBarsCard,
     WaterfallCard,
-    SectionCard
+    SectionCard,
+    ActionHubCard,
+    DataTable,
+    // Computed data passed in from the parent (SharonPortalWebsite)
+    financialInsights,
+    clientRevenueRows,
+    expenseCategoryRows,
+    monthlyFinance,
   } = props;
-    const reportTitle =
-      activeFinancialTile === "profit_loss"
-        ? "Statement of Profit or Loss"
-        : activeFinancialTile === "cash_movement"
-          ? "Cash Movement Statement"
-          : activeFinancialTile === "gst_position"
-            ? "GST Position Statement"
-            : "Revenue Summary Statement";
-    const reportSubtitle =
-      activeFinancialTile === "profit_loss"
-        ? "Prepared from portal activity currently recorded in your invoices and expenses."
-        : activeFinancialTile === "cash_movement"
-          ? "Prepared from paid invoices, tax reserves, GST balances and recorded expenses."
-          : activeFinancialTile === "gst_position"
-            ? "Prepared from GST collected on invoices and GST credits recorded on expenses."
-            : "Prepared from paid client revenue and recent monthly trends recorded in the portal.";
-    const statementRows =
-      activeFinancialTile === "profit_loss"
-        ? [
-            { label: "Income", value: totals.incomeExGst, strong: true },
-            { label: "Less: Expenses", value: -totals.totalExpenses },
-            { label: "Operating surplus / (deficit)", value: totals.incomeExGst - totals.totalExpenses, strong: true },
-            { label: "Less: Estimated tax reserve", value: -totals.estimatedTax },
-            { label: "Net result after tax reserve", value: totals.incomeExGst - totals.totalExpenses - totals.estimatedTax, strong: true },
-          ]
-        : activeFinancialTile === "cash_movement"
-          ? [
-              { label: "Cash received from paid invoices", value: totals.paidIncome, strong: true },
-              { label: "Less: GST payable", value: -totals.gstPayable },
-              { label: "Less: Estimated tax reserve", value: -totals.estimatedTax },
-              { label: "Less: Platform fees", value: -totals.totalFees },
-              { label: "Less: Expenses paid / recorded", value: -totals.totalExpenses },
-              { label: `Less: Subscription (${currency(totals.monthlySubscriptionCost)}/mo)`, value: -totals.monthlySubscriptionCost },
-              { label: "Closing safe-to-spend balance", value: totals.safeToSpend, strong: true },
-            ]
-          : activeFinancialTile === "gst_position"
-            ? [
-                { label: "GST collected on invoices", value: totals.gstCollected, strong: true },
-                { label: "Less: GST credits on expenses", value: -totals.gstOnExpenses },
-                { label: "Net GST payable / (refundable)", value: totals.gstPayable, strong: true },
-              ]
-            : [
-                { label: "Average monthly paid revenue", value: financialInsights.averageMonthlyRevenue, strong: true },
-                { label: "Top client revenue share", value: financialInsights.topClientShare, suffix: "%" },
-                { label: "Top three client revenue share", value: financialInsights.topThreeClientShare, suffix: "%" },
-                { label: "Revenue volatility", value: financialInsights.averageVolatility, suffix: "%" },
-              ];
-    const rightColumnRows =
-      activeFinancialTile === "profit_loss"
-        ? [
-            ["Gross invoiced", currency(totals.totalIncome)],
-            ["GST collected", currency(totals.gstCollected)],
-            ["Income ex GST", currency(totals.incomeExGst)],
-            ["Expense ratio", `${financialInsights.expenseRatio.toFixed(1)}%`],
-          ]
-        : activeFinancialTile === "cash_movement"
-          ? [
-              ["Paid income", currency(totals.paidIncome)],
-              ["GST payable", currency(totals.gstPayable)],
-              ["Tax reserve", currency(totals.estimatedTax)],
-              ["You keep", `${Math.max(financialInsights.usableCashRatio, 0).toFixed(1)}%`],
-            ]
-          : activeFinancialTile === "gst_position"
-            ? [
-                ["GST registration", profile.gstRegistered ? "Registered" : "Not registered"],
-                ["GST collected", currency(totals.gstCollected)],
-                ["GST credits", currency(totals.gstOnExpenses)],
-                ["Net GST", currency(totals.gstPayable)],
-              ]
-            : [
-                ["Average monthly revenue", currency(financialInsights.averageMonthlyRevenue)],
-                ["Best month", `${financialInsights.bestMonth?.label || "—"} · ${currency(financialInsights.bestMonth?.revenue || 0)}`],
-                ["Worst month", `${financialInsights.worstMonth?.label || "—"} · ${currency(financialInsights.worstMonth?.revenue || 0)}`],
-                ["Average invoice", currency(financialInsights.averageInvoiceValue)],
-              ];
 
-    return (
+  // Local state — which report tile is active
+  const [activeFinancialTile, setActiveFinancialTile] = useState("profit_loss");
+
+  const reportTitle =
+    activeFinancialTile === "profit_loss"
+      ? "Statement of Profit or Loss"
+      : activeFinancialTile === "cash_movement"
+        ? "Cash Movement Statement"
+        : activeFinancialTile === "gst_position"
+          ? "GST Position Statement"
+          : "Revenue Summary Statement";
+
+  const reportSubtitle =
+    activeFinancialTile === "profit_loss"
+      ? "Prepared from portal activity currently recorded in your invoices and expenses."
+      : activeFinancialTile === "cash_movement"
+        ? "Prepared from paid invoices, tax reserves, GST balances and recorded expenses."
+        : activeFinancialTile === "gst_position"
+          ? "Prepared from GST collected on invoices and GST credits recorded on expenses."
+          : "Prepared from paid client revenue and recent monthly trends recorded in the portal.";
+
+  const statementRows =
+    activeFinancialTile === "profit_loss"
+      ? [
+          { label: "Income", value: totals.incomeExGst, strong: true },
+          { label: "Less: Expenses", value: -totals.totalExpenses },
+          { label: "Operating surplus / (deficit)", value: totals.incomeExGst - totals.totalExpenses, strong: true },
+          { label: "Less: Estimated tax reserve", value: -totals.estimatedTax },
+          { label: "Net result after tax reserve", value: totals.incomeExGst - totals.totalExpenses - totals.estimatedTax, strong: true },
+        ]
+      : activeFinancialTile === "cash_movement"
+        ? [
+            { label: "Cash received from paid invoices", value: totals.paidIncome, strong: true },
+            { label: "Less: GST payable", value: -totals.gstPayable },
+            { label: "Less: Estimated tax reserve", value: -totals.estimatedTax },
+            { label: "Less: Platform fees", value: -totals.totalFees },
+            { label: "Less: Expenses paid / recorded", value: -totals.totalExpenses },
+            { label: `Less: Subscription (${currency(totals.monthlySubscriptionCost)}/mo)`, value: -totals.monthlySubscriptionCost },
+            { label: "Closing safe-to-spend balance", value: totals.safeToSpend, strong: true },
+          ]
+        : activeFinancialTile === "gst_position"
+          ? [
+              { label: "GST collected on invoices", value: totals.gstCollected, strong: true },
+              { label: "Less: GST credits on expenses", value: -totals.gstOnExpenses },
+              { label: "Net GST payable / (refundable)", value: totals.gstPayable, strong: true },
+            ]
+          : [
+              { label: "Average monthly paid revenue", value: financialInsights.averageMonthlyRevenue, strong: true },
+              { label: "Top client revenue share", value: financialInsights.topClientShare, suffix: "%" },
+              { label: "Top three client revenue share", value: financialInsights.topThreeClientShare, suffix: "%" },
+              { label: "Revenue volatility", value: financialInsights.averageVolatility, suffix: "%" },
+            ];
+
+  const rightColumnRows =
+    activeFinancialTile === "profit_loss"
+      ? [
+          ["Gross invoiced", currency(totals.totalIncome)],
+          ["GST collected", currency(totals.gstCollected)],
+          ["Income ex GST", currency(totals.incomeExGst)],
+          ["Expense ratio", `${financialInsights.expenseRatio.toFixed(1)}%`],
+        ]
+      : activeFinancialTile === "cash_movement"
+        ? [
+            ["Paid income", currency(totals.paidIncome)],
+            ["GST payable", currency(totals.gstPayable)],
+            ["Tax reserve", currency(totals.estimatedTax)],
+            ["You keep", `${Math.max(financialInsights.usableCashRatio, 0).toFixed(1)}%`],
+          ]
+        : activeFinancialTile === "gst_position"
+          ? [
+              ["GST registration", profile.gstRegistered ? "Registered" : "Not registered"],
+              ["GST collected", currency(totals.gstCollected)],
+              ["GST credits", currency(totals.gstOnExpenses)],
+              ["Net GST", currency(totals.gstPayable)],
+            ]
+          : [
+              ["Average monthly revenue", currency(financialInsights.averageMonthlyRevenue)],
+              ["Best month", `${financialInsights.bestMonth?.label || "—"} · ${currency(financialInsights.bestMonth?.revenue || 0)}`],
+              ["Worst month", `${financialInsights.worstMonth?.label || "—"} · ${currency(financialInsights.worstMonth?.revenue || 0)}`],
+              ["Average invoice", currency(financialInsights.averageInvoiceValue)],
+            ];
+
+  return (
     <div style={{ display: "grid", gap: 20 }}>
       <SectionCard title="Financial reports" right={<div style={{ fontSize: 12, color: colours.muted }}>Formal statement style</div>}>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-            gap: 16,
-          }}
-        >
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16 }}>
           <ActionHubCard
             icon="📈"
             title="Profit & loss"
@@ -262,5 +271,5 @@ export default function FinancialInsightsPage(props) {
         </div>
       </SectionCard>
     </div>
-    );
-    };
+  );
+}
