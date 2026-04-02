@@ -1,21 +1,27 @@
+<<<<<<< HEAD
 import React, { useState, useMemo } from "react";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // BASReportPage
 // All state and handlers come from SharonPortalWebsite via props.
 // ─────────────────────────────────────────────────────────────────────────────
+=======
+import React from "react";
+import { buttonPrimary } from "./PortalHelpers";
+>>>>>>> 8f04839342b413780e81d1341f0e78b0d312c296
 
 export default function BASReportPage(props) {
   const {
-    profile,
-    invoices,
-    expenses,
-    invoiceAllocations,
-    totals,
+    profile = {},
+    invoices = [],
+    expenses = [],
+    invoiceAllocations = [],
+    totals = {},
     basQuarter,
     setBasQuarter,
-    basNotes,
+    basNotes = {},
     setBasNotes,
+<<<<<<< HEAD
     colours,
     cardStyle,
     buttonPrimary,
@@ -29,6 +35,19 @@ export default function BASReportPage(props) {
     SectionCard,
     SummaryBox,
     setActivePage,
+=======
+    cardStyle = {},
+    colours = {},
+    currency = (v) => v,
+    formatDateAU = (v) => v,
+    safeNumber = (v) => Number(v || 0),
+    DEFAULT_MONTHLY_SUBSCRIPTION,
+    DashboardHero,
+    InsightChip,
+    MetricCard,
+    SectionCard,
+    setActivePage = () => {},
+>>>>>>> 8f04839342b413780e81d1341f0e78b0d312c296
   } = props;
 
       const quarterOptions = [

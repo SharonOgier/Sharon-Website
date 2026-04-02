@@ -7,6 +7,7 @@ import React, { useState, useMemo } from "react";
 
 export default function DashboardPage(props) {
   const {
+<<<<<<< HEAD
     profile,
     clients,
     invoices,
@@ -35,6 +36,25 @@ export default function DashboardPage(props) {
     buttonSecondary,
     inputStyle,
     labelStyle,
+=======
+    profile = {},
+    clients = [],
+    invoices = [],
+    quotes = [],
+    expenses = [],
+    documents = [],
+    services = [],
+    totals = {},
+    invoiceAllocations = [],
+    setActivePage = () => {},
+    setActiveSettingsTab = () => {},
+    cardStyle = {},
+    colours = {},
+    currency = (v) => v,
+    formatDateAU = (v) => v,
+    safeNumber = (v) => Number(v || 0),
+    DEFAULT_MONTHLY_SUBSCRIPTION = 45,
+>>>>>>> 8f04839342b413780e81d1341f0e78b0d312c296
     DashboardHero,
     InsightChip,
     MetricCard,
@@ -44,13 +64,58 @@ export default function DashboardPage(props) {
     ActivityListCard,
     SectionCard,
     DataTable,
+<<<<<<< HEAD
+=======
+    buttonPrimary,
+    buttonSecondary,
+    dashboardInsights,
+    clientRevenueRows,
+    expenseCategoryRows,
+    invoiceStatusRows,
+    recentActivityRows,
+>>>>>>> 8f04839342b413780e81d1341f0e78b0d312c296
     exportToATOForm,
     restorePortalStateFromSupabase,
     saveAllCurrentStateToSupabase,
     supabaseSyncStatus,
     getClientName,
+<<<<<<< HEAD
   } = props;
 
+=======
+    monthlyFinance,
+  } = props;
+
+  const resolvedDashboardInsights = dashboardInsights || { collectionRate: 0 };
+  const resolvedClientRevenueRows = clientRevenueRows || [];
+  const resolvedExpenseCategoryRows = expenseCategoryRows || [];
+  const resolvedInvoiceStatusRows = invoiceStatusRows || [];
+  const resolvedRecentActivityRows = recentActivityRows || [];
+  const resolvedMonthlyFinance = monthlyFinance || [];
+  const resolvedExportToATOForm = typeof exportToATOForm === "function" ? exportToATOForm : () => {};
+  const resolvedRestorePortalStateFromSupabase = typeof restorePortalStateFromSupabase === "function" ? restorePortalStateFromSupabase : () => {};
+  const resolvedSaveAllCurrentStateToSupabase = typeof saveAllCurrentStateToSupabase === "function" ? saveAllCurrentStateToSupabase : () => {};
+  const resolvedSupabaseSyncStatus = supabaseSyncStatus || "Not connected yet.";
+  const resolvedGetClientName = typeof getClientName === "function" ? getClientName : (clientId) => clientId || "—";
+  const resolvedButtonPrimary = buttonPrimary || {
+    background: colours?.purple || "#6A1B9A",
+    color: "#fff",
+    border: "none",
+    borderRadius: 10,
+    padding: "10px 14px",
+    fontWeight: 700,
+    cursor: "pointer",
+  };
+  const resolvedButtonSecondary = buttonSecondary || {
+    background: "#fff",
+    color: colours?.text || "#14202B",
+    border: `1px solid ${colours?.border || "#E2E8F0"}`,
+    borderRadius: 10,
+    padding: "10px 14px",
+    fontWeight: 700,
+    cursor: "pointer",
+  };
+>>>>>>> 8f04839342b413780e81d1341f0e78b0d312c296
       // ── Onboarding checklist ──────────────────────────────────────
       const onboardingSteps = [
         { label: "Add your business name", done: Boolean(profile.businessName), action: () => { setActivePage("settings"); setActiveSettingsTab("Profile"); } },
@@ -112,7 +177,7 @@ export default function DashboardPage(props) {
         subtitle="Start with the actions you use most. This home view keeps invoices, quotes, expenses and financial performance in one place so you can move quickly without hunting through the portal."
         highlight={currency(totals.safeToSpend)}
       >
-        <InsightChip label="Collection rate" value={`${dashboardInsights.collectionRate.toFixed(1)}%`} />
+        <InsightChip label="Collection rate" value={`${resolvedDashboardInsights.collectionRate.toFixed(1)}%`} />
         <InsightChip label="Subscription/mo" value={currency(totals.monthlySubscriptionCost)} />
         <InsightChip label="Safe to spend" value={currency(totals.safeToSpend)} />
       </DashboardHero>
@@ -183,10 +248,10 @@ export default function DashboardPage(props) {
         }}
       >
         <SectionCard title="Monthly financial momentum" right={<div style={{ fontSize: 12, color: colours.muted }}>Latest 6 months</div>}>
-          {monthlyFinance.length ? (
+          {resolvedMonthlyFinance.length ? (
             <div style={{ display: "grid", gap: 16 }}>
-              {monthlyFinance.map((month) => {
-                const maxValue = Math.max(...monthlyFinance.map((item) => Math.max(item.revenue, item.expenses, Math.abs(item.net))), 0);
+              {resolvedMonthlyFinance.map((month) => {
+                const maxValue = Math.max(...resolvedMonthlyFinance.map((item) => Math.max(item.revenue, item.expenses, Math.abs(item.net))), 0);
                 const revenueWidth = maxValue > 0 ? (month.revenue / maxValue) * 100 : 0;
                 const expenseWidth = maxValue > 0 ? (month.expenses / maxValue) * 100 : 0;
                 const netWidth = maxValue > 0 ? (Math.abs(month.net) / maxValue) * 100 : 0;
@@ -240,9 +305,9 @@ export default function DashboardPage(props) {
           gap: 20,
         }}
       >
-        <TrendBarsCard title="Top clients by paid revenue" subtitle="Based on invoices marked Paid" data={clientRevenueRows} valueKey="value" formatValue={(value) => currency(value)} accent={colours.teal} emptyText="No paid invoices yet." />
-        <TrendBarsCard title="Expense categories" subtitle="Largest categories from recorded expenses" data={expenseCategoryRows} valueKey="value" formatValue={(value) => currency(value)} accent={colours.purple} emptyText="No expenses recorded yet." />
-        <TrendBarsCard title="Invoice status mix" subtitle="A quick collections snapshot" data={invoiceStatusRows} valueKey="value" formatValue={(value) => `${value} item${value === 1 ? "" : "s"}`} accent={colours.navy} emptyText="No invoices yet." />
+        <TrendBarsCard title="Top clients by paid revenue" subtitle="Based on invoices marked Paid" data={resolvedClientRevenueRows} valueKey="value" formatValue={(value) => currency(value)} accent={colours.teal} emptyText="No paid invoices yet." />
+        <TrendBarsCard title="Expense categories" subtitle="Largest categories from recorded expenses" data={resolvedExpenseCategoryRows} valueKey="value" formatValue={(value) => currency(value)} accent={colours.purple} emptyText="No expenses recorded yet." />
+        <TrendBarsCard title="Invoice status mix" subtitle="A quick collections snapshot" data={resolvedInvoiceStatusRows} valueKey="value" formatValue={(value) => `${value} item${value === 1 ? "" : "s"}`} accent={colours.navy} emptyText="No invoices yet." />
       </div>
 
       <SectionCard title="Financial reports" right={<div style={{ fontSize: 12, color: colours.muted }}>Tap any report to open it</div>}>
@@ -301,31 +366,31 @@ export default function DashboardPage(props) {
               <div style={{ ...cardStyle, padding: 16, background: colours.bg }}>
                 <div style={{ fontSize: 12, fontWeight: 800, textTransform: "uppercase", color: colours.muted }}>ATO export</div>
                 <div style={{ fontSize: 14, color: colours.text, lineHeight: 1.6, marginTop: 8 }}>Send paid invoice and expense data straight into the tax form page with the current portal records.</div>
-                <button style={{ ...buttonPrimary, marginTop: 14 }} onClick={exportToATOForm}>Export to ATO Tax Form</button>
+                <button style={{ ...resolvedButtonPrimary, marginTop: 14 }} onClick={resolvedExportToATOForm}>Export to ATO Tax Form</button>
               </div>
               <div style={{ ...cardStyle, padding: 16, background: colours.bg }}>
                 <div style={{ fontSize: 12, fontWeight: 800, textTransform: "uppercase", color: colours.muted }}>Supabase sync</div>
                 <div style={{ fontSize: 14, color: colours.text, lineHeight: 1.6, marginTop: 8 }}>Your dashboard reflects the same SaaS entities already saved in Supabase: invoices, expenses, clients, services, income sources, and documents.</div>
                 <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 14 }}>
-                  <button style={buttonSecondary} onClick={restorePortalStateFromSupabase}>Load from Supabase DB</button>
-                  <button style={buttonPrimary} onClick={() => saveAllCurrentStateToSupabase()}>Save to Supabase DB</button>
+                  <button style={resolvedButtonSecondary} onClick={resolvedRestorePortalStateFromSupabase}>Load from Supabase DB</button>
+                  <button style={resolvedButtonPrimary} onClick={() => resolvedSaveAllCurrentStateToSupabase()}>Save to Supabase DB</button>
                 </div>
               </div>
             </div>
             <div style={{ fontSize: 13, color: colours.muted, lineHeight: 1.6 }}>
-              Status: {supabaseSyncStatus}
+              Status: {resolvedSupabaseSyncStatus}
             </div>
           </div>
         </SectionCard>
 
-        <ActivityListCard title="Recent activity" rows={recentActivityRows} />
+        <ActivityListCard title="Recent activity" rows={resolvedRecentActivityRows} />
       </div>
 
       <SectionCard title="Paid invoice allocation detail" right={<div style={{ fontSize: 12, color: colours.muted }}>Live from invoices marked Paid</div>}>
         <DataTable
           columns={[
             { key: "invoiceNumber", label: "Invoice" },
-            { key: "clientId", label: "Client", render: (_, row) => getClientName(row.clientId) },
+            { key: "clientId", label: "Client", render: (_, row) => resolvedGetClientName(row.clientId) },
             { key: "gross", label: "Paid", render: (v) => currency(v) },
             { key: "gst", label: "GST", render: (v) => currency(v) },
             { key: "estimatedTax", label: "Tax", render: (v) => currency(v) },
