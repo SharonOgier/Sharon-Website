@@ -280,46 +280,50 @@ export const incomeFrequencyOptions = [
 export const inputStyle = {
   width: "100%",
   border: `1px solid ${colours.border}`,
-  borderRadius: 10,
-  padding: "10px 12px",
+  borderRadius: 12,
+  padding: "12px 14px",
   fontSize: 14,
+  lineHeight: 1.4,
   boxSizing: "border-box",
   background: colours.white,
+  boxShadow: "inset 0 1px 2px rgba(15, 23, 42, 0.03)",
 };
 
 export const labelStyle = {
   display: "block",
   fontSize: 13,
-  fontWeight: 600,
+  fontWeight: 700,
   color: colours.text,
-  marginBottom: 6,
+  marginBottom: 8,
 };
 
 export const cardStyle = {
   background: colours.white,
   border: `1px solid ${colours.border}`,
-  borderRadius: 18,
-  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+  borderRadius: 22,
+  boxShadow: "0 12px 32px rgba(15, 23, 42, 0.06)",
 };
 
 export const buttonPrimary = {
   background: colours.purple,
   color: "#fff",
   border: "none",
-  borderRadius: 10,
-  padding: "10px 14px",
-  fontWeight: 700,
+  borderRadius: 12,
+  padding: "11px 16px",
+  fontWeight: 800,
   cursor: "pointer",
+  boxShadow: "0 10px 24px rgba(106, 27, 154, 0.18)",
 };
 
 export const buttonSecondary = {
   background: colours.white,
   color: colours.text,
   border: `1px solid ${colours.border}`,
-  borderRadius: 10,
-  padding: "10px 14px",
-  fontWeight: 700,
+  borderRadius: 12,
+  padding: "11px 16px",
+  fontWeight: 800,
   cursor: "pointer",
+  boxShadow: "0 6px 18px rgba(15, 23, 42, 0.04)",
 };
 
 export const currency = (value) =>

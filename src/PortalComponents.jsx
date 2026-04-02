@@ -180,7 +180,7 @@ export function PaywallScreen({ profile, serverBaseUrl }) {
 
 export function SectionCard({ title, children, right }) {
   return (
-    <div className="sas-section-card" style={{ ...cardStyle, padding: 20 }}>
+    <div className="sas-section-card" style={{ ...cardStyle, padding: 22 }}>
       <div
         style={{
           display: "flex",
@@ -209,7 +209,7 @@ export function SectionCard({ title, children, right }) {
 
 export function SummaryBox({ title, value, subtitle }) {
   return (
-    <div className="sas-summary-box" style={{ ...cardStyle, padding: 18 }}>
+    <div className="sas-summary-box" style={{ ...cardStyle, padding: 20, minHeight: 124, display: "flex", flexDirection: "column", justifyContent: "center" }}>
       <div style={{ fontSize: 13, fontWeight: 700, color: colours.muted }}>
         {title}
       </div>
@@ -235,17 +235,17 @@ export function SummaryBox({ title, value, subtitle }) {
 export function DashboardHero({ title, subtitle, highlight, children }) {
   return (
     <div
-      className="sas-dashboard-hero"
+      className="sas-dashboard-hero sas-hero-grid"
       style={{
         background: `linear-gradient(135deg, ${colours.navy} 0%, ${colours.purple} 58%, ${colours.teal} 100%)`,
-        borderRadius: 24,
-        padding: 28,
+        borderRadius: 28,
+        padding: 30,
         color: "#FFFFFF",
         display: "grid",
         gridTemplateColumns: "minmax(0, 1.7fr) minmax(280px, 1fr)",
         gap: 24,
         alignItems: "stretch",
-        boxShadow: "0 18px 40px rgba(43, 47, 107, 0.18)",
+        boxShadow: "0 22px 50px rgba(43, 47, 107, 0.16)",
       }}
     >
       <div className="sas-hero-content" style={{ minWidth: 0 }}>
@@ -319,7 +319,7 @@ export function MetricCard({ title, value, subtitle, accent = colours.purple }) 
       className="sas-metric-card"
       style={{
         ...cardStyle,
-        padding: 18,
+        padding: 20,
         position: "relative",
         overflow: "hidden",
         minHeight: 132,

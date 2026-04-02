@@ -3458,34 +3458,146 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       }}
     >
       <style>{`
-        .sas-layout { display: grid; grid-template-columns: 240px minmax(0, 1fr); min-height: 100vh; }
-        .sas-sidebar { background: #fff; border-right: 1px solid #E2E8F0; padding: 20px; position: relative; z-index: 100; }
+        * { box-sizing: border-box; }
+        .sas-layout { display: grid; grid-template-columns: 252px minmax(0, 1fr); min-height: 100vh; }
+        .sas-sidebar {
+          background: rgba(255,255,255,0.96);
+          backdrop-filter: blur(12px);
+          border-right: 1px solid #E2E8F0;
+          padding: 22px 18px;
+          position: sticky;
+          top: 0;
+          height: 100vh;
+          overflow-y: auto;
+          z-index: 100;
+        }
+        .sas-sidebar button { transition: all 0.18s ease; }
+        .sas-sidebar button:hover { transform: translateX(2px); }
         .sas-overlay { display: none; }
         .sas-hamburger { display: none; }
-        .sas-main { padding: 24px; overflow-x: auto; }
+        .sas-main {
+          padding: 28px;
+          overflow-x: auto;
+          background:
+            radial-gradient(circle at top right, rgba(106, 27, 154, 0.06), transparent 22%),
+            linear-gradient(180deg, #F8FAFC 0%, #F4F7FB 100%);
+        }
         .sas-page-wrap { width: 100%; overflow-x: auto; }
         .sas-page-inner { min-width: 0; }
+        .sas-page-panel {
+          display: grid;
+          gap: 22px;
+          width: 100%;
+        }
+        .sas-inline-page-card {
+          background: #FFFFFF;
+          border: 1px solid #E2E8F0;
+          border-radius: 22px;
+          box-shadow: 0 12px 32px rgba(15, 23, 42, 0.06);
+          padding: 22px;
+        }
+        .sas-inline-page-card h1,
+        .sas-inline-page-card h2,
+        .sas-inline-page-card h3 { overflow-wrap: anywhere; }
+        .sas-section-card,
+        .sas-summary-box,
+        .sas-metric-card,
+        .sas-action-card {
+          transition: transform 0.18s ease, box-shadow 0.18s ease;
+        }
+        .sas-section-card:hover,
+        .sas-summary-box:hover,
+        .sas-metric-card:hover,
+        .sas-action-card:hover {
+          transform: translateY(-1px);
+          box-shadow: 0 16px 36px rgba(15, 23, 42, 0.08);
+        }
+        .sas-section-card { overflow: hidden; }
+        .sas-summary-box { min-height: 124px; }
         .sas-dashboard-hero .sas-hero-title { word-break: break-word; overflow-wrap: anywhere; }
         .sas-dashboard-hero .sas-hero-subtitle { word-break: break-word; }
+        .sas-dashboard-hero .sas-insight-chip { backdrop-filter: blur(6px); }
+        .sas-table-wrap {
+          border: 1px solid #E2E8F0;
+          border-radius: 18px;
+          background: #FFFFFF;
+        }
+        .sas-data-table th {
+          background: #F8FAFC;
+          color: #475569;
+          font-size: 12px;
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+        }
+        .sas-data-table th,
+        .sas-data-table td {
+          padding: 14px 16px !important;
+          border-bottom: 1px solid #E2E8F0;
+          vertical-align: top;
+        }
+        .sas-data-table tbody tr:hover td { background: #FCFCFD; }
+        input, select, textarea, button { font-family: inherit; }
+        input, select, textarea {
+          transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+        }
+        input:focus, select:focus, textarea:focus {
+          outline: none;
+          border-color: #6A1B9A !important;
+          box-shadow: 0 0 0 3px rgba(106, 27, 154, 0.12);
+        }
+        button { transition: transform 0.16s ease, box-shadow 0.16s ease, opacity 0.16s ease; }
+        button:hover { box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08); }
+        button:active { transform: translateY(1px); }
+        @media (max-width: 1080px) {
+          .sas-layout { grid-template-columns: 230px minmax(0, 1fr); }
+          .sas-main { padding: 22px; }
+        }
         @media (max-width: 768px) {
           .sas-layout { grid-template-columns: 1fr; }
-          .sas-sidebar { position: fixed; top: 0; left: -260px; width: 240px; height: 100vh; overflow-y: auto; transition: left 0.25s ease; z-index: 200; box-shadow: 4px 0 20px rgba(0,0,0,0.12); }
+          .sas-sidebar {
+            position: fixed;
+            top: 0;
+            left: -272px;
+            width: 248px;
+            height: 100vh;
+            overflow-y: auto;
+            transition: left 0.25s ease;
+            z-index: 200;
+            box-shadow: 10px 0 30px rgba(15, 23, 42, 0.18);
+          }
           .sas-sidebar.open { left: 0; }
-          .sas-overlay { display: block; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 199; }
-          .sas-hamburger { display: flex; align-items: center; gap: 12px; background: #fff; border-bottom: 1px solid #E2E8F0; padding: 14px 16px; position: sticky; top: 0; z-index: 100; }
-          .sas-hamburger-btn { background: none; border: none; cursor: pointer; padding: 4px; display: flex; flex-direction: column; gap: 5px; }
+          .sas-overlay { display: block; position: fixed; inset: 0; background: rgba(15,23,42,0.45); z-index: 199; }
+          .sas-hamburger {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: rgba(255,255,255,0.96);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid #E2E8F0;
+            padding: 14px 16px;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+          }
+          .sas-hamburger-btn { background: none; border: none; cursor: pointer; padding: 4px; display: flex; flex-direction: column; gap: 5px; box-shadow: none !important; }
           .sas-hamburger-btn span { display: block; width: 22px; height: 2px; background: #6A1B9A; border-radius: 2px; }
-          .sas-main { padding: 16px; overflow-x: auto; }
+          .sas-main { padding: 16px; }
           .sas-page-wrap { overflow-x: auto; }
-          .sas-dashboard-hero.sas-hero-grid { grid-template-columns: 1fr !important; gap: 16px !important; padding: 20px !important; border-radius: 18px !important; }
+          .sas-page-inner { max-width: 100% !important; }
+          .sas-inline-page-card { padding: 16px; border-radius: 18px; }
+          .sas-dashboard-hero.sas-hero-grid { grid-template-columns: 1fr !important; gap: 16px !important; padding: 20px !important; border-radius: 20px !important; }
           .sas-dashboard-hero .sas-hero-title { font-size: 28px !important; line-height: 1.15 !important; }
           .sas-dashboard-hero .sas-hero-subtitle { font-size: 14px !important; line-height: 1.55 !important; }
           .sas-dashboard-hero .sas-hero-focus-card { padding: 18px !important; min-height: auto !important; }
           .sas-dashboard-hero .sas-hero-focus-value { font-size: 24px !important; line-height: 1.1 !important; word-break: break-word; }
+          .sas-data-table { min-width: 680px !important; }
+          .sas-summary-box, .sas-metric-card, .sas-action-card { min-height: auto !important; }
         }
         @media (max-width: 480px) {
           .sas-main { padding: 12px; }
+          .sas-inline-page-card { padding: 14px; }
           .sas-dashboard-hero .sas-hero-title { font-size: 24px !important; }
+          .sas-section-card, .sas-summary-box, .sas-metric-card, .sas-action-card { border-radius: 18px !important; }
         }
       `}</style>
 
@@ -3548,7 +3660,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
 
         <main className="sas-main">
           <div className="sas-page-wrap">
-            <div className="sas-page-inner" style={{ maxWidth: 1400, margin: "0 auto" }}>
+            <div className="sas-page-inner sas-page-panel" style={{ maxWidth: 1480, margin: "0 auto" }}>
             {activePage === "dashboard" && <DashboardPage
               profile={profile} clients={clients} invoices={invoices} quotes={quotes}
               expenses={expenses} documents={documents} services={services}
@@ -3770,22 +3882,35 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
               openDocumentEditor={openDocumentEditor} closeDocumentEditor={closeDocumentEditor}
               saveDocumentEdits={saveDocumentEdits}
             />}
-            {activePage === "ato tax form" && <ATOTaxFormPage
-              profile={profile} invoices={invoices} expenses={expenses}
-              incomeSources={incomeSources} getClientById={getClientById}
-            />}
-            {activePage === "bas report" && <BASReportPage
-              profile={profile} invoices={invoices} expenses={expenses}
-              invoiceAllocations={invoiceAllocations} totals={totals}
-              basQuarter={basQuarter} setBasQuarter={setBasQuarter}
-              basNotes={basNotes} setBasNotes={setBasNotes}
-              colours={colours} cardStyle={cardStyle}
-              buttonPrimary={buttonPrimary} inputStyle={inputStyle} labelStyle={labelStyle}
-              currency={currency} formatDateAU={formatDateAU} safeNumber={safeNumber}
-              DashboardHero={DashboardHero} InsightChip={InsightChip}
-              SectionCard={SectionCard} SummaryBox={SummaryBox}
-              setActivePage={setActivePage}
-            />}
+            {activePage === "ato tax form" && (
+              <div className="sas-inline-page-card">
+                <div style={{ display: "grid", gap: 8, marginBottom: 18 }}>
+                  <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 0.5, textTransform: "uppercase", color: colours.muted }}>Admin workspace</div>
+                  <div style={{ fontSize: 28, fontWeight: 900, color: colours.text }}>ATO Tax Form</div>
+                  <div style={{ fontSize: 14, lineHeight: 1.6, color: colours.muted }}>Review income, expenses and tax values in the same clean card layout used across the rest of your portal.</div>
+                </div>
+                <ATOTaxFormPage
+                  profile={profile} invoices={invoices} expenses={expenses}
+                  incomeSources={incomeSources} getClientById={getClientById}
+                />
+              </div>
+            )}
+            {activePage === "bas report" && (
+              <div className="sas-inline-page-card">
+                <BASReportPage
+                  profile={profile} invoices={invoices} expenses={expenses}
+                  invoiceAllocations={invoiceAllocations} totals={totals}
+                  basQuarter={basQuarter} setBasQuarter={setBasQuarter}
+                  basNotes={basNotes} setBasNotes={setBasNotes}
+                  colours={colours} cardStyle={cardStyle}
+                  buttonPrimary={buttonPrimary} inputStyle={inputStyle} labelStyle={labelStyle}
+                  currency={currency} formatDateAU={formatDateAU} safeNumber={safeNumber}
+                  DashboardHero={DashboardHero} InsightChip={InsightChip}
+                  SectionCard={SectionCard} SummaryBox={SummaryBox}
+                  setActivePage={setActivePage}
+                />
+              </div>
+            )}
             {activePage === "settings" && <SettingsPage
               profile={profile} setProfile={setProfile}
               activeSettingsTab={activeSettingsTab} setActiveSettingsTab={setActiveSettingsTab}
