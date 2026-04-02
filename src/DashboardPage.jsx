@@ -1,4 +1,9 @@
-import React from "react";
+import React, { useState, useMemo } from "react";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DashboardPage
+// All state and handlers come from SharonPortalWebsite via props.
+// ─────────────────────────────────────────────────────────────────────────────
 
 export default function DashboardPage(props) {
   const {
@@ -11,6 +16,13 @@ export default function DashboardPage(props) {
     services,
     totals,
     invoiceAllocations,
+    monthlyFinance,
+    clientRevenueRows,
+    expenseCategoryRows,
+    invoiceStatusRows,
+    recentActivityRows,
+    dashboardInsights,
+    financialInsights,
     setActivePage,
     setActiveSettingsTab,
     cardStyle,
@@ -19,6 +31,10 @@ export default function DashboardPage(props) {
     formatDateAU,
     safeNumber,
     DEFAULT_MONTHLY_SUBSCRIPTION,
+    buttonPrimary,
+    buttonSecondary,
+    inputStyle,
+    labelStyle,
     DashboardHero,
     InsightChip,
     MetricCard,
@@ -27,8 +43,14 @@ export default function DashboardPage(props) {
     WaterfallCard,
     ActivityListCard,
     SectionCard,
-    DataTable
+    DataTable,
+    exportToATOForm,
+    restorePortalStateFromSupabase,
+    saveAllCurrentStateToSupabase,
+    supabaseSyncStatus,
+    getClientName,
   } = props;
+
       // ── Onboarding checklist ──────────────────────────────────────
       const onboardingSteps = [
         { label: "Add your business name", done: Boolean(profile.businessName), action: () => { setActivePage("settings"); setActiveSettingsTab("Profile"); } },
@@ -223,6 +245,43 @@ export default function DashboardPage(props) {
         <TrendBarsCard title="Invoice status mix" subtitle="A quick collections snapshot" data={invoiceStatusRows} valueKey="value" formatValue={(value) => `${value} item${value === 1 ? "" : "s"}`} accent={colours.navy} emptyText="No invoices yet." />
       </div>
 
+      <SectionCard title="Financial reports" right={<div style={{ fontSize: 12, color: colours.muted }}>Tap any report to open it</div>}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16 }}>
+          <ActionHubCard
+            icon="📈"
+            title="Profit & loss"
+            description="Income less expenses — operating surplus or deficit after tax reserve."
+            buttonLabel="View report"
+            onClick={() => setActivePage("financial insights")}
+            tone={colours.purple}
+          />
+          <ActionHubCard
+            icon="💧"
+            title="Cash movement"
+            description="Cash received, GST deducted, tax reserved, fees and closing safe-to-spend."
+            buttonLabel="View report"
+            onClick={() => setActivePage("financial insights")}
+            tone={colours.teal}
+          />
+          <ActionHubCard
+            icon="🧾"
+            title="GST position"
+            description="GST collected on invoices less GST credits on expenses — net amount owing."
+            buttonLabel="View report"
+            onClick={() => setActivePage("financial insights")}
+            tone={colours.navy}
+          />
+          <ActionHubCard
+            icon="📊"
+            title="Revenue summary"
+            description="Client concentration, best and worst months, revenue volatility."
+            buttonLabel="View report"
+            onClick={() => setActivePage("financial insights")}
+            tone={colours.purple}
+          />
+        </div>
+      </SectionCard>
+
       <div
         style={{
           display: "grid",
@@ -278,4 +337,5 @@ export default function DashboardPage(props) {
       </SectionCard>
     </div>
       );
+
 }
