@@ -7,7 +7,6 @@ import React, { useState, useMemo } from "react";
 
 export default function DashboardPage(props) {
   const {
-<<<<<<< HEAD
     profile,
     clients,
     invoices,
@@ -36,25 +35,6 @@ export default function DashboardPage(props) {
     buttonSecondary,
     inputStyle,
     labelStyle,
-=======
-    profile = {},
-    clients = [],
-    invoices = [],
-    quotes = [],
-    expenses = [],
-    documents = [],
-    services = [],
-    totals = {},
-    invoiceAllocations = [],
-    setActivePage = () => {},
-    setActiveSettingsTab = () => {},
-    cardStyle = {},
-    colours = {},
-    currency = (v) => v,
-    formatDateAU = (v) => v,
-    safeNumber = (v) => Number(v || 0),
-    DEFAULT_MONTHLY_SUBSCRIPTION = 45,
->>>>>>> 8f04839342b413780e81d1341f0e78b0d312c296
     DashboardHero,
     InsightChip,
     MetricCard,
@@ -64,58 +44,13 @@ export default function DashboardPage(props) {
     ActivityListCard,
     SectionCard,
     DataTable,
-<<<<<<< HEAD
-=======
-    buttonPrimary,
-    buttonSecondary,
-    dashboardInsights,
-    clientRevenueRows,
-    expenseCategoryRows,
-    invoiceStatusRows,
-    recentActivityRows,
->>>>>>> 8f04839342b413780e81d1341f0e78b0d312c296
     exportToATOForm,
     restorePortalStateFromSupabase,
     saveAllCurrentStateToSupabase,
     supabaseSyncStatus,
     getClientName,
-<<<<<<< HEAD
   } = props;
 
-=======
-    monthlyFinance,
-  } = props;
-
-  const resolvedDashboardInsights = dashboardInsights || { collectionRate: 0 };
-  const resolvedClientRevenueRows = clientRevenueRows || [];
-  const resolvedExpenseCategoryRows = expenseCategoryRows || [];
-  const resolvedInvoiceStatusRows = invoiceStatusRows || [];
-  const resolvedRecentActivityRows = recentActivityRows || [];
-  const resolvedMonthlyFinance = monthlyFinance || [];
-  const resolvedExportToATOForm = typeof exportToATOForm === "function" ? exportToATOForm : () => {};
-  const resolvedRestorePortalStateFromSupabase = typeof restorePortalStateFromSupabase === "function" ? restorePortalStateFromSupabase : () => {};
-  const resolvedSaveAllCurrentStateToSupabase = typeof saveAllCurrentStateToSupabase === "function" ? saveAllCurrentStateToSupabase : () => {};
-  const resolvedSupabaseSyncStatus = supabaseSyncStatus || "Not connected yet.";
-  const resolvedGetClientName = typeof getClientName === "function" ? getClientName : (clientId) => clientId || "—";
-  const resolvedButtonPrimary = buttonPrimary || {
-    background: colours?.purple || "#6A1B9A",
-    color: "#fff",
-    border: "none",
-    borderRadius: 10,
-    padding: "10px 14px",
-    fontWeight: 700,
-    cursor: "pointer",
-  };
-  const resolvedButtonSecondary = buttonSecondary || {
-    background: "#fff",
-    color: colours?.text || "#14202B",
-    border: `1px solid ${colours?.border || "#E2E8F0"}`,
-    borderRadius: 10,
-    padding: "10px 14px",
-    fontWeight: 700,
-    cursor: "pointer",
-  };
->>>>>>> 8f04839342b413780e81d1341f0e78b0d312c296
       // ── Onboarding checklist ──────────────────────────────────────
       const onboardingSteps = [
         { label: "Add your business name", done: Boolean(profile.businessName), action: () => { setActivePage("settings"); setActiveSettingsTab("Profile"); } },

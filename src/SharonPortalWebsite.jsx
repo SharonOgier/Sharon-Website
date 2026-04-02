@@ -78,6 +78,24 @@ import {
 } from "./PortalDocumentBuilders";
 
 
+// ─── Page components ──────────────────────────────────────────────────────────
+import DashboardPage        from "./pages/DashboardPage";
+import FinancialInsightsPage from "./pages/FinancialInsightsPage";
+import ClientsPage          from "./pages/ClientsPage";
+import InvoicesPage         from "./pages/InvoicesPage";
+import QuotesPage           from "./pages/QuotesPage";
+import ServicesPage         from "./pages/ServicesPage";
+import BillsPage            from "./pages/BillsPage";
+import ExpensesPage         from "./pages/ExpensesPage";
+import IncomeSourcesPage    from "./pages/IncomeSourcesPage";
+import DocumentsPage        from "./pages/DocumentsPage";
+import SetupWizardPage      from "./pages/SetupWizardPage";
+import AuthPage             from "./pages/AuthPage";
+import BASReportPage        from "./pages/BASReportPage";
+import SettingsPage         from "./pages/SettingsPage";
+// ─────────────────────────────────────────────────────────────────────────────
+
+
 export default function AccountingPortalPrototype() {
   const { toasts, toast, removeToast } = useToast();
   const { confirm, modal: confirmModal } = useConfirm();
@@ -3376,24 +3394,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     }, [clientRevenueRows, totals, invoices, monthlyFinance, expenses, expenseCategoryRows]);
 
 
-// ─── Page components ──────────────────────────────────────────────────────────
-import DashboardPage        from "./pages/DashboardPage";
-import FinancialInsightsPage from "./pages/FinancialInsightsPage";
-import ClientsPage          from "./pages/ClientsPage";
-import InvoicesPage         from "./pages/InvoicesPage";
-import QuotesPage           from "./pages/QuotesPage";
-import ServicesPage         from "./pages/ServicesPage";
-import BillsPage            from "./pages/BillsPage";
-import ExpensesPage         from "./pages/ExpensesPage";
-import IncomeSourcesPage    from "./pages/IncomeSourcesPage";
-import DocumentsPage        from "./pages/DocumentsPage";
-import SetupWizardPage      from "./pages/SetupWizardPage";
-import AuthPage             from "./pages/AuthPage";
-import BASReportPage        from "./pages/BASReportPage";
-import SettingsPage         from "./pages/SettingsPage";
-// ─────────────────────────────────────────────────────────────────────────────
-
-    );
+    ;
     if (!authReady) {
     return (
       <div
