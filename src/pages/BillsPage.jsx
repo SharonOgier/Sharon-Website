@@ -69,6 +69,12 @@ export default function BillsPage(props) {
     blankBillLine,
     saveBill,
     openExpenseEditor = () => {},
+    expenseEditorOpen = false,
+    expenseEditorForm = null,
+    setExpenseEditorForm = () => {},
+    closeExpenseEditor = () => {},
+    saveExpenseEdits = () => {},
+    savingExpenseEdits = false,
     setImportType = () => {},
     setImportRows = () => {},
     setImportError = () => {},
@@ -445,7 +451,62 @@ export default function BillsPage(props) {
             rows={billRows}
           />
         </SectionCard>
-      </div>
+
+      {/* Expense/Bill Editor Modal */}
+      {expenseEditorOpen && expenseEditorForm && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 3000, background: "rgba(15,23,42,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div style={{ background: "#fff", borderRadius: 22, padding: 28, width: "100%", maxWidth: 680, maxHeight: "90vh", overflowY: "auto", boxShadow: "0 24px 60px rgba(15,23,42,0.22)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+              <div style={{ fontSize: 22, fontWeight: 800, color: colours.text }}>Edit Bill</div>
+              <button style={buttonSecondary} onClick={closeExpenseEditor}>Close</button>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16 }}>
+              <div>
+                <label style={labelStyle}>Supplier</label>
+                <input style={inputStyle} value={expenseEditorForm.supplier || ""} onChange={(e) => setExpenseEditorForm((prev) => ({ ...prev, supplier: e.target.value }))} />
+              </div>
+              <div>
+                <label style={labelStyle}>Category</label>
+                <select style={inputStyle} value={expenseEditorForm.category || ""} onChange={(e) => setExpenseEditorForm((prev) => ({ ...prev, category: e.target.value }))}>
+                  <option value="">Select...</option>
+                  {(expenseCategories || []).map((cat) => <option key={cat} value={cat}>{cat}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={labelStyle}>Bill Date</label>
+                <input type="date" style={inputStyle} value={expenseEditorForm.date || ""} onChange={(e) => setExpenseEditorForm((prev) => ({ ...prev, date: e.target.value }))} />
+              </div>
+              <div>
+                <label style={labelStyle}>Due Date</label>
+                <input type="date" style={inputStyle} value={expenseEditorForm.dueDate || expenseEditorForm.date || ""} onChange={(e) => setExpenseEditorForm((prev) => ({ ...prev, dueDate: e.target.value }))} />
+              </div>
+              <div>
+                <label style={labelStyle}>Amount (incl GST)</label>
+                <input type="number" min="0" step="0.01" style={inputStyle} value={expenseEditorForm.amount || ""} onChange={(e) => setExpenseEditorForm((prev) => ({ ...prev, amount: e.target.value }))} />
+              </div>
+              <div>
+                <label style={labelStyle}>GST Credit</label>
+                <input type="number" style={{ ...inputStyle, background: "#F8FAFC" }} readOnly value={(safeNumber(expenseEditorForm.amount) / 11).toFixed(2)} />
+              </div>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <label style={labelStyle}>Description</label>
+                <textarea style={{ ...inputStyle, minHeight: 90, resize: "vertical" }} value={expenseEditorForm.description || ""} onChange={(e) => setExpenseEditorForm((prev) => ({ ...prev, description: e.target.value }))} />
+              </div>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 20 }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14 }}>
+                <input type="checkbox" checked={Boolean(expenseEditorForm.isPaid)} onChange={(e) => setExpenseEditorForm((prev) => ({ ...prev, isPaid: e.target.checked, paidAt: e.target.checked ? new Date().toISOString() : "" }))} />
+                Mark as Paid
+              </label>
+              <div style={{ display: "flex", gap: 10 }}>
+                <button style={buttonSecondary} onClick={closeExpenseEditor}>Cancel</button>
+                <button style={{ ...buttonPrimary, opacity: savingExpenseEdits ? 0.6 : 1 }} disabled={savingExpenseEdits} onClick={saveExpenseEdits}>{savingExpenseEdits ? "Saving..." : "Save Changes"}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
     );
 
 }

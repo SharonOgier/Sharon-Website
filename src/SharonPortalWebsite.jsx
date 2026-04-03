@@ -4038,6 +4038,10 @@ export default function AccountingPortalPrototype() {
               getClientName={getClientName} totals={totals}
               blankBillLine={blankBillLine} saveBill={saveBill}
               openExpenseEditor={openExpenseEditor}
+              expenseEditorOpen={expenseEditorOpen} expenseEditorForm={expenseEditorForm}
+              setExpenseEditorForm={setExpenseEditorForm}
+              closeExpenseEditor={closeExpenseEditor} saveExpenseEdits={saveExpenseEdits}
+              savingExpenseEdits={savingExpense}
               setImportType={setImportType} setImportRows={setImportRows}
               setImportError={setImportError} setShowImportModal={setShowImportModal}
             />}
