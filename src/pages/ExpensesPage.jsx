@@ -1,9 +1,9 @@
 import React, { useState, useMemo } from "react";
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // ExpensesPage
 // All state and handlers come from SharonPortalWebsite via props.
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 export default function ExpensesPage(props) {
   const {
@@ -77,10 +77,10 @@ export default function ExpensesPage(props) {
         <InsightChip label="Categories" value={String(Object.keys(categoryTotals).length)} />
       </DashboardHero>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16 }}>
-        <MetricCard title="Total expenses" value={currency(totalExpenseAmt)} subtitle="All recorded expenses." accent={colours.navy} />
+        <MetricCard title="Total expenses" value={currency(totalExpenseAmt)} subtitle="All recorded expenses." accent={colours.purple} />
         <MetricCard title="This month" value={currency(thisMonthExpenses)} subtitle="Expenses recorded this calendar month." accent={colours.teal} />
         <MetricCard title="GST credits" value={currency(totalGstCredit)} subtitle="Claimable input tax credits." accent={colours.purple} />
-        <MetricCard title="Categories used" value={String(Object.keys(categoryTotals).length)} subtitle="Distinct expense categories." accent={colours.navy} />
+        <MetricCard title="Categories used" value={String(Object.keys(categoryTotals).length)} subtitle="Distinct expense categories." accent={colours.purple} />
         <div style={{ ...cardStyle, padding: 18, gridColumn: "span 2" }}>
           <div style={{ fontSize: 12, fontWeight: 800, color: colours.muted, textTransform: "uppercase", marginBottom: 10 }}>Top expense categories</div>
           <MiniBarChart data={topCategories} height={90} accent={colours.purple} />
@@ -113,7 +113,7 @@ export default function ExpensesPage(props) {
               type="date"
               style={inputStyle}
               value={expenseForm.date}
-              onChange={(e) => setExpenseForm({ ...expenseForm, date: e.target.value, dueDate: addDaysEOM(e.target.value) })}
+              onChange={(e) => setExpenseForm((prev) => ({ ...prev, date: e.target.value, dueDate: addDaysEOM(e.target.value) }))}
             />
           </div>
 
@@ -124,7 +124,7 @@ export default function ExpensesPage(props) {
               type="date"
               style={inputStyle}
               value={expenseForm.dueDate || expenseForm.date}
-              onChange={(e) => setExpenseForm({ ...expenseForm, dueDate: e.target.value })}
+              onChange={(e) => setExpenseForm((prev) => ({ ...prev, dueDate: e.target.value }))}
             />
           </div>
 
@@ -133,7 +133,7 @@ export default function ExpensesPage(props) {
             <input
               style={inputStyle}
               value={expenseForm.supplier}
-              onChange={(e) => setExpenseForm({ ...expenseForm, supplier: e.target.value })}
+              onChange={(e) => setExpenseForm((prev) => ({ ...prev, supplier: e.target.value }))}
             />
           </div>
 
@@ -142,7 +142,7 @@ export default function ExpensesPage(props) {
             <input
               style={inputStyle}
               value={expenseForm.category}
-              onChange={(e) => setExpenseForm({ ...expenseForm, category: e.target.value })}
+              onChange={(e) => setExpenseForm((prev) => ({ ...prev, category: e.target.value }))}
             />
           </div>
 
@@ -152,7 +152,7 @@ export default function ExpensesPage(props) {
               type="number"
               style={inputStyle}
               value={expenseForm.amount}
-              onChange={(e) => setExpenseForm({ ...expenseForm, amount: e.target.value })}
+              onChange={(e) => setExpenseForm((prev) => ({ ...prev, amount: e.target.value }))}
             />
           </div>
 
@@ -161,7 +161,7 @@ export default function ExpensesPage(props) {
             <textarea
               style={{ ...inputStyle, minHeight: 90, resize: "vertical" }}
               value={expenseForm.description}
-              onChange={(e) => setExpenseForm({ ...expenseForm, description: e.target.value })}
+              onChange={(e) => setExpenseForm((prev) => ({ ...prev, description: e.target.value }))}
             />
           </div>
 
@@ -183,14 +183,9 @@ export default function ExpensesPage(props) {
           </div>
         </div>
 
-        {expenseForm.receiptFileName ? (
-          <div style={{ marginTop: 12, fontSize: 14, color: colours.muted }}>
-            Selected receipt: {expenseForm.receiptFileName}
-          </div>
-        ) : <EmptyState icon="📁" title="No documents yet" message="Upload receipts, contracts and generated PDFs here. All documents are stored securely against your account." />}
-
         {receiptFile ? (
-          <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <div style={{ marginTop: 12, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+            <span style={{ fontSize: 14, color: colours.muted }}>{expenseForm.receiptFileName}</span>
             <button
               type="button"
               style={buttonSecondary}
@@ -199,24 +194,26 @@ export default function ExpensesPage(props) {
                 window.open(previewUrl, "_blank");
               }}
             >
-              Preview Receipt
+              Preview
             </button>
-
             <button
               type="button"
               style={buttonSecondary}
               onClick={() => {
                 setReceiptFile(null);
-                setExpenseForm((prev) => ({ ...prev,
-                  receiptFileName: "",
-                  receiptUrl: "",
-                }));
+                setExpenseForm((prev) => ({ ...prev, receiptFileName: "", receiptUrl: "" }));
               }}
             >
-              Remove Receipt
+              Remove
             </button>
           </div>
-        ) : <EmptyState icon="📁" title="No documents yet" message="Upload receipts, contracts and generated PDFs here. All documents are stored securely against your account." />}
+        ) : expenseForm.receiptFileName ? (
+          <div style={{ marginTop: 12, fontSize: 14, color: colours.muted }}>
+            Saved receipt: {expenseForm.receiptFileName}
+          </div>
+        ) : (
+          <div style={{ marginTop: 8, fontSize: 13, color: colours.muted }}>No receipt attached.</div>
+        )}
 
         <div style={{ marginTop: 18 }}>
           <button style={buttonPrimary} onClick={saveExpense}>
@@ -227,7 +224,7 @@ export default function ExpensesPage(props) {
 
       <SectionCard title="Expense List">
         <DataTable
-          emptyState={{ icon: "💸", title: "No expenses yet", message: "Record your first expense using the form above. GST credits are calculated automatically and your Safe to Spend updates in real time." }}
+          emptyState={{ icon: "[money]", title: "No expenses yet", message: "Record your first expense using the form above. GST credits are calculated automatically and your Safe to Spend updates in real time." }}
           columns={[
             { key: "date", label: "Date", render: (v) => formatDateAU(v) },
             { key: "dueDate", label: "Due Date", render: (v, row) => formatDateAU(v || row.date) },
@@ -256,9 +253,68 @@ export default function ExpensesPage(props) {
 
                   <button
                     style={{ ...buttonSecondary, color: colours.teal, borderColor: colours.teal }}
-                    onClick={() => sendExpenseDirect(row)}
+                    onClick={() => {
+                      const w = window.open("", "_blank");
+                      if (!w) return;
+                      const receiptSection = row.receiptUrl
+                        ? `<div style="margin-top:24px;">
+                            <div style="font-size:12px;font-weight:700;text-transform:uppercase;color:#6A1B9A;margin-bottom:8px;">Receipt</div>
+                            ${row.receiptUrl.match(/\.(jpg|jpeg|png|webp)/i)
+                              ? `<img src="${row.receiptUrl}" style="max-width:100%;border-radius:10px;border:1px solid #E2E8F0;" />`
+                              : `<a href="${row.receiptUrl}" target="_blank" style="color:#6A1B9A;font-size:14px;">View attached receipt (PDF)</a>`
+                            }
+                           </div>`
+                        : "";
+                      w.document.write(`<!doctype html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<title>Expense - ${row.supplier || row.description || ""}</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 32px; font-family: Arial, Helvetica, sans-serif; color: #14202B; background: #F8FAFC; }
+  .card { background: #fff; border: 1px solid #E2E8F0; border-radius: 16px; padding: 32px; max-width: 640px; margin: 0 auto; }
+  .header { border-bottom: 2px solid #6A1B9A; padding-bottom: 16px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: flex-start; }
+  .title { font-size: 26px; font-weight: 900; color: #6A1B9A; }
+  .label { font-size: 11px; font-weight: 700; text-transform: uppercase; color: #6A1B9A; margin-bottom: 4px; }
+  .value { font-size: 14px; color: #14202B; margin-bottom: 16px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 32px; }
+  .amount { font-size: 28px; font-weight: 900; color: #006D6D; }
+  .badge { display: inline-block; background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 8px; padding: 4px 12px; font-size: 13px; font-weight: 700; color: #166534; margin-bottom: 16px; }
+  .print-btn { display: block; margin: 24px auto 0; background: #6A1B9A; color: #fff; border: none; border-radius: 10px; padding: 12px 32px; font-size: 15px; font-weight: 700; cursor: pointer; }
+  @media print { .print-btn { display: none; } body { background: #fff; padding: 0; } .card { border: none; border-radius: 0; box-shadow: none; } }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="header">
+    <div>
+      <div class="title">EXPENSE RECORD</div>
+      <div style="font-size:13px;color:#64748B;margin-top:4px;">${row.expenseType || "Business Expense"}</div>
+    </div>
+    <div style="text-align:right;">
+      <div class="amount">$${parseFloat(row.amount || 0).toFixed(2)}</div>
+      <div style="font-size:12px;color:#64748B;margin-top:2px;">incl. GST $${parseFloat(row.gst || 0).toFixed(2)}</div>
+    </div>
+  </div>
+  <div class="grid">
+    <div><div class="label">Supplier</div><div class="value">${row.supplier || "-"}</div></div>
+    <div><div class="label">Date</div><div class="value">${row.date || "-"}</div></div>
+    <div><div class="label">Category</div><div class="value">${row.category || "-"}</div></div>
+    <div><div class="label">Due Date</div><div class="value">${row.dueDate || row.date || "-"}</div></div>
+    <div><div class="label">Work Type</div><div class="value">${row.workType || "-"}</div></div>
+    <div><div class="label">GST Amount</div><div class="value">$${parseFloat(row.gst || 0).toFixed(2)}</div></div>
+  </div>
+  ${row.description ? `<div class="label" style="margin-top:8px;">Description</div><div class="value">${row.description}</div>` : ""}
+  ${receiptSection}
+</div>
+<button class="print-btn" onclick="window.print()">Print / Save as PDF</button>
+</body>
+</html>`);
+                      w.document.close();
+                    }}
                   >
-                    Email
+                    Preview &amp; Print
                   </button>
 
                   <button style={buttonSecondary} onClick={() => deleteExpense(row.id)}>

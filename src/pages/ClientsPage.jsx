@@ -1,9 +1,9 @@
 import React, { useState, useMemo } from "react";
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // ClientsPage
 // All state and handlers come from SharonPortalWebsite via props.
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 export default function ClientsPage(props) {
   const {
@@ -94,7 +94,7 @@ export default function ClientsPage(props) {
     defaultCurrency: "AUD $",
     recruiterUsed: false,
     sendToClient: false,
-    sendToMe: false,
+    sendToMe: true,
     autoReminders: false,
     includeAddressDetails: false,
     sendReceipts: false,
@@ -158,10 +158,10 @@ export default function ClientsPage(props) {
       </DashboardHero>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 16 }}>
-        <MetricCard title="Total clients" value={String(clients.length)} subtitle="All clients currently in the portal." accent={colours.navy} />
+        <MetricCard title="Total clients" value={String(clients.length)} subtitle="All clients currently in the portal." accent={colours.purple} />
         <MetricCard title="Active clients" value={String(activeClients.length)} subtitle="Clients with at least one invoice." accent={colours.teal} />
         <MetricCard title="GST exempt" value={String(gstExemptClients.length)} subtitle="Clients outside Australia or GST exempt." accent={colours.purple} />
-        <MetricCard title="Paid revenue" value={currency(totalClientRevenue)} subtitle="Total paid invoices across all clients." accent={colours.navy} />
+        <MetricCard title="Paid revenue" value={currency(totalClientRevenue)} subtitle="Total paid invoices across all clients." accent={colours.purple} />
       </div>
 
       <SectionCard title="Client details">
@@ -177,7 +177,9 @@ export default function ClientsPage(props) {
             <input
               style={inputStyle}
               value={clientForm.name}
-              onChange={(e) => setClientForm({ ...clientForm, name: e.target.value })}
+              onChange={(e) => setClientForm((prev) => ({ ...prev,
+                    name: e.target.value
+                  }))}
             />
           </div>
 
@@ -186,7 +188,9 @@ export default function ClientsPage(props) {
             <select
               style={inputStyle}
               value={clientForm.workType}
-              onChange={(e) => setClientForm({ ...clientForm, workType: e.target.value })}
+              onChange={(e) => setClientForm((prev) => ({ ...prev,
+                    workType: e.target.value
+                  }))}
             >
               <option>Financial / Management Accountant</option>
               <option>Bookkeeping</option>
@@ -202,7 +206,9 @@ export default function ClientsPage(props) {
             <input
               style={inputStyle}
               value={clientForm.contactPerson}
-              onChange={(e) => setClientForm({ ...clientForm, contactPerson: e.target.value })}
+              onChange={(e) => setClientForm((prev) => ({ ...prev,
+                    contactPerson: e.target.value
+                  }))}
             />
           </div>
 
@@ -211,7 +217,9 @@ export default function ClientsPage(props) {
             <input
               style={inputStyle}
               value={clientForm.email}
-              onChange={(e) => setClientForm({ ...clientForm, email: e.target.value })}
+              onChange={(e) => setClientForm((prev) => ({ ...prev,
+                    email: e.target.value
+                  }))}
             />
           </div>
         </div>
@@ -221,7 +229,9 @@ export default function ClientsPage(props) {
             <input
               type="checkbox"
               checked={clientForm.recruiterUsed}
-              onChange={(e) => setClientForm({ ...clientForm, recruiterUsed: e.target.checked })}
+              onChange={(e) => setClientForm((prev) => ({ ...prev,
+                    recruiterUsed: e.target.checked
+                  }))}
             />
             I went through a recruiter or similar third party to get this work
           </label>
@@ -235,7 +245,9 @@ export default function ClientsPage(props) {
               <input
                 type="checkbox"
                 checked={clientForm.sendToClient}
-                onChange={(e) => setClientForm({ ...clientForm, sendToClient: e.target.checked })}
+                onChange={(e) => setClientForm((prev) => ({ ...prev,
+                    sendToClient: e.target.checked
+                  }))}
               />
               Send to my Client
             </label>
@@ -244,7 +256,9 @@ export default function ClientsPage(props) {
               <input
                 type="checkbox"
                 checked={clientForm.sendToMe}
-                onChange={(e) => setClientForm({ ...clientForm, sendToMe: e.target.checked })}
+                onChange={(e) => setClientForm((prev) => ({ ...prev,
+                    sendToMe: e.target.checked
+                  }))}
               />
               Send to me
             </label>
@@ -253,7 +267,9 @@ export default function ClientsPage(props) {
               <input
                 type="checkbox"
                 checked={clientForm.autoReminders}
-                onChange={(e) => setClientForm({ ...clientForm, autoReminders: e.target.checked })}
+                onChange={(e) => setClientForm((prev) => ({ ...prev,
+                    autoReminders: e.target.checked
+                  }))}
               />
               Automatically send reminders once an Invoice is more than 2 days overdue
             </label>
@@ -263,7 +279,9 @@ export default function ClientsPage(props) {
                 type="checkbox"
                 checked={clientForm.includeAddressDetails}
                 onChange={(e) =>
-                  setClientForm({ ...clientForm, includeAddressDetails: e.target.checked })
+                  setClientForm((prev) => ({ ...prev,
+                    includeAddressDetails: e.target.checked
+                  }))
                 }
               />
               Include Client address or other details
@@ -276,10 +294,10 @@ export default function ClientsPage(props) {
                   style={{ ...inputStyle, minHeight: 90, resize: "vertical" }}
                   value={clientForm.addressDetails}
                   onChange={(e) =>
-                    setClientForm({ ...clientForm,
-                      addressDetails: e.target.value,
+                    setClientForm((prev) => ({ ...prev,
+                    addressDetails: e.target.value,
                       address: e.target.value,
-                    })
+                  }))
                   }
                 />
               </div>
@@ -289,7 +307,9 @@ export default function ClientsPage(props) {
               <input
                 type="checkbox"
                 checked={clientForm.sendReceipts}
-                onChange={(e) => setClientForm({ ...clientForm, sendReceipts: e.target.checked })}
+                onChange={(e) => setClientForm((prev) => ({ ...prev,
+                    sendReceipts: e.target.checked
+                  }))}
               />
               Send receipts to this client for Invoice payments made via card
             </label>
@@ -305,9 +325,9 @@ export default function ClientsPage(props) {
                 type="checkbox"
                 checked={clientForm.outsideAustraliaOrGstExempt}
                 onChange={(e) =>
-                  setClientForm({ ...clientForm,
+                  setClientForm((prev) => ({ ...prev,
                     outsideAustraliaOrGstExempt: e.target.checked,
-                  })
+                  }))
                 }
               />
               This Client is outside Australia or Services for this Client are exempt from GST
@@ -318,13 +338,15 @@ export default function ClientsPage(props) {
               <select
                 style={inputStyle}
                 value={clientForm.defaultCurrency}
-                onChange={(e) => setClientForm({ ...clientForm, defaultCurrency: e.target.value })}
+                onChange={(e) => setClientForm((prev) => ({ ...prev,
+                    defaultCurrency: e.target.value
+                  }))}
               >
                 <option>AUD $</option>
                 <option>USD $</option>
                 <option>NZD $</option>
-                <option>GBP £</option>
-                <option>EUR €</option>
+                <option>GBP</option>
+                <option>EUR</option>
               </select>
             </div>
 
@@ -332,7 +354,9 @@ export default function ClientsPage(props) {
               <input
                 type="checkbox"
                 checked={clientForm.feesDeducted}
-                onChange={(e) => setClientForm({ ...clientForm, feesDeducted: e.target.checked })}
+                onChange={(e) => setClientForm((prev) => ({ ...prev,
+                    feesDeducted: e.target.checked
+                  }))}
               />
               Payments will have fees or expenses deducted
             </label>
@@ -341,7 +365,9 @@ export default function ClientsPage(props) {
               <input
                 type="checkbox"
                 checked={clientForm.deductsTaxPrior}
-                onChange={(e) => setClientForm({ ...clientForm, deductsTaxPrior: e.target.checked })}
+                onChange={(e) => setClientForm((prev) => ({ ...prev,
+                    deductsTaxPrior: e.target.checked
+                  }))}
               />
               This Client deducts tax prior to payment
             </label>
@@ -351,17 +377,21 @@ export default function ClientsPage(props) {
                 type="checkbox"
                 checked={clientForm.shortTermRentalIncome}
                 onChange={(e) =>
-                  setClientForm({ ...clientForm, shortTermRentalIncome: e.target.checked })
+                  setClientForm((prev) => ({ ...prev,
+                    shortTermRentalIncome: e.target.checked
+                  }))
                 }
               />
-              This “Client” is for short-term rental income
+              This "Client" is for short-term rental income
             </label>
 
             <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14 }}>
               <input
                 type="checkbox"
                 checked={clientForm.hasPurchaseOrder}
-                onChange={(e) => setClientForm({ ...clientForm, hasPurchaseOrder: e.target.checked })}
+                onChange={(e) => setClientForm((prev) => ({ ...prev,
+                    hasPurchaseOrder: e.target.checked
+                  }))}
               />
               I have a purchase order or reference number
             </label>
@@ -387,7 +417,7 @@ export default function ClientsPage(props) {
 
       <SectionCard title="Client List">
         <DataTable
-          emptyState={{ icon: "👥", title: "No clients yet", message: "Add your first client above to start creating invoices and quotes." }}
+          emptyState={{ icon: "[clients]", title: "No clients yet", message: "Add your first client above to start creating invoices and quotes." }}
           columns={[
             { key: "name", label: "Client" },
             { key: "contactPerson", label: "Contact" },
@@ -421,7 +451,7 @@ export default function ClientsPage(props) {
               <div><label style={labelStyle}>Email</label><input style={inputStyle} value={clientEditorForm.email || ""} onChange={(e) => setClientEditorForm((prev) => ({ ...prev, email: e.target.value }))} /></div>
               <div><label style={labelStyle}>Phone</label><input style={inputStyle} value={clientEditorForm.phone || ""} onChange={(e) => setClientEditorForm((prev) => ({ ...prev, phone: e.target.value }))} /></div>
               <div><label style={labelStyle}>Work type</label><input style={inputStyle} value={clientEditorForm.workType || ""} onChange={(e) => setClientEditorForm((prev) => ({ ...prev, workType: e.target.value }))} /></div>
-              <div><label style={labelStyle}>Default currency</label><select style={inputStyle} value={clientEditorForm.defaultCurrency || "AUD $"} onChange={(e) => setClientEditorForm((prev) => ({ ...prev, defaultCurrency: e.target.value }))}><option>AUD $</option><option>USD $</option><option>NZD $</option><option>GBP £</option><option>EUR €</option></select></div>
+              <div><label style={labelStyle}>Default currency</label><select style={inputStyle} value={clientEditorForm.defaultCurrency || "AUD $"} onChange={(e) => setClientEditorForm((prev) => ({ ...prev, defaultCurrency: e.target.value }))}><option>AUD $</option><option>USD $</option><option>NZD $</option><option>GBP</option><option>EUR</option></select></div>
               <div style={{ gridColumn: "1 / -1" }}><label style={labelStyle}>Address details</label><textarea style={{ ...inputStyle, minHeight: 90 }} value={clientEditorForm.addressDetails || clientEditorForm.address || ""} onChange={(e) => setClientEditorForm((prev) => ({ ...prev, addressDetails: e.target.value, address: e.target.value }))} /></div>
             </div>
             <div style={{ display: "grid", gap: 10, marginTop: 14 }}>
@@ -434,7 +464,7 @@ export default function ClientsPage(props) {
               <button style={buttonPrimary} onClick={saveClientEdits}>Save Changes</button>
             </div>
           </div>
-        ) : <EmptyState icon="👥" title="No client selected" message="Use View / Edit on a client row to open the client editor." />}
+        ) : <EmptyState icon="[clients]" title="No client selected" message="Use View / Edit on a client row to open the client editor." />}
       </SectionCard>
     </div>
   );

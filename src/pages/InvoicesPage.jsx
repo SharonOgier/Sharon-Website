@@ -1,9 +1,9 @@
 import React, { useState, useMemo } from "react";
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // InvoicesPage
 // All state and handlers come from SharonPortalWebsite via props.
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 export default function InvoicesPage(props) {
   const {
@@ -80,7 +80,10 @@ export default function InvoicesPage(props) {
     setImportRows = () => {},
     setImportError = () => {},
     setShowImportModal = () => {},
+    sendInvoiceFromPreview,
   } = props;
+
+  const blankLineItem = () => ({ id: Date.now() + Math.random(), description: "", quantity: 1, unitPrice: "", gstType: "GST on Income (10%)" });
 
     const invLines = computeLineItemTotals(invoiceForm.lineItems || [], invoiceForm.clientId);
     const previewSubtotal = invLines.reduce((s, l) => s + l.rowSubtotal, 0);
@@ -114,17 +117,17 @@ export default function InvoicesPage(props) {
           <InsightChip label="Draft" value={`${draftCount}`} />
         </DashboardHero>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16 }}>
-          <MetricCard title="Total invoiced" value={currency(totalInvoiced)} subtitle="All invoices in the portal." accent={colours.navy} />
+          <MetricCard title="Total invoiced" value={currency(totalInvoiced)} subtitle="All invoices in the portal." accent={colours.purple} />
           <MetricCard title="Total paid" value={currency(totalPaid)} subtitle="Invoices marked as paid." accent={colours.teal} />
           <MetricCard title="Outstanding" value={currency(totalOutstanding)} subtitle="Unpaid invoices." accent={colours.purple} />
-          <MetricCard title="Overdue" value={String(overdueInvoices.length)} subtitle="Past due date, still unpaid." accent={colours.navy} />
+          <MetricCard title="Overdue" value={String(overdueInvoices.length)} subtitle="Past due date, still unpaid." accent={colours.purple} />
           <div style={{ ...cardStyle, padding: 18, gridColumn: "span 2" }}>
             <div style={{ fontSize: 12, fontWeight: 800, color: colours.muted, textTransform: "uppercase", marginBottom: 10 }}>Invoice totals by month</div>
             <MiniBarChart data={recentMonths} height={90} accent={colours.teal} />
           </div>
         </div>
         <SectionCard title="Create Invoice">
-          {/* ── Wizard progress bar ── */}
+          {/* -- Wizard progress bar -- */}
           <div style={{ display: "flex", alignItems: "center", marginBottom: 28 }}>
             {["Client", "Details", "Line Items", "Review & Save"].map((label, i) => {
               const step = i + 1;
@@ -137,7 +140,7 @@ export default function InvoicesPage(props) {
                     <div style={{ width: 32, height: 32, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 13,
                       background: done ? colours.teal : active ? colours.purple : colours.border,
                       color: done || active ? "#fff" : colours.muted, transition: "all 0.2s" }}>
-                      {done ? "✓" : step}
+                      {done ? "Paid" : step}
                     </div>
                     <div style={{ fontSize: 11, fontWeight: active ? 800 : 500, color: active ? colours.purple : done ? colours.teal : colours.muted, whiteSpace: "nowrap" }}>{label}</div>
                   </div>
@@ -147,7 +150,7 @@ export default function InvoicesPage(props) {
             })}
           </div>
 
-          {/* ── Step 1: Client ── */}
+          {/* -- Step 1: Client -- */}
           {invoiceWizardStep === 1 && (
             <div style={{ display: "grid", gap: 20 }}>
               <div>
@@ -161,11 +164,11 @@ export default function InvoicesPage(props) {
                       .map((c) => (
                         <div key={c.id} onClick={() => { setInvoiceForm((p) => ({ ...p, clientId: String(c.id), currencyCode: getClientCurrencyCode(c) })); setInvClientSearch(c.name); }}
                           style={{ padding: "10px 14px", cursor: "pointer", fontSize: 14, borderBottom: `1px solid ${colours.border}`, background: String(invoiceForm.clientId) === String(c.id) ? colours.lightPurple : "#fff" }}>
-                          <strong>{c.name}</strong>{c.businessName ? <span style={{ color: colours.muted }}> — {c.businessName}</span> : ""}
+                          <strong>{c.name}</strong>{c.businessName ? <span style={{ color: colours.muted }}> -- {c.businessName}</span> : ""}
                         </div>
                       ))}
                     {clients.filter((c) => c.name.toLowerCase().includes(invClientSearch.toLowerCase())).length === 0 && (
-                      <div style={{ padding: "10px 14px", fontSize: 13, color: colours.muted }}>No match — add a new client below</div>
+                      <div style={{ padding: "10px 14px", fontSize: 13, color: colours.muted }}>No match -- add a new client below</div>
                     )}
                   </div>
                 )}
@@ -175,8 +178,8 @@ export default function InvoicesPage(props) {
                     setInvoiceForm((p) => ({ ...p, clientId: e.target.value, currencyCode: getClientCurrencyCode(sel) }));
                     setInvClientSearch(sel?.name || "");
                   }}>
-                    <option value="">— or pick from list —</option>
-                    {clients.map((c) => <option key={c.id} value={c.id}>{c.name}{c.businessName ? ` — ${c.businessName}` : ""}</option>)}
+                    <option value="">-- or pick from list --</option>
+                    {clients.map((c) => <option key={c.id} value={c.id}>{c.name}{c.businessName ? ` -- ${c.businessName}` : ""}</option>)}
                   </select>
                 )}
               </div>
@@ -192,8 +195,8 @@ export default function InvoicesPage(props) {
                     </div>
                     <div style={{ ...cardStyle, padding: 16, background: colours.lightTeal }}>
                       <div style={{ fontSize: 11, fontWeight: 800, color: colours.muted, textTransform: "uppercase", marginBottom: 8 }}>Contact</div>
-                      {c.email && <div style={{ fontSize: 13, color: colours.text, marginTop: 2 }}>✉ {c.email}</div>}
-                      {c.phone && <div style={{ fontSize: 13, color: colours.text, marginTop: 4 }}>📞 {c.phone}</div>}
+                      {c.email && <div style={{ fontSize: 13, color: colours.text, marginTop: 2 }}>Email: {c.email}</div>}
+                      {c.phone && <div style={{ fontSize: 13, color: colours.text, marginTop: 4 }}>Ph: {c.phone}</div>}
                       {c.address && <div style={{ fontSize: 13, color: colours.muted, marginTop: 4 }}>{c.address}</div>}
                     </div>
                     <div style={{ ...cardStyle, padding: 16, background: colours.white }}>
@@ -211,76 +214,76 @@ export default function InvoicesPage(props) {
                     + New Client
                   </button>
                   <button style={{ ...buttonSecondary, fontSize: 13 }} onClick={() => { setImportType("clients"); setImportRows([]); setImportError(""); setShowImportModal(true); }}>
-                    ⬆ Import
+                    Upload Import
                   </button>
                 </div>
                 <button style={{ ...buttonPrimary, opacity: invoiceForm.clientId ? 1 : 0.4 }}
                   disabled={!invoiceForm.clientId}
-                  onClick={() => setInvoiceWizardStep(2)}>Next: Details →</button>
+                  onClick={() => setInvoiceWizardStep(2)}>Next: Details</button>
               </div>
             </div>
           )}
 
-          {/* ── Step 2: Details ── */}
+          {/* -- Step 2: Details -- */}
           {invoiceWizardStep === 2 && (
             <div style={{ display: "grid", gap: 20 }}>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16 }}>
                 <div>
                   <label style={labelStyle}>Invoice Date</label>
-                  <input type="date" style={inputStyle} value={invoiceForm.invoiceDate} onChange={(e) => setInvoiceForm({ ...invoiceForm, invoiceDate: e.target.value })} />
+                  <input type="date" style={inputStyle} value={invoiceForm.invoiceDate} onChange={(e) => setInvoiceForm((prev) => ({ ...prev, invoiceDate: e.target.value }))} />
                 </div>
                 <div>
                   <label style={labelStyle}>Due Date</label>
-                  <input type="date" style={inputStyle} value={invoiceForm.dueDate} onChange={(e) => setInvoiceForm({ ...invoiceForm, dueDate: e.target.value })} />
+                  <input type="date" style={inputStyle} value={invoiceForm.dueDate} onChange={(e) => setInvoiceForm((prev) => ({ ...prev, dueDate: e.target.value }))} />
                 </div>
                 <div>
                   <label style={labelStyle}>Invoice Number</label>
-                  <input style={inputStyle} value={invoiceForm.invoiceNumber || ""} onChange={(e) => setInvoiceForm({ ...invoiceForm, invoiceNumber: e.target.value })} placeholder="Auto-generated if blank" />
+                  <input style={inputStyle} value={invoiceForm.invoiceNumber || ""} onChange={(e) => setInvoiceForm((prev) => ({ ...prev, invoiceNumber: e.target.value }))} placeholder="Auto-generated if blank" />
                 </div>
                 <div>
                   <label style={labelStyle}>Recurring</label>
-                  <select style={inputStyle} value={invoiceForm.recurs || "Never"} onChange={(e) => setInvoiceForm({ ...invoiceForm, recurs: e.target.value })}>
+                  <select style={inputStyle} value={invoiceForm.recurs || "Never"} onChange={(e) => setInvoiceForm((prev) => ({ ...prev, recurs: e.target.value }))}>
                     {["Never", "Weekly", "Fortnightly", "Monthly", "Quarterly", "Annually"].map((f) => <option key={f} value={f}>{f}</option>)}
                   </select>
                   {invoiceForm.recurs && invoiceForm.recurs !== "Never" && (
-                    <div style={{ fontSize: 12, color: colours.purple, marginTop: 5, fontWeight: 600 }}>🔁 New draft created {invoiceForm.recurs.toLowerCase()} on login</div>
+                    <div style={{ fontSize: 12, color: colours.purple, marginTop: 5, fontWeight: 600 }}> New draft created {invoiceForm.recurs.toLowerCase()} on login</div>
                   )}
                 </div>
                 {invoiceClient?.hasPurchaseOrder && (
                   <div>
                     <label style={labelStyle}>Purchase Order / Reference</label>
-                    <input style={inputStyle} value={invoiceForm.purchaseOrderReference || ""} onChange={(e) => setInvoiceForm({ ...invoiceForm, purchaseOrderReference: e.target.value })} />
+                    <input style={inputStyle} value={invoiceForm.purchaseOrderReference || ""} onChange={(e) => setInvoiceForm((prev) => ({ ...prev, purchaseOrderReference: e.target.value }))} />
                   </div>
                 )}
               </div>
               <div>
                 <label style={labelStyle}>Comments (optional)</label>
-                <textarea style={{ ...inputStyle, minHeight: 80, resize: "vertical" }} value={invoiceForm.comments || ""} onChange={(e) => setInvoiceForm({ ...invoiceForm, comments: e.target.value })} placeholder="Any notes to appear on the invoice..." />
+                <textarea style={{ ...inputStyle, minHeight: 80, resize: "vertical" }} value={invoiceForm.comments || ""} onChange={(e) => setInvoiceForm((prev) => ({ ...prev, comments: e.target.value }))} placeholder="Any notes to appear on the invoice..." />
               </div>
               <div style={{ display: "grid", gap: 10 }}>
                 <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14 }}>
-                  <input type="checkbox" checked={invoiceForm.hidePhoneNumber} onChange={(e) => setInvoiceForm({ ...invoiceForm, hidePhoneNumber: e.target.checked })} />
+                  <input type="checkbox" checked={invoiceForm.hidePhoneNumber} onChange={(e) => setInvoiceForm((prev) => ({ ...prev, hidePhoneNumber: e.target.checked }))} />
                   Hide my phone number on this invoice
                 </label>
                 <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14 }}>
-                  <input type="checkbox" checked={invoiceForm.includesUntaxedPortion} onChange={(e) => setInvoiceForm({ ...invoiceForm, includesUntaxedPortion: e.target.checked })} />
+                  <input type="checkbox" checked={invoiceForm.includesUntaxedPortion} onChange={(e) => setInvoiceForm((prev) => ({ ...prev, includesUntaxedPortion: e.target.checked }))} />
                   Includes untaxed portion
                 </label>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8 }}>
-                <button style={buttonSecondary} onClick={() => setInvoiceWizardStep(1)}>← Back</button>
-                <button style={buttonPrimary} onClick={() => setInvoiceWizardStep(3)}>Next: Line Items →</button>
+                <button style={buttonSecondary} onClick={() => setInvoiceWizardStep(1)}>Back</button>
+                <button style={buttonPrimary} onClick={() => setInvoiceWizardStep(3)}>Next: Line Items</button>
               </div>
             </div>
           )}
 
-          {/* ── Step 3: Line Items ── */}
+          {/* -- Step 3: Line Items -- */}
           {invoiceWizardStep === 3 && (
             <div style={{ display: "grid", gap: 16 }}>
               {/* Service quick-add */}
               {services.length > 0 && (
                 <div style={{ ...cardStyle, padding: 14, background: colours.lightPurple, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: colours.purple, flexShrink: 0 }}>📋 Add from Services:</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: colours.purple, flexShrink: 0 }}> Add from Services:</div>
                   <select defaultValue="" style={{ ...inputStyle, flex: 1, minWidth: 200 }}
                     onChange={(e) => {
                       const svc = services.find((s) => String(s.id) === e.target.value);
@@ -288,7 +291,7 @@ export default function InvoicesPage(props) {
                       const exempt = clientIsGstExempt(invoiceForm.clientId);
                       const newItem = {
                         id: Date.now() + Math.random(),
-                        description: svc.name + (svc.description ? " — " + svc.description : ""),
+                        description: svc.name + (svc.description ? " -- " + svc.description : ""),
                         quantity: 1,
                         unitPrice: String(svc.price ?? ""),
                         gstType: exempt ? "GST Free" : (svc.gstType || "GST on Income (10%)"),
@@ -299,12 +302,12 @@ export default function InvoicesPage(props) {
                       }));
                       e.target.value = "";
                     }}>
-                    <option value="">— pick a service to add —</option>
+                    <option value="">-- pick a service to add --</option>
                     {services.map((svc) => (
-                      <option key={svc.id} value={svc.id}>{svc.name}{svc.price ? " — " + currency(svc.price) : ""}</option>
+                      <option key={svc.id} value={svc.id}>{svc.name}{svc.price ? " -- " + currency(svc.price) : ""}</option>
                     ))}
                   </select>
-                  <div style={{ fontSize: 11, color: colours.muted, flexBasis: "100%" }}>Pick as many as you need — descriptions and prices are editable without affecting saved services</div>
+                  <div style={{ fontSize: 11, color: colours.muted, flexBasis: "100%" }}>Pick as many as you need -- descriptions and prices are editable without affecting saved services</div>
                 </div>
               )}
               <div style={{ overflowX: "auto" }}>
@@ -351,7 +354,7 @@ export default function InvoicesPage(props) {
                           <td style={{ padding: "8px 6px", width: 40 }}>
                             {(invoiceForm.lineItems || []).length > 1 && (
                               <button onClick={() => setInvoiceForm((prev) => ({ ...prev, lineItems: prev.lineItems.filter((_, i) => i !== idx) }))}
-                                style={{ background: "none", border: "none", cursor: "pointer", color: colours.muted, fontSize: 18, lineHeight: 1 }}>×</button>
+                                style={{ background: "none", border: "none", cursor: "pointer", color: colours.muted, fontSize: 18, lineHeight: 1 }}>x</button>
                             )}
                           </td>
                         </tr>
@@ -366,13 +369,13 @@ export default function InvoicesPage(props) {
                 <span style={{ fontSize: 13, color: colours.muted }}>{(invoiceForm.lineItems || []).length} line{(invoiceForm.lineItems || []).length !== 1 ? "s" : ""}</span>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8 }}>
-                <button style={buttonSecondary} onClick={() => setInvoiceWizardStep(2)}>← Back</button>
-                <button style={buttonPrimary} onClick={() => setInvoiceWizardStep(4)}>Next: Review →</button>
+                <button style={buttonSecondary} onClick={() => setInvoiceWizardStep(2)}>Back</button>
+                <button style={buttonPrimary} onClick={() => setInvoiceWizardStep(4)}>Next: Review</button>
               </div>
             </div>
           )}
 
-          {/* ── Step 4: Review & Save ── */}
+          {/* -- Step 4: Review & Save -- */}
           {invoiceWizardStep === 4 && (
             <div style={{ display: "grid", gap: 20 }}>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
@@ -408,8 +411,8 @@ export default function InvoicesPage(props) {
                   return (
                     <div key={idx} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: `1px solid ${colours.border}`, fontSize: 14 }}>
                       <div>
-                        <span style={{ fontWeight: 600 }}>{item.description || "—"}</span>
-                        <span style={{ color: colours.muted, marginLeft: 10 }}>× {qty} @ {invoiceMoney(unit)}</span>
+                        <span style={{ fontWeight: 600 }}>{item.description || "--"}</span>
+                        <span style={{ color: colours.muted, marginLeft: 10 }}>x {qty} @ {invoiceMoney(unit)}</span>
                       </div>
                       <strong>{invoiceMoney(rowSub + rowGst)}</strong>
                     </div>
@@ -431,11 +434,11 @@ export default function InvoicesPage(props) {
               )}
 
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, marginTop: 8 }}>
-                <button style={buttonSecondary} onClick={() => setInvoiceWizardStep(3)}>← Back</button>
+                <button style={buttonSecondary} onClick={() => setInvoiceWizardStep(3)}>Back</button>
                 <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                   <button style={buttonSecondary} onClick={openInvoicePreview}>Preview PDF</button>
                   <button style={{ ...buttonSecondary, opacity: savingInvoice ? 0.6 : 1 }} disabled={savingInvoice} onClick={async () => { setInvoiceForm((prev) => ({ ...prev, status: "Draft" })); const ok = await saveInvoice(); if (ok) setInvoiceWizardStep(1); }}>Save Draft</button>
-                  <button style={{ ...buttonPrimary, opacity: savingInvoice ? 0.6 : 1 }} disabled={savingInvoice} onClick={async () => { const ok = await saveInvoice(); if (ok) setInvoiceWizardStep(1); }}>{savingInvoice ? "Saving..." : "Save Invoice ✓"}</button>
+                  <button style={{ ...buttonPrimary, opacity: savingInvoice ? 0.6 : 1 }} disabled={savingInvoice} onClick={async () => { const ok = await saveInvoice(); if (ok) setInvoiceWizardStep(1); }}>{savingInvoice ? "Saving..." : "Save Invoice Paid"}</button>
                 </div>
               </div>
             </div>
@@ -444,9 +447,9 @@ export default function InvoicesPage(props) {
 
         <SectionCard title="Invoice List">
           <DataTable
-            emptyState={{ icon: "🧾", title: "No invoices yet", message: "Create your first invoice using the form above. Invoices can be emailed as a PDF with a Stripe payment link." }}
+            emptyState={{ icon: "", title: "No invoices yet", message: "Create your first invoice using the form above. Invoices can be emailed as a PDF with a Stripe payment link." }}
             columns={[
-              { key: "invoiceNumber", label: "Invoice", render: (v, row) => <span>{v}{row.recurs && row.recurs !== "Never" ? <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 700, color: colours.purple, background: colours.lightPurple, padding: "2px 7px", borderRadius: 6 }}>🔁 {row.recurs}</span> : null}</span> },
+              { key: "invoiceNumber", label: "Invoice", render: (v, row) => <span>{v}{row.recurs && row.recurs !== "Never" ? <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 700, color: colours.purple, background: colours.lightPurple, padding: "2px 7px", borderRadius: 6 }}> {row.recurs}</span> : null}</span> },
               { key: "clientId", label: "Client", render: (_, row) => getClientName(row.clientId) },
               { key: "invoiceDate", label: "Date", render: (v) => formatDateAU(v) },
               { key: "dueDate", label: "Due", render: (v) => formatDateAU(v) },
@@ -461,7 +464,7 @@ export default function InvoicesPage(props) {
                   background: row.type === "credit_note" ? "#F5ECFB" : v === "Paid" ? "#dcfce7" : v === "Draft" ? "#f1f5f9" : "#fef9c3",
                   color: row.type === "credit_note" ? colours.purple : v === "Paid" ? "#16a34a" : v === "Draft" ? "#64748b" : "#b45309",
                 }}>
-                  {row.type === "credit_note" ? "CN" : v === "Paid" ? "✓ PAID" : v || "Draft"}
+                  {row.type === "credit_note" ? "CN" : v === "Paid" ? "Paid PAID" : v || "Draft"}
                 </span>
               )},
               {
@@ -477,7 +480,7 @@ export default function InvoicesPage(props) {
                     </button>
                     <button
                       style={{ ...buttonSecondary, color: colours.teal, borderColor: colours.teal }}
-                      onClick={() => sendInvoiceFromPreview(row.id)}
+                      onClick={() => { if (typeof sendInvoiceFromPreview === "function") sendInvoiceFromPreview(row.id); else if (window.sendInvoiceFromPreview) window.sendInvoiceFromPreview(row.id); }}
                     >
                       Email
                     </button>
@@ -493,7 +496,7 @@ export default function InvoicesPage(props) {
                       </>
                     ) : (
                       <span style={{ color: "#16a34a", fontWeight: 700, alignSelf: "center", fontSize: 13 }}>
-                        ✓ Paid{row.paidVia ? ` via ${row.paidVia}` : ""}
+                        Paid{row.paidVia ? ` via ${row.paidVia}` : ""}
                       </span>
                     )}
 

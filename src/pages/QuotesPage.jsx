@@ -1,9 +1,9 @@
 import React, { useState, useMemo } from "react";
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // QuotesPage
 // All state and handlers come from SharonPortalWebsite via props.
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 export default function QuotesPage(props) {
   const {
@@ -66,6 +66,9 @@ export default function QuotesPage(props) {
     setImportRows = () => {},
     setImportError = () => {},
     setShowImportModal = () => {},
+    sendQuoteFromPreview,
+    convertQuoteToInvoice,
+    openQuotePreview,
   } = props;
 
     const quoteLines = computeLineItemTotals(quoteForm.lineItems || [], quoteForm.clientId);
@@ -96,17 +99,17 @@ export default function QuotesPage(props) {
           <InsightChip label="Pending" value={String(pendingQuotes.length)} />
         </DashboardHero>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16 }}>
-          <MetricCard title="Total quoted" value={currency(totalQuoted)} subtitle="Value of all quotes in the portal." accent={colours.navy} />
+          <MetricCard title="Total quoted" value={currency(totalQuoted)} subtitle="Value of all quotes in the portal." accent={colours.purple} />
           <MetricCard title="Accepted value" value={currency(acceptedQuotes.reduce((s, q) => s + safeNumber(q.total), 0))} subtitle="Value of accepted quotes." accent={colours.teal} />
           <MetricCard title="Conversion rate" value={`${conversionRate.toFixed(1)}%`} subtitle="Quotes accepted vs total sent." accent={colours.purple} />
-          <MetricCard title="Expired" value={String(expiredQuotes.length)} subtitle="Quotes past expiry date." accent={colours.navy} />
+          <MetricCard title="Expired" value={String(expiredQuotes.length)} subtitle="Quotes past expiry date." accent={colours.purple} />
           <div style={{ ...cardStyle, padding: 18, gridColumn: "span 2" }}>
             <div style={{ fontSize: 12, fontWeight: 800, color: colours.muted, textTransform: "uppercase", marginBottom: 10 }}>Quote status breakdown</div>
             <MiniBarChart data={statusData} height={90} accent={colours.purple} />
           </div>
         </div>
         <SectionCard title="Create Quote">
-          {/* ── Wizard progress bar ── */}
+          {/* -- Wizard progress bar -- */}
           <div style={{ display: "flex", alignItems: "center", marginBottom: 28 }}>
             {["Client", "Details", "Line Items", "Review & Save"].map((label, i) => {
               const step = i + 1;
@@ -119,7 +122,7 @@ export default function QuotesPage(props) {
                     <div style={{ width: 32, height: 32, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 13,
                       background: done ? colours.teal : active ? colours.purple : colours.border,
                       color: done || active ? "#fff" : colours.muted, transition: "all 0.2s" }}>
-                      {done ? "✓" : step}
+                      {done ? "v" : step}
                     </div>
                     <div style={{ fontSize: 11, fontWeight: active ? 800 : 500, color: active ? colours.purple : done ? colours.teal : colours.muted, whiteSpace: "nowrap" }}>{label}</div>
                   </div>
@@ -129,7 +132,7 @@ export default function QuotesPage(props) {
             })}
           </div>
 
-          {/* ── Step 1: Client ── */}
+          {/* -- Step 1: Client -- */}
           {quoteWizardStep === 1 && (
             <div style={{ display: "grid", gap: 20 }}>
               <div>
@@ -143,11 +146,11 @@ export default function QuotesPage(props) {
                       .map((c) => (
                         <div key={c.id} onClick={() => { setQuoteForm((p) => ({ ...p, clientId: String(c.id), currencyCode: getClientCurrencyCode(c) })); setQuoteClientSearch(c.name); }}
                           style={{ padding: "10px 14px", cursor: "pointer", fontSize: 14, borderBottom: `1px solid ${colours.border}`, background: String(quoteForm.clientId) === String(c.id) ? colours.lightPurple : "#fff" }}>
-                          <strong>{c.name}</strong>{c.businessName ? <span style={{ color: colours.muted }}> — {c.businessName}</span> : ""}
+                          <strong>{c.name}</strong>{c.businessName ? <span style={{ color: colours.muted }}> -- {c.businessName}</span> : ""}
                         </div>
                       ))}
                     {clients.filter((c) => c.name.toLowerCase().includes(quoteClientSearch.toLowerCase())).length === 0 && (
-                      <div style={{ padding: "10px 14px", fontSize: 13, color: colours.muted }}>No match — add a new client below</div>
+                      <div style={{ padding: "10px 14px", fontSize: 13, color: colours.muted }}>No match -- add a new client below</div>
                     )}
                   </div>
                 )}
@@ -157,8 +160,8 @@ export default function QuotesPage(props) {
                     setQuoteForm((p) => ({ ...p, clientId: e.target.value, currencyCode: getClientCurrencyCode(sel) }));
                     setQuoteClientSearch(sel?.name || "");
                   }}>
-                    <option value="">— or pick from list —</option>
-                    {clients.map((c) => <option key={c.id} value={c.id}>{c.name}{c.businessName ? ` — ${c.businessName}` : ""}</option>)}
+                    <option value="">-- or pick from list --</option>
+                    {clients.map((c) => <option key={c.id} value={c.id}>{c.name}{c.businessName ? ` -- ${c.businessName}` : ""}</option>)}
                   </select>
                 )}
               </div>
@@ -174,8 +177,8 @@ export default function QuotesPage(props) {
                     </div>
                     <div style={{ ...cardStyle, padding: 16, background: colours.lightTeal }}>
                       <div style={{ fontSize: 11, fontWeight: 800, color: colours.muted, textTransform: "uppercase", marginBottom: 8 }}>Contact</div>
-                      {c.email && <div style={{ fontSize: 13, color: colours.text, marginTop: 2 }}>✉ {c.email}</div>}
-                      {c.phone && <div style={{ fontSize: 13, color: colours.text, marginTop: 4 }}>📞 {c.phone}</div>}
+                      {c.email && <div style={{ fontSize: 13, color: colours.text, marginTop: 2 }}>Email: {c.email}</div>}
+                      {c.phone && <div style={{ fontSize: 13, color: colours.text, marginTop: 4 }}>Ph: {c.phone}</div>}
                       {c.address && <div style={{ fontSize: 13, color: colours.muted, marginTop: 4 }}>{c.address}</div>}
                     </div>
                     <div style={{ ...cardStyle, padding: 16, background: colours.white }}>
@@ -193,56 +196,56 @@ export default function QuotesPage(props) {
                     + New Client
                   </button>
                   <button style={{ ...buttonSecondary, fontSize: 13 }} onClick={() => { setImportType("clients"); setImportRows([]); setImportError(""); setShowImportModal(true); }}>
-                    ⬆ Import
+                    Upload Import
                   </button>
                 </div>
                 <button style={{ ...buttonPrimary, opacity: quoteForm.clientId ? 1 : 0.4 }}
                   disabled={!quoteForm.clientId}
-                  onClick={() => setQuoteWizardStep(2)}>Next: Details →</button>
+                  onClick={() => setQuoteWizardStep(2)}>Next: Details</button>
               </div>
             </div>
           )}
 
-          {/* ── Step 2: Details ── */}
+          {/* -- Step 2: Details -- */}
           {quoteWizardStep === 2 && (
             <div style={{ display: "grid", gap: 20 }}>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16 }}>
                 <div>
                   <label style={labelStyle}>Quote Date</label>
-                  <input type="date" style={inputStyle} value={quoteForm.quoteDate} onChange={(e) => setQuoteForm({ ...quoteForm, quoteDate: e.target.value })} />
+                  <input type="date" style={inputStyle} value={quoteForm.quoteDate} onChange={(e) => setQuoteForm((prev) => ({ ...prev, quoteDate: e.target.value }))} />
                 </div>
                 <div>
                   <label style={labelStyle}>Expiry Date</label>
-                  <input type="date" style={inputStyle} value={quoteForm.expiryDate} onChange={(e) => setQuoteForm({ ...quoteForm, expiryDate: e.target.value })} />
+                  <input type="date" style={inputStyle} value={quoteForm.expiryDate} onChange={(e) => setQuoteForm((prev) => ({ ...prev, expiryDate: e.target.value }))} />
                 </div>
                 <div>
                   <label style={labelStyle}>Quote Number</label>
-                  <input style={inputStyle} value={quoteForm.quoteNumber || ""} onChange={(e) => setQuoteForm({ ...quoteForm, quoteNumber: e.target.value })} placeholder="Auto-generated if blank" />
+                  <input style={inputStyle} value={quoteForm.quoteNumber || ""} onChange={(e) => setQuoteForm((prev) => ({ ...prev, quoteNumber: e.target.value }))} placeholder="Auto-generated if blank" />
                 </div>
               </div>
               <div>
                 <label style={labelStyle}>Comments (optional)</label>
-                <textarea style={{ ...inputStyle, minHeight: 80, resize: "vertical" }} value={quoteForm.comments || ""} onChange={(e) => setQuoteForm({ ...quoteForm, comments: e.target.value })} placeholder="Any notes to appear on the quote..." />
+                <textarea style={{ ...inputStyle, minHeight: 80, resize: "vertical" }} value={quoteForm.comments || ""} onChange={(e) => setQuoteForm((prev) => ({ ...prev, comments: e.target.value }))} placeholder="Any notes to appear on the quote..." />
               </div>
               <div>
                 <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14 }}>
-                  <input type="checkbox" checked={quoteForm.hidePhoneNumber} onChange={(e) => setQuoteForm({ ...quoteForm, hidePhoneNumber: e.target.checked })} />
+                  <input type="checkbox" checked={quoteForm.hidePhoneNumber} onChange={(e) => setQuoteForm((prev) => ({ ...prev, hidePhoneNumber: e.target.checked }))} />
                   Hide my phone number on this quote
                 </label>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8 }}>
-                <button style={buttonSecondary} onClick={() => setQuoteWizardStep(1)}>← Back</button>
-                <button style={buttonPrimary} onClick={() => setQuoteWizardStep(3)}>Next: Line Items →</button>
+                <button style={buttonSecondary} onClick={() => setQuoteWizardStep(1)}>Back</button>
+                <button style={buttonPrimary} onClick={() => setQuoteWizardStep(3)}>Next: Line Items</button>
               </div>
             </div>
           )}
 
-          {/* ── Step 3: Line Items ── */}
+          {/* -- Step 3: Line Items -- */}
           {quoteWizardStep === 3 && (
             <div style={{ display: "grid", gap: 16 }}>
               {services.length > 0 && (
                 <div style={{ ...cardStyle, padding: 14, background: colours.lightPurple, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: colours.purple, flexShrink: 0 }}>📋 Add from Services:</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: colours.purple, flexShrink: 0 }}> Add from Services:</div>
                   <select defaultValue="" style={{ ...inputStyle, flex: 1, minWidth: 200 }}
                     onChange={(e) => {
                       const svc = services.find((s) => String(s.id) === e.target.value);
@@ -250,7 +253,7 @@ export default function QuotesPage(props) {
                       const exempt = clientIsGstExempt(quoteForm.clientId);
                       const newItem = {
                         id: Date.now() + Math.random(),
-                        description: svc.name + (svc.description ? " — " + svc.description : ""),
+                        description: svc.name + (svc.description ? " -- " + svc.description : ""),
                         quantity: 1,
                         unitPrice: String(svc.price ?? ""),
                         gstType: exempt ? "GST Free" : (svc.gstType || "GST on Income (10%)"),
@@ -261,12 +264,12 @@ export default function QuotesPage(props) {
                       }));
                       e.target.value = "";
                     }}>
-                    <option value="">— pick a service to add —</option>
+                    <option value="">-- pick a service to add --</option>
                     {services.map((svc) => (
-                      <option key={svc.id} value={svc.id}>{svc.name}{svc.price ? " — " + currency(svc.price) : ""}</option>
+                      <option key={svc.id} value={svc.id}>{svc.name}{svc.price ? " -- " + currency(svc.price) : ""}</option>
                     ))}
                   </select>
-                  <div style={{ fontSize: 11, color: colours.muted, flexBasis: "100%" }}>Pick as many as you need — descriptions and prices are editable without affecting saved services</div>
+                  <div style={{ fontSize: 11, color: colours.muted, flexBasis: "100%" }}>Pick as many as you need -- descriptions and prices are editable without affecting saved services</div>
                 </div>
               )}
               <div style={{ overflowX: "auto" }}>
@@ -313,7 +316,7 @@ export default function QuotesPage(props) {
                           <td style={{ padding: "8px 6px", width: 40 }}>
                             {(quoteForm.lineItems || []).length > 1 && (
                               <button onClick={() => setQuoteForm((prev) => ({ ...prev, lineItems: prev.lineItems.filter((_, i) => i !== idx) }))}
-                                style={{ background: "none", border: "none", cursor: "pointer", color: colours.muted, fontSize: 18, lineHeight: 1 }}>×</button>
+                                style={{ background: "none", border: "none", cursor: "pointer", color: colours.muted, fontSize: 18, lineHeight: 1 }}>x</button>
                             )}
                           </td>
                         </tr>
@@ -328,13 +331,13 @@ export default function QuotesPage(props) {
                 <span style={{ fontSize: 13, color: colours.muted }}>{(quoteForm.lineItems || []).length} line{(quoteForm.lineItems || []).length !== 1 ? "s" : ""}</span>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8 }}>
-                <button style={buttonSecondary} onClick={() => setQuoteWizardStep(2)}>← Back</button>
-                <button style={buttonPrimary} onClick={() => setQuoteWizardStep(4)}>Next: Review →</button>
+                <button style={buttonSecondary} onClick={() => setQuoteWizardStep(2)}>Back</button>
+                <button style={buttonPrimary} onClick={() => setQuoteWizardStep(4)}>Next: Review</button>
               </div>
             </div>
           )}
 
-          {/* ── Step 4: Review & Save ── */}
+          {/* -- Step 4: Review & Save -- */}
           {quoteWizardStep === 4 && (
             <div style={{ display: "grid", gap: 20 }}>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
@@ -373,8 +376,8 @@ export default function QuotesPage(props) {
                   return (
                     <div key={idx} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: `1px solid ${colours.border}`, fontSize: 14 }}>
                       <div>
-                        <span style={{ fontWeight: 600 }}>{item.description || "—"}</span>
-                        <span style={{ color: colours.muted, marginLeft: 10 }}>× {qty} @ {quoteMoney(unit)}</span>
+                        <span style={{ fontWeight: 600 }}>{item.description || "--"}</span>
+                        <span style={{ color: colours.muted, marginLeft: 10 }}>x {qty} @ {quoteMoney(unit)}</span>
                       </div>
                       <strong>{quoteMoney(rowSub + rowGst)}</strong>
                     </div>
@@ -396,11 +399,11 @@ export default function QuotesPage(props) {
               )}
 
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, marginTop: 8 }}>
-                <button style={buttonSecondary} onClick={() => setQuoteWizardStep(3)}>← Back</button>
+                <button style={buttonSecondary} onClick={() => setQuoteWizardStep(3)}>Back</button>
                 <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                   <button style={buttonSecondary} onClick={openQuotePreview}>Preview PDF</button>
                   <button style={{ ...buttonSecondary, opacity: savingQuote ? 0.6 : 1 }} disabled={savingQuote} onClick={async () => { setQuoteForm((prev) => ({ ...prev, status: "Draft" })); const ok = await saveQuote(); if (ok) setQuoteWizardStep(1); }}>Save Draft</button>
-                  <button style={{ ...buttonPrimary, opacity: savingQuote ? 0.6 : 1 }} disabled={savingQuote} onClick={async () => { const ok = await saveQuote(); if (ok) setQuoteWizardStep(1); }}>{savingQuote ? "Saving..." : "Save Quote ✓"}</button>
+                  <button style={{ ...buttonPrimary, opacity: savingQuote ? 0.6 : 1 }} disabled={savingQuote} onClick={async () => { const ok = await saveQuote(); if (ok) setQuoteWizardStep(1); }}>{savingQuote ? "Saving..." : "Save Quote v"}</button>
                 </div>
               </div>
             </div>
@@ -409,7 +412,7 @@ export default function QuotesPage(props) {
 
         <SectionCard title="Quote List">
           <DataTable
-            emptyState={{ icon: "📋", title: "No quotes yet", message: "Create your first quote using the form above. Quotes can be converted to invoices once accepted." }}
+            emptyState={{ icon: "", title: "No quotes yet", message: "Create your first quote using the form above. Quotes can be converted to invoices once accepted." }}
             columns={[
               { key: "quoteNumber", label: "Quote" },
               { key: "clientId", label: "Client", render: (_, row) => getClientName(row.clientId) },
@@ -442,7 +445,7 @@ export default function QuotesPage(props) {
                     </button>
                     <button
                       style={{ ...buttonSecondary, color: colours.teal, borderColor: colours.teal }}
-                      onClick={() => sendQuoteFromPreview(row.id)}
+                      onClick={() => { if (typeof sendQuoteFromPreview === "function") sendQuoteFromPreview(row.id); else if (window.sendQuoteFromPreview) window.sendQuoteFromPreview(row.id); }}
                     >
                       Email
                     </button>
@@ -452,7 +455,7 @@ export default function QuotesPage(props) {
                         onClick={() => convertQuoteToInvoice(row)}
                         title="Mark as Accepted and create a Draft invoice"
                       >
-                        → Invoice
+                        -> Invoice
                       </button>
                     )}
                     <button style={buttonSecondary} onClick={() => deleteQuote(row.id)}>
@@ -738,7 +741,7 @@ export default function QuotesPage(props) {
                               convertQuoteToInvoice(fullQuote);
                             }}
                           >
-                            Convert to Invoice →
+                            Convert to Invoice ->
                           </button>
                         )}
                         <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14 }}>

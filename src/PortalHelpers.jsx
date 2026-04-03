@@ -349,7 +349,7 @@ const escapeHtml = (value) =>
 
 const nl2br = (value) => escapeHtml(value).replace(/\n/g, "<br/>");
 
-// Parse YYYY-MM-DD as LOCAL date (not UTC) — prevents day-shift in AU timezones
+// Parse YYYY-MM-DD as LOCAL date (not UTC) -- prevents day-shift in AU timezones
 export const parseLocalDate = (dateString) => {
   if (!dateString) return new Date();
   const parts = String(dateString).slice(0, 10).split("-");
@@ -498,7 +498,7 @@ export const blankClient = {
   workType: "Financial / Management Accountant",
   recruiterUsed: false,
   sendToClient: true,
-  sendToMe: false,
+  sendToMe: true,
   autoReminders: true,
   attachPdf: false,
   includeAddressDetails: true,
