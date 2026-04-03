@@ -4063,6 +4063,10 @@ export default function AccountingPortalPrototype() {
               SectionCard={SectionCard} DataTable={DataTable} EmptyState={EmptyState}
               MiniBarChart={MiniBarChart} IncomeSourceModal={IncomeSourceModal}
               saveIncomeSource={saveIncomeSource} deleteIncomeSource={deleteIncomeSource}
+              openIncomeSourceEditor={openIncomeSourceEditor}
+              closeIncomeSourceEditor={closeIncomeSourceEditor}
+              saveIncomeSourceEdits={saveIncomeSourceEdits}
+              savingIncomeSourceEdits={savingIncomeSource}
             />}
             {activePage === "documents" && <DocumentsPage
               documents={documents} documentFile={documentFile} setDocumentFile={setDocumentFile}

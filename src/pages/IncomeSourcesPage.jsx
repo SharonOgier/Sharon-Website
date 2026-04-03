@@ -1,9 +1,9 @@
 import React, { useState, useMemo } from "react";
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // IncomeSourcesPage
 // All state and handlers come from SharonPortalWebsite via props.
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 export default function IncomeSourcesPage(props) {
   const {
@@ -36,6 +36,10 @@ export default function IncomeSourcesPage(props) {
     IncomeSourceModal,
     saveIncomeSource,
     deleteIncomeSource,
+    openIncomeSourceEditor = () => {},
+    closeIncomeSourceEditor = () => {},
+    saveIncomeSourceEdits = () => {},
+    savingIncomeSourceEdits = false,
   } = props;
 
     const totalBeforeTax = incomeSources.reduce((s, src) => s + safeNumber(src.beforeTax), 0);
@@ -55,10 +59,10 @@ export default function IncomeSourcesPage(props) {
         <InsightChip label="Annualised est." value={currency(annualised)} />
       </DashboardHero>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16 }}>
-        <MetricCard title="Sources recorded" value={String(incomeSources.length)} subtitle="All income sources in the portal." accent={colours.navy} />
+        <MetricCard title="Sources recorded" value={String(incomeSources.length)} subtitle="All income sources in the portal." accent={colours.purple} />
         <MetricCard title="Total before tax" value={currency(totalBeforeTax)} subtitle="Sum of all recorded before-tax amounts." accent={colours.teal} />
         <MetricCard title="Annualised estimate" value={currency(annualised)} subtitle="Projected annual income based on frequency." accent={colours.purple} />
-        <MetricCard title="Income types" value={String(Object.keys(typeBreakdown).length)} subtitle="Distinct income type categories." accent={colours.navy} />
+        <MetricCard title="Income types" value={String(Object.keys(typeBreakdown).length)} subtitle="Distinct income type categories." accent={colours.purple} />
         <div style={{ ...cardStyle, padding: 18, gridColumn: "span 2" }}>
           <div style={{ fontSize: 12, fontWeight: 800, color: colours.muted, textTransform: "uppercase", marginBottom: 10 }}>Income by type</div>
           <MiniBarChart data={typeData} height={90} accent={colours.teal} />
@@ -66,7 +70,7 @@ export default function IncomeSourcesPage(props) {
       </div>
       <SectionCard title="Income Sources" right={<button style={buttonPrimary} onClick={() => setShowIncomeSourceModal(true)}>New Income Source</button>}>
         <DataTable
-          emptyState={{ icon: "💰", title: "No income sources yet", message: "Add your income sources for your ATO export — employment, freelance, rental income and other earnings.", action: { label: "Add income source", onClick: () => {} } }}
+          emptyState={{ icon: "", title: "No income sources yet", message: "Add your income sources for your ATO export -- employment, freelance, rental income and other earnings.", action: { label: "Add income source", onClick: () => {} } }}
           columns={[
             { key: "name", label: "Name" },
             { key: "incomeType", label: "Income Type" },
@@ -82,15 +86,65 @@ export default function IncomeSourcesPage(props) {
               key: "actions",
               label: "",
               render: (_, row) => (
-                <button style={buttonSecondary} onClick={() => deleteIncomeSource(row.id)}>
-                  Delete
-                </button>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button style={buttonSecondary} onClick={() => openIncomeSourceEditor(row)}>Edit</button>
+                  <button style={buttonSecondary} onClick={() => deleteIncomeSource(row.id)}>Delete</button>
+                </div>
               ),
             },
           ]}
           rows={incomeSources}
         />
       </SectionCard>
+
+      {/* Income Source Editor Modal */}
+      {incomeSourceEditorOpen && incomeSourceEditorForm && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 3000, background: "rgba(15,23,42,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div style={{ background: "#fff", borderRadius: 22, padding: 28, width: "100%", maxWidth: 600, maxHeight: "90vh", overflowY: "auto", boxShadow: "0 24px 60px rgba(15,23,42,0.22)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+              <div style={{ fontSize: 22, fontWeight: 800, color: colours.text }}>Edit Income Source</div>
+              <button style={buttonSecondary} onClick={closeIncomeSourceEditor}>Close</button>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16 }}>
+              <div>
+                <label style={labelStyle}>Name</label>
+                <input style={inputStyle} value={incomeSourceEditorForm.name || ""} onChange={(e) => setIncomeSourceEditorForm((prev) => ({ ...prev, name: e.target.value }))} />
+              </div>
+              <div>
+                <label style={labelStyle}>Income Type</label>
+                <select style={inputStyle} value={incomeSourceEditorForm.incomeType || ""} onChange={(e) => setIncomeSourceEditorForm((prev) => ({ ...prev, incomeType: e.target.value }))}>
+                  {(incomeTypeOptions || []).map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={labelStyle}>Amount Before Tax</label>
+                <input type="number" min="0" step="0.01" style={inputStyle} value={incomeSourceEditorForm.beforeTax || ""} onChange={(e) => setIncomeSourceEditorForm((prev) => ({ ...prev, beforeTax: e.target.value }))} />
+              </div>
+              <div>
+                <label style={labelStyle}>Frequency</label>
+                <select style={inputStyle} value={incomeSourceEditorForm.frequency || ""} onChange={(e) => setIncomeSourceEditorForm((prev) => ({ ...prev, frequency: e.target.value }))}>
+                  <option value="">Select...</option>
+                  {(incomeFrequencyOptions || []).map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+                </select>
+              </div>
+            </div>
+            <div style={{ display: "grid", gap: 10, marginTop: 16 }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14 }}>
+                <input type="checkbox" checked={Boolean(incomeSourceEditorForm.startedAfterDate)} onChange={(e) => setIncomeSourceEditorForm((prev) => ({ ...prev, startedAfterDate: e.target.checked }))} />
+                Started after 1 Jul 2025
+              </label>
+              <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14 }}>
+                <input type="checkbox" checked={Boolean(incomeSourceEditorForm.hasEndDate)} onChange={(e) => setIncomeSourceEditorForm((prev) => ({ ...prev, hasEndDate: e.target.checked }))} />
+                Has a fixed end date
+              </label>
+            </div>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 20 }}>
+              <button style={buttonSecondary} onClick={closeIncomeSourceEditor}>Cancel</button>
+              <button style={{ ...buttonPrimary, opacity: savingIncomeSourceEdits ? 0.6 : 1 }} disabled={savingIncomeSourceEdits} onClick={saveIncomeSourceEdits}>{savingIncomeSourceEdits ? "Saving..." : "Save Changes"}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
     );
 

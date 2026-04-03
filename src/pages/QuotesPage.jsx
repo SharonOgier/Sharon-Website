@@ -455,7 +455,7 @@ export default function QuotesPage(props) {
                         onClick={() => convertQuoteToInvoice(row)}
                         title="Mark as Accepted and create a Draft invoice"
                       >
-                        -> Invoice
+                        Convert to Invoice
                       </button>
                     )}
                     <button style={buttonSecondary} onClick={() => deleteQuote(row.id)}>
@@ -741,7 +741,7 @@ export default function QuotesPage(props) {
                               convertQuoteToInvoice(fullQuote);
                             }}
                           >
-                            Convert to Invoice ->
+                            Convert to Invoice
                           </button>
                         )}
                         <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14 }}>
