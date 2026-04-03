@@ -103,7 +103,7 @@ export default function DashboardPage(props) {
                   border: "1px solid " + (step.done ? "#BBF7D0" : "#E9D5FF"),
                   cursor: step.done ? "default" : "pointer",
                   opacity: step.done ? 0.8 : 1 }}>
-                <div style={{ fontSize: 18, flexShrink: 0 }}>{step.done ? "v" : ""}</div>
+                <div style={{ fontSize: 18, flexShrink: 0 }}>{step.done ? "✅" : ""}</div>
                 <div style={{ fontSize: 13, fontWeight: step.done ? 400 : 600, color: step.done ? "#166534" : colours.text,
                   textDecoration: step.done ? "line-through" : "none" }}>{step.label}</div>
                 {!step.done && <div style={{ marginLeft: "auto", fontSize: 11, color: colours.purple, fontWeight: 700, flexShrink: 0 }}>Go</div>}
@@ -140,7 +140,7 @@ export default function DashboardPage(props) {
           }}
         >
           <ActionHubCard
-            icon="[receipt]"
+            icon="🧾"
             title="Create invoice"
             description="Generate a new invoice quickly and move straight into the invoice workspace."
             buttonLabel="Open invoices"
@@ -148,7 +148,7 @@ export default function DashboardPage(props) {
             tone={colours.purple}
           />
           <ActionHubCard
-            icon="[quote]"
+            icon="💬"
             title="Create quote"
             description="Prepare a quote for a client and convert it later when work is approved."
             buttonLabel="Open quotes"
@@ -156,7 +156,7 @@ export default function DashboardPage(props) {
             tone={colours.teal}
           />
           <ActionHubCard
-            icon="[money]"
+            icon="💸"
             title="Add expense"
             description="Capture a business expense, upload the receipt and keep your records current."
             buttonLabel="Open expenses"
@@ -164,7 +164,7 @@ export default function DashboardPage(props) {
             tone={colours.navy}
           />
           <ActionHubCard
-            icon="[bar]"
+            icon="📊"
             title="View insights"
             description="Review cash flow, margins, tax reserves and other performance signals."
             buttonLabel="Open insights"
@@ -262,7 +262,7 @@ export default function DashboardPage(props) {
       <SectionCard title="Financial reports" right={<div style={{ fontSize: 12, color: colours.muted }}>Tap any report to open it</div>}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16 }}>
           <ActionHubCard
-            icon="[chart]"
+            icon="📈"
             title="Profit & loss"
             description="Income less expenses -- operating surplus or deficit after tax reserve."
             buttonLabel="View report"
@@ -270,7 +270,7 @@ export default function DashboardPage(props) {
             tone={colours.purple}
           />
           <ActionHubCard
-            icon="[drop]"
+            icon="💧"
             title="Cash movement"
             description="Cash received, GST deducted, tax reserved, fees and closing safe-to-spend."
             buttonLabel="View report"
@@ -278,7 +278,7 @@ export default function DashboardPage(props) {
             tone={colours.teal}
           />
           <ActionHubCard
-            icon="[receipt]"
+            icon="🧾"
             title="GST position"
             description="GST collected on invoices less GST credits on expenses -- net amount owing."
             buttonLabel="View report"
@@ -286,7 +286,7 @@ export default function DashboardPage(props) {
             tone={colours.navy}
           />
           <ActionHubCard
-            icon="[bar]"
+            icon="📊"
             title="Revenue summary"
             description="Client concentration, best and worst months, revenue volatility."
             buttonLabel="View report"
