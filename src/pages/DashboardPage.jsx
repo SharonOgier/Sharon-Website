@@ -1,9 +1,9 @@
 import React, { useState, useMemo } from "react";
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // DashboardPage
 // All state and handlers come from SharonPortalWebsite via props.
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 export default function DashboardPage(props) {
   const {
@@ -65,7 +65,7 @@ export default function DashboardPage(props) {
   const resolvedSupabaseSyncStatus = supabaseSyncStatus || "";
   const resolvedGetClientName = typeof getClientName === "function" ? getClientName : () => "";
 
-      // ── Onboarding checklist ──────────────────────────────────────
+      // -- Onboarding checklist --------------------------------------
       const onboardingSteps = [
         { label: "Add your business name", done: Boolean(profile.businessName), action: () => { setActivePage("settings"); setActiveSettingsTab("Profile"); } },
         { label: "Add your ABN", done: Boolean(profile.abn), action: () => { setActivePage("settings"); setActiveSettingsTab("Profile"); } },
@@ -84,7 +84,7 @@ export default function DashboardPage(props) {
         <div style={{ ...cardStyle, padding: 24, background: "linear-gradient(135deg, #F5ECFB 0%, #EDE9FE 100%)", border: "1px solid #E9D5FF" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
             <div>
-              <div style={{ fontSize: 16, fontWeight: 800, color: colours.purple, marginBottom: 4 }}>🚀 Get started — {doneCount} of {onboardingSteps.length} complete</div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: colours.purple, marginBottom: 4 }}> Get started -- {doneCount} of {onboardingSteps.length} complete</div>
               <div style={{ fontSize: 13, color: colours.muted }}>Complete these steps to get the most out of your portal</div>
             </div>
             <div style={{ textAlign: "right" }}>
@@ -103,10 +103,10 @@ export default function DashboardPage(props) {
                   border: "1px solid " + (step.done ? "#BBF7D0" : "#E9D5FF"),
                   cursor: step.done ? "default" : "pointer",
                   opacity: step.done ? 0.8 : 1 }}>
-                <div style={{ fontSize: 18, flexShrink: 0 }}>{step.done ? "✅" : "⬜"}</div>
+                <div style={{ fontSize: 18, flexShrink: 0 }}>{step.done ? "v" : ""}</div>
                 <div style={{ fontSize: 13, fontWeight: step.done ? 400 : 600, color: step.done ? "#166534" : colours.text,
                   textDecoration: step.done ? "line-through" : "none" }}>{step.label}</div>
-                {!step.done && <div style={{ marginLeft: "auto", fontSize: 11, color: colours.purple, fontWeight: 700, flexShrink: 0 }}>Go →</div>}
+                {!step.done && <div style={{ marginLeft: "auto", fontSize: 11, color: colours.purple, fontWeight: 700, flexShrink: 0 }}>Go</div>}
               </div>
             ))}
           </div>
@@ -114,7 +114,7 @@ export default function DashboardPage(props) {
       )}
       {allDone && (
         <div style={{ ...cardStyle, padding: 18, background: "#F0FDF4", border: "1px solid #BBF7D0", display: "flex", alignItems: "center", gap: 14 }}>
-          <div style={{ fontSize: 28 }}>🎉</div>
+          <div style={{ fontSize: 28 }}></div>
           <div>
             <div style={{ fontSize: 15, fontWeight: 800, color: "#166534" }}>You're all set up!</div>
             <div style={{ fontSize: 13, color: "#166534", marginTop: 2 }}>Your portal is fully configured and ready to use.</div>
@@ -140,7 +140,7 @@ export default function DashboardPage(props) {
           }}
         >
           <ActionHubCard
-            icon="🧾"
+            icon="[receipt]"
             title="Create invoice"
             description="Generate a new invoice quickly and move straight into the invoice workspace."
             buttonLabel="Open invoices"
@@ -148,7 +148,7 @@ export default function DashboardPage(props) {
             tone={colours.purple}
           />
           <ActionHubCard
-            icon="💬"
+            icon="[quote]"
             title="Create quote"
             description="Prepare a quote for a client and convert it later when work is approved."
             buttonLabel="Open quotes"
@@ -156,7 +156,7 @@ export default function DashboardPage(props) {
             tone={colours.teal}
           />
           <ActionHubCard
-            icon="💸"
+            icon="[money]"
             title="Add expense"
             description="Capture a business expense, upload the receipt and keep your records current."
             buttonLabel="Open expenses"
@@ -164,7 +164,7 @@ export default function DashboardPage(props) {
             tone={colours.navy}
           />
           <ActionHubCard
-            icon="📊"
+            icon="[bar]"
             title="View insights"
             description="Review cash flow, margins, tax reserves and other performance signals."
             buttonLabel="Open insights"
@@ -185,7 +185,7 @@ export default function DashboardPage(props) {
         <MetricCard title="Gross paid" value={currency(totals.paidIncome)} subtitle="Cash received from invoices marked Paid." accent={colours.teal} />
         <MetricCard title="GST payable" value={currency(totals.gstPayable)} subtitle={`Sales GST ${currency(totals.gstCollected)} less expense credits ${currency(totals.gstOnExpenses)}.`} accent={colours.purple} />
         <MetricCard title="Estimated tax reserve" value={currency(totals.estimatedTax)} subtitle="Set aside based on paid income excluding GST." accent={colours.navy} />
-        <MetricCard title="Portal subscription" value={currency(totals.monthlySubscriptionCost)} subtitle={`$${safeNumber(profile.monthlySubscription ?? DEFAULT_MONTHLY_SUBSCRIPTION)}/mo — set in Settings → Financial.`} accent={colours.purple} />
+        <MetricCard title="Portal subscription" value={currency(totals.monthlySubscriptionCost)} subtitle={`$${safeNumber(profile.monthlySubscription ?? DEFAULT_MONTHLY_SUBSCRIPTION)}/mo -- set in Settings -> Financial.`} accent={colours.purple} />
         <MetricCard title="Safe to spend" value={currency(totals.safeToSpend)} subtitle={`After GST, tax, fees, expenses & $${safeNumber(profile.monthlySubscription ?? DEFAULT_MONTHLY_SUBSCRIPTION)}/mo subscription.`} accent={colours.teal} />
       </div>
 
@@ -262,15 +262,15 @@ export default function DashboardPage(props) {
       <SectionCard title="Financial reports" right={<div style={{ fontSize: 12, color: colours.muted }}>Tap any report to open it</div>}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16 }}>
           <ActionHubCard
-            icon="📈"
+            icon="[chart]"
             title="Profit & loss"
-            description="Income less expenses — operating surplus or deficit after tax reserve."
+            description="Income less expenses -- operating surplus or deficit after tax reserve."
             buttonLabel="View report"
             onClick={() => setActivePage("financial insights")}
             tone={colours.purple}
           />
           <ActionHubCard
-            icon="💧"
+            icon="[drop]"
             title="Cash movement"
             description="Cash received, GST deducted, tax reserved, fees and closing safe-to-spend."
             buttonLabel="View report"
@@ -278,15 +278,15 @@ export default function DashboardPage(props) {
             tone={colours.teal}
           />
           <ActionHubCard
-            icon="🧾"
+            icon="[receipt]"
             title="GST position"
-            description="GST collected on invoices less GST credits on expenses — net amount owing."
+            description="GST collected on invoices less GST credits on expenses -- net amount owing."
             buttonLabel="View report"
             onClick={() => setActivePage("financial insights")}
             tone={colours.navy}
           />
           <ActionHubCard
-            icon="📊"
+            icon="[bar]"
             title="Revenue summary"
             description="Client concentration, best and worst months, revenue volatility."
             buttonLabel="View report"
