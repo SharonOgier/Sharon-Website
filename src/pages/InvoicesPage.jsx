@@ -310,58 +310,61 @@ export default function InvoicesPage(props) {
                   <div style={{ fontSize: 11, color: colours.muted, flexBasis: "100%" }}>Pick as many as you need -- descriptions and prices are editable without affecting saved services</div>
                 </div>
               )}
-              <div style={{ overflowX: "auto" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 680 }}>
-                  <thead>
-                    <tr style={{ background: colours.bg }}>
-                      {["Description", "Qty", "Unit Price (ex GST)", "GST Type", "GST", "Total", ""].map((h) => (
-                        <th key={h} style={{ padding: "10px 8px", textAlign: "left", fontSize: 12, fontWeight: 700, color: colours.muted, borderBottom: `1px solid ${colours.border}` }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(invoiceForm.lineItems || []).map((item, idx) => {
-                      const qty = Math.max(1, safeNumber(item.quantity || 1));
-                      const unit = safeNumber(item.unitPrice);
-                      const rowSub = unit * qty;
-                      const exempt = clientIsGstExempt(invoiceForm.clientId);
-                      const effectiveGst = exempt ? "GST Free" : (item.gstType || "GST on Income (10%)");
-                      const rowGst = effectiveGst === "GST on Income (10%)" ? rowSub * 0.1 : 0;
-                      return (
-                        <tr key={item.id} style={{ borderBottom: `1px solid ${colours.border}` }}>
-                          <td style={{ padding: "8px 6px", minWidth: 200 }}>
-                            <input style={{ ...inputStyle, fontSize: 13 }} value={item.description}
-                              onChange={(e) => setInvoiceForm((prev) => ({ ...prev, lineItems: prev.lineItems.map((l, i) => i === idx ? { ...l, description: e.target.value } : l) }))}
-                              placeholder="Description" />
-                          </td>
-                          <td style={{ padding: "8px 6px", width: 70 }}>
-                            <input type="number" min="1" style={{ ...inputStyle, fontSize: 13 }} value={item.quantity}
-                              onChange={(e) => setInvoiceForm((prev) => ({ ...prev, lineItems: prev.lineItems.map((l, i) => i === idx ? { ...l, quantity: e.target.value } : l) }))} />
-                          </td>
-                          <td style={{ padding: "8px 6px", width: 130 }}>
-                            <input type="number" min="0" step="0.01" style={{ ...inputStyle, fontSize: 13 }} value={item.unitPrice}
-                              onChange={(e) => setInvoiceForm((prev) => ({ ...prev, lineItems: prev.lineItems.map((l, i) => i === idx ? { ...l, unitPrice: e.target.value } : l) }))}
-                              placeholder="0.00" />
-                          </td>
-                          <td style={{ padding: "8px 6px", width: 160 }}>
-                            <select style={{ ...inputStyle, fontSize: 13, background: exempt ? "#F8FAFC" : colours.white }} disabled={exempt} value={effectiveGst}
-                              onChange={(e) => setInvoiceForm((prev) => ({ ...prev, lineItems: prev.lineItems.map((l, i) => i === idx ? { ...l, gstType: e.target.value } : l) }))}>
-                              {GST_TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                            </select>
-                          </td>
-                          <td style={{ padding: "8px 6px", width: 90, fontSize: 13, color: colours.muted, textAlign: "right" }}>{invoiceMoney(rowGst)}</td>
-                          <td style={{ padding: "8px 6px", width: 110, fontSize: 13, fontWeight: 700, textAlign: "right" }}>{invoiceMoney(rowSub + rowGst)}</td>
-                          <td style={{ padding: "8px 6px", width: 40 }}>
-                            {(invoiceForm.lineItems || []).length > 1 && (
-                              <button onClick={() => setInvoiceForm((prev) => ({ ...prev, lineItems: prev.lineItems.filter((_, i) => i !== idx) }))}
-                                style={{ background: "none", border: "none", cursor: "pointer", color: colours.muted, fontSize: 18, lineHeight: 1 }}>x</button>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+              <div style={{ display: "grid", gap: 12 }}>
+                {(invoiceForm.lineItems || []).map((item, idx) => {
+                  const qty = Math.max(1, safeNumber(item.quantity || 1));
+                  const unit = safeNumber(item.unitPrice);
+                  const rowSub = unit * qty;
+                  const exempt = clientIsGstExempt(invoiceForm.clientId);
+                  const effectiveGst = exempt ? "GST Free" : (item.gstType || "GST on Income (10%)");
+                  const rowGst = effectiveGst === "GST on Income (10%)" ? rowSub * 0.1 : 0;
+                  return (
+                    <div key={item.id} style={{ ...cardStyle, padding: 14, display: "grid", gap: 10 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: colours.muted, textTransform: "uppercase" }}>Line {idx + 1}</div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <div style={{ fontSize: 14, fontWeight: 800, color: colours.teal }}>{invoiceMoney(rowSub + rowGst)}</div>
+                          {(invoiceForm.lineItems || []).length > 1 && (
+                            <button onClick={() => setInvoiceForm((prev) => ({ ...prev, lineItems: prev.lineItems.filter((_, i) => i !== idx) }))}
+                              style={{ background: "none", border: "none", cursor: "pointer", color: colours.muted, fontSize: 20, lineHeight: 1, padding: "0 4px" }}>x</button>
+                          )}
+                        </div>
+                      </div>
+                      <div>
+                        <label style={labelStyle}>Description</label>
+                        <input style={{ ...inputStyle, fontSize: 13 }} value={item.description}
+                          onChange={(e) => setInvoiceForm((prev) => ({ ...prev, lineItems: prev.lineItems.map((l, i) => i === idx ? { ...l, description: e.target.value } : l) }))}
+                          placeholder="Description" />
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                        <div>
+                          <label style={labelStyle}>Qty</label>
+                          <input type="number" min="1" style={{ ...inputStyle, fontSize: 13 }} value={item.quantity}
+                            onChange={(e) => setInvoiceForm((prev) => ({ ...prev, lineItems: prev.lineItems.map((l, i) => i === idx ? { ...l, quantity: e.target.value } : l) }))} />
+                        </div>
+                        <div>
+                          <label style={labelStyle}>Unit Price (ex GST)</label>
+                          <input type="number" min="0" step="0.01" style={{ ...inputStyle, fontSize: 13 }} value={item.unitPrice}
+                            onChange={(e) => setInvoiceForm((prev) => ({ ...prev, lineItems: prev.lineItems.map((l, i) => i === idx ? { ...l, unitPrice: e.target.value } : l) }))}
+                            placeholder="0.00" />
+                        </div>
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                        <div>
+                          <label style={labelStyle}>GST Type</label>
+                          <select style={{ ...inputStyle, fontSize: 13, background: exempt ? "#F8FAFC" : colours.white }} disabled={exempt} value={effectiveGst}
+                            onChange={(e) => setInvoiceForm((prev) => ({ ...prev, lineItems: prev.lineItems.map((l, i) => i === idx ? { ...l, gstType: e.target.value } : l) }))}>
+                            {GST_TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <label style={labelStyle}>GST</label>
+                          <input style={{ ...inputStyle, fontSize: 13, background: "#F8FAFC" }} readOnly value={invoiceMoney(rowGst)} />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
               <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                 <button onClick={() => setInvoiceForm((prev) => ({ ...prev, lineItems: [...(prev.lineItems || []), blankLineItem()] }))}
