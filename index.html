@@ -529,7 +529,7 @@
             <div class="card">
               <h3>Get in touch</h3>
               <div class="contact-list">
-                <div class="contact-item">Email: info@sharonogier.com</div>
+                <div class="contact-item">Email: <a href="mailto:info@sharonogier.com">info@sharonogier.com</a></div>
                 <div class="contact-item">Phone: 1300 017 167</div>
                 <div class="contact-item">Location focus: Casino NSW and surrounding areas</div>
               </div>
@@ -560,8 +560,8 @@
         pages.forEach((page) => page.classList.remove('active'));
 
         button.classList.add('active');
-        document.getElementById(`page-${target}`).classList.add('active');
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+        const activePage = document.getElementById('page-' + target);
+        if (activePage) activePage.classList.add('active');
       });
     });
   </script>
