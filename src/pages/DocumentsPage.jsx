@@ -1,9 +1,9 @@
 import React, { useState, useMemo } from "react";
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // DocumentsPage
 // All state and handlers come from SharonPortalWebsite via props.
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 export default function DocumentsPage(props) {
   const {
@@ -51,12 +51,12 @@ export default function DocumentsPage(props) {
         <InsightChip label="File types" value={String(Object.keys(docTypes).length)} />
       </DashboardHero>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16 }}>
-        <MetricCard title="Total documents" value={String(documents.length)} subtitle="All files stored in the portal." accent={colours.navy} />
+        <MetricCard title="Total documents" value={String(documents.length)} subtitle="All files stored in the portal." accent={colours.purple} />
         <MetricCard title="Last uploaded" value={lastUploaded} subtitle="Most recently added document." accent={colours.teal} />
         <MetricCard title="File types" value={String(Object.keys(docTypes).length)} subtitle="Distinct file extensions stored." accent={colours.purple} />
         <div style={{ ...cardStyle, padding: 18 }}>
           <div style={{ fontSize: 12, fontWeight: 800, color: colours.muted, textTransform: "uppercase", marginBottom: 10 }}>Files by type</div>
-          <MiniBarChart data={typeData.length ? typeData : [{ label: "None", value: 0 }]} height={70} accent={colours.navy} />
+          <MiniBarChart data={typeData.length ? typeData : [{ label: "None", value: 0 }]} height={70} accent={colours.purple} />
         </div>
       </div>
       <SectionCard
@@ -74,10 +74,12 @@ export default function DocumentsPage(props) {
             columns={[
               { key: "name", label: "Document" },
               { key: "uploadedAt", label: "Uploaded", render: (v) => formatDateAU(v) },
-              { key: "url", label: "Open", render: (v) => <a href={v} target="_blank" rel="noreferrer">Open</a> },
               { key: "actions", label: "", render: (_, row) => (
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <button style={buttonSecondary} onClick={() => openDocumentEditor(row)}>View / Edit</button>
+                  {row.url && (
+                    <button style={{ ...buttonSecondary, color: colours.teal, borderColor: colours.teal }} onClick={() => window.open(row.url, "_blank")}>View</button>
+                  )}
+                  <button style={buttonSecondary} onClick={() => openDocumentEditor(row)}>Edit</button>
                   <button style={buttonSecondary} onClick={() => deleteDocument(row.id)}>Delete</button>
                 </div>
               )},
@@ -102,7 +104,7 @@ export default function DocumentsPage(props) {
               <button style={buttonPrimary} onClick={saveDocumentEdits}>Save Changes</button>
             </div>
           </div>
-        ) : <EmptyState icon="📁" title="No documents yet" message="Upload receipts, contracts and generated PDFs here. All documents are stored securely against your account." />}
+        ) : <EmptyState icon="" title="No documents yet" message="Upload receipts, contracts and generated PDFs here. All documents are stored securely against your account." />}
       </SectionCard>
     </div>
     );

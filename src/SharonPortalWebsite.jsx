@@ -4108,7 +4108,8 @@ export default function AccountingPortalPrototype() {
                   buttonPrimary={buttonPrimary} inputStyle={inputStyle} labelStyle={labelStyle}
                   currency={currency} formatDateAU={formatDateAU} safeNumber={safeNumber}
                   DashboardHero={DashboardHero} InsightChip={InsightChip}
-                  SectionCard={SectionCard} SummaryBox={SummaryBox}
+                  MetricCard={MetricCard} SectionCard={SectionCard} SummaryBox={SummaryBox}
+                  buttonSecondary={buttonSecondary}
                   setActivePage={setActivePage}
                 />
               </div>
