@@ -192,7 +192,7 @@ export default function DashboardPage(props) {
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "minmax(0, 1.4fr) minmax(320px, 0.9fr)",
+          gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
           gap: 20,
         }}
       >
@@ -299,7 +299,7 @@ export default function DashboardPage(props) {
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "minmax(0, 1.2fr) minmax(320px, 0.8fr)",
+          gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
           gap: 20,
         }}
       >
