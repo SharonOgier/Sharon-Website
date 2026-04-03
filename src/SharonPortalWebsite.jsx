@@ -2814,6 +2814,44 @@ export default function AccountingPortalPrototype() {
     writeQuotePreviewToWindow(w, quote, { allowEmail: true });
     };
 
+    const saveBill = async ({ totalAmt, totalGst, clear } = {}) => {
+    if (clear) {
+      setExpenseForm({ date: todayLocal(), dueDate: addDaysEOM(todayLocal()), supplier: "", category: "", description: "", amount: "", expenseType: "", workType: profile.workType, receiptFileName: "", receiptUrl: "" });
+      setBillLineItems([blankBillLine()]);
+      setBillWizardStep(1);
+      return;
+    }
+    if (!expenseForm.supplier) { toast.warning("Supplier name is required"); return; }
+    if (!totalAmt || totalAmt <= 0) { toast.warning("Add at least one line item with an amount"); return; }
+    setSavingBill(true);
+    try {
+      const primaryCategory = billLineItems.find((l) => l.category)?.category || "Other";
+      const combinedDesc = billLineItems.map((l) => l.description).filter(Boolean).join("; ");
+      const payload = {
+        ...expenseForm,
+        category: primaryCategory,
+        description: combinedDesc,
+        amount: totalAmt,
+        gst: totalGst || 0,
+        billLineItems,
+        expenseType: "Bill / Payable",
+        isPaid: false,
+        paidAt: "",
+      };
+      const saved = await upsertRecordInDatabase(SUPABASE_TABLES.expenses, payload);
+      setExpenses((prev) => [...prev, saved]);
+      toast.success("Bill saved!");
+      setExpenseForm({ date: todayLocal(), dueDate: addDaysEOM(todayLocal()), supplier: "", category: "", description: "", amount: "", expenseType: "", workType: profile.workType, receiptFileName: "", receiptUrl: "" });
+      setBillLineItems([blankBillLine()]);
+      setBillWizardStep(1);
+    } catch (err) {
+      console.error("BILL SAVE ERROR:", err);
+      toast.error(err.message || "Bill save failed");
+    } finally {
+      setSavingBill(false);
+    }
+    };
+
     const saveExpense = async () => {
     try {
       const expenseErrors = validateExpensePayload({ ...expenseForm, amount: safeNumber(expenseForm.amount) });
@@ -3998,6 +4036,10 @@ export default function AccountingPortalPrototype() {
               saveSupplier={saveSupplier} deleteSupplier={deleteSupplier}
               saveAPCreditNote={saveAPCreditNote}
               getClientName={getClientName} totals={totals}
+              blankBillLine={blankBillLine} saveBill={saveBill}
+              openExpenseEditor={openExpenseEditor}
+              setImportType={setImportType} setImportRows={setImportRows}
+              setImportError={setImportError} setShowImportModal={setShowImportModal}
             />}
             {activePage === "income sources" && <IncomeSourcesPage
               incomeSources={incomeSources}

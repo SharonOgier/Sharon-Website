@@ -1,9 +1,9 @@
 import React, { useState, useMemo } from "react";
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // BillsPage
 // All state and handlers come from SharonPortalWebsite via props.
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 export default function BillsPage(props) {
   const {
@@ -66,6 +66,13 @@ export default function BillsPage(props) {
     getClientName,
     totals,
     knownSuppliers = Array.from(new Set((suppliers || []).map((s) => s?.name).filter(Boolean))),
+    blankBillLine,
+    saveBill,
+    openExpenseEditor = () => {},
+    setImportType = () => {},
+    setImportRows = () => {},
+    setImportError = () => {},
+    setShowImportModal = () => {},
   } = props;
 
     const todayKey = todayLocal();
@@ -121,7 +128,7 @@ export default function BillsPage(props) {
         >
           <MetricCard title="Total payable" value={currency(totalPayable)} subtitle="All unpaid supplier bills." accent={colours.purple} />
           <MetricCard title="Due in 7 days" value={currency(dueSoonBills.reduce((sum, item) => sum + safeNumber(item.amount), 0))} subtitle="Bills requiring attention soon." accent={colours.teal} />
-          <MetricCard title="Overdue" value={currency(overdueBills.reduce((sum, item) => sum + safeNumber(item.amount), 0))} subtitle="Bills past their due date." accent={colours.navy} />
+          <MetricCard title="Overdue" value={currency(overdueBills.reduce((sum, item) => sum + safeNumber(item.amount), 0))} subtitle="Bills past their due date." accent={colours.purple} />
           <MetricCard title="Bills recorded" value={String(billRows.length)} subtitle="All supplier bills from your expense records." accent={colours.purple} />
         </div>
 
@@ -136,7 +143,7 @@ export default function BillsPage(props) {
         />
 
         <SectionCard title="Enter Supplier Bill">
-          {/* ── Wizard progress bar ── */}
+          {/* -- Wizard progress bar -- */}
           <div style={{ display: "flex", alignItems: "center", marginBottom: 28 }}>
             {["Supplier", "Details", "Line Items", "Review & Save"].map((label, i) => {
               const step = i + 1;
@@ -149,7 +156,7 @@ export default function BillsPage(props) {
                     <div style={{ width: 32, height: 32, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 13,
                       background: done ? colours.teal : active ? colours.purple : colours.border,
                       color: done || active ? "#fff" : colours.muted, transition: "all 0.2s" }}>
-                      {done ? "✓" : step}
+                      {done ? "v" : step}
                     </div>
                     <div style={{ fontSize: 11, fontWeight: active ? 800 : 500, color: active ? colours.purple : done ? colours.teal : colours.muted, whiteSpace: "nowrap" }}>{label}</div>
                   </div>
@@ -203,9 +210,9 @@ export default function BillsPage(props) {
                   return (
                     <div style={{ ...cardStyle, padding: 14, background: colours.lightPurple, marginTop: 12, display: "grid", gap: 4 }}>
                       <div style={{ fontSize: 11, fontWeight: 800, color: colours.muted, textTransform: "uppercase", marginBottom: 4 }}>Supplier Details</div>
-                      {sup.contactPerson && <div style={{ fontSize: 13, color: colours.text }}>👤 {sup.contactPerson}</div>}
-                      {sup.email && <div style={{ fontSize: 13, color: colours.text }}>✉ {sup.email}</div>}
-                      {sup.phone && <div style={{ fontSize: 13, color: colours.text }}>📞 {sup.phone}</div>}
+                      {sup.contactPerson && <div style={{ fontSize: 13, color: colours.text }}> {sup.contactPerson}</div>}
+                      {sup.email && <div style={{ fontSize: 13, color: colours.text }}>Email: {sup.email}</div>}
+                      {sup.phone && <div style={{ fontSize: 13, color: colours.text }}>Ph: {sup.phone}</div>}
                       {sup.address && <div style={{ fontSize: 13, color: colours.muted }}>{sup.address}</div>}
                       {sup.abn && <div style={{ fontSize: 13, color: colours.muted }}>ABN: {sup.abn}</div>}
                     </div>
@@ -218,7 +225,7 @@ export default function BillsPage(props) {
                 </button>
                 <button style={{ ...buttonPrimary, opacity: expenseForm.supplier.trim() ? 1 : 0.4 }}
                   disabled={!expenseForm.supplier.trim()}
-                  onClick={() => setBillWizardStep(2)}>Next: Details →</button>
+                  onClick={() => setBillWizardStep(2)}>Next: Details</button>
               </div>
             </div>
           )}
@@ -243,8 +250,8 @@ export default function BillsPage(props) {
                 </div>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8 }}>
-                <button style={buttonSecondary} onClick={() => setBillWizardStep(1)}>← Back</button>
-                <button style={buttonPrimary} onClick={() => setBillWizardStep(3)}>Next: Line Items →</button>
+                <button style={buttonSecondary} onClick={() => setBillWizardStep(1)}>Back</button>
+                <button style={buttonPrimary} onClick={() => setBillWizardStep(3)}>Next: Line Items</button>
               </div>
             </div>
           )}
@@ -295,7 +302,7 @@ export default function BillsPage(props) {
                           <td style={{ padding: "8px 6px", width: 40 }}>
                             {billLineItems.length > 1 && (
                               <button onClick={() => setBillLineItems((prev) => prev.filter((_, i) => i !== idx))}
-                                style={{ background: "none", border: "none", cursor: "pointer", color: colours.muted, fontSize: 18, lineHeight: 1 }}>×</button>
+                                style={{ background: "none", border: "none", cursor: "pointer", color: colours.muted, fontSize: 18, lineHeight: 1 }}>x</button>
                             )}
                           </td>
                         </tr>
@@ -310,8 +317,8 @@ export default function BillsPage(props) {
                 <span style={{ fontSize: 13, color: colours.muted }}>{billLineItems.length} line{billLineItems.length !== 1 ? "s" : ""}</span>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8 }}>
-                <button style={buttonSecondary} onClick={() => setBillWizardStep(2)}>← Back</button>
-                <button style={buttonPrimary} onClick={() => setBillWizardStep(4)}>Next: Review →</button>
+                <button style={buttonSecondary} onClick={() => setBillWizardStep(2)}>Back</button>
+                <button style={buttonPrimary} onClick={() => setBillWizardStep(4)}>Next: Review</button>
               </div>
             </div>
           )}
@@ -338,7 +345,7 @@ export default function BillsPage(props) {
                   {billLineItems.filter(l => l.description || l.amount).map((item, idx) => (
                     <div key={idx} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: `1px solid ${colours.border}`, fontSize: 14 }}>
                       <div>
-                        <span style={{ fontWeight: 600 }}>{item.description || "—"}</span>
+                        <span style={{ fontWeight: 600 }}>{item.description || "--"}</span>
                         {item.category && <span style={{ color: colours.muted, marginLeft: 8, fontSize: 12 }}>{item.category}</span>}
                       </div>
                       <div style={{ textAlign: "right" }}>
@@ -353,41 +360,10 @@ export default function BillsPage(props) {
                   </div>
                 </div>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, marginTop: 8 }}>
-                  <button style={buttonSecondary} onClick={() => setBillWizardStep(3)}>← Back</button>
+                  <button style={buttonSecondary} onClick={() => setBillWizardStep(3)}>Back</button>
                   <div style={{ display: "flex", gap: 10 }}>
-                    <button style={buttonSecondary} onClick={() => {
-                      setExpenseForm({ date: todayLocal(), dueDate: addDaysEOM(todayLocal()), supplier: "", category: "", description: "", amount: "", expenseType: "", workType: profile.workType, receiptFileName: "", receiptUrl: "" });
-                      setBillLineItems([blankBillLine()]);
-                      setBillWizardStep(1);
-                    }}>Clear</button>
-                    <button style={buttonPrimary} disabled={savingBill} onClick={async () => {
-                      if (!expenseForm.supplier) { toast.warning("Supplier name is required"); return; }
-                      if (totalAmt <= 0) { toast.warning("Add at least one line with an amount"); return; }
-                      setSavingBill(true);
-                      const primaryCategory = billLineItems.find((l) => l.category)?.category || "Other";
-                      const combinedDesc = billLineItems.map((l) => l.description).filter(Boolean).join("; ");
-                      const payload = {
-                        ...expenseForm,
-                        category: primaryCategory,
-                        description: combinedDesc,
-                        amount: totalAmt,
-                        gst: totalGst,
-                        billLineItems,
-                        expenseType: "Bill / Payable",
-                      };
-                      try {
-                        const saved = await upsertRecordInDatabase(SUPABASE_TABLES.expenses, payload);
-                        setExpenses((prev) => [...prev, saved]);
-                        toast.success("Bill saved!");
-                        setExpenseForm({ date: todayLocal(), dueDate: addDaysEOM(todayLocal()), supplier: "", category: "", description: "", amount: "", expenseType: "", workType: profile.workType, receiptFileName: "", receiptUrl: "" });
-                        setBillLineItems([blankBillLine()]);
-                        setBillWizardStep(1);
-                      } catch (err) {
-                        toast.error(err.message || "Save failed");
-                      } finally {
-                        setSavingBill(false);
-                      }
-                    }}>{savingBill ? "Saving..." : "Save Bill ✓"}</button>
+                    <button style={buttonSecondary} onClick={() => saveBill && saveBill({ clear: true })}>Clear</button>
+                    <button style={buttonPrimary} disabled={savingBill} onClick={() => saveBill && saveBill({ totalAmt, totalGst })}>{savingBill ? "Saving..." : "Save Bill"}</button>
                   </div>
                 </div>
               </div>
@@ -398,12 +374,12 @@ export default function BillsPage(props) {
 
         <SectionCard title="Supplier Directory" right={
           <div style={{ display: "flex", gap: 8 }}>
-            <button style={buttonSecondary} onClick={() => { setImportType("suppliers"); setImportRows([]); setImportError(""); setShowImportModal(true); }}>⬆ Import</button>
+            <button style={buttonSecondary} onClick={() => { setImportType("suppliers"); setImportRows([]); setImportError(""); setShowImportModal(true); }}>Upload Import</button>
             <button style={buttonPrimary} onClick={() => { setSupplierForm({ name: "", email: "", phone: "", address: "", abn: "", contactPerson: "", notes: "" }); setEditingSupplierId(null); setShowSupplierModal(true); }}>+ Add Supplier</button>
           </div>
         }>
           <DataTable
-            emptyState={{ icon: "🏢", title: "No suppliers yet", message: "Save supplier details here so they auto-fill when you enter bills. Name, email, phone, address and ABN all stored." }}
+            emptyState={{ icon: "", title: "No suppliers yet", message: "Save supplier details here so they auto-fill when you enter bills. Name, email, phone, address and ABN all stored." }}
             columns={[
               { key: "name", label: "Supplier" },
               { key: "contactPerson", label: "Contact" },
@@ -423,7 +399,7 @@ export default function BillsPage(props) {
 
         <SectionCard title="Bills list" right={<div style={{ fontSize: 12, color: colours.muted }}>Based on expense records</div>}>
           <DataTable
-            emptyState={{ icon: "📄", title: "No bills yet", message: "Bills and payables you record will appear here. Use the form above to add your first bill." }}
+            emptyState={{ icon: "", title: "No bills yet", message: "Bills and payables you record will appear here. Use the form above to add your first bill." }}
             columns={[
               { key: "supplier", label: "Supplier" },
               { key: "category", label: "Category" },
