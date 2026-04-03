@@ -163,7 +163,7 @@ export function PaywallScreen({ profile, serverBaseUrl }) {
             <div style={{ fontSize: 36, fontWeight: 900, color: "#6A1B9A" }}>${DEFAULT_MONTHLY_SUBSCRIPTION}</div>
             <div style={{ fontSize: 14, color: "#64748B", marginTop: 4 }}>per month · cancel anytime</div>
           </div>
-          {error && <div style={{ background: "#FEE2E2", color: "#991B1B", borderRadius: 10, padding: "10px 14px", marginBottom: 16, fontSize: 13 }}>{error}</div>}
+          {error && <div style={{ background: "#FEE2E2", color: "#991B1B", borderRadius: 10, padding: "10px 14px", marginBottom: 18, fontSize: 13 }}>{error}</div>}
           <button onClick={handleSubscribe} disabled={loading} style={{ width: "100%", background: loading ? "#9CA3AF" : "#6A1B9A", color: "#fff", border: "none", borderRadius: 12, padding: "14px 20px", fontSize: 16, fontWeight: 800, cursor: loading ? "not-allowed" : "pointer" }}>
             {loading ? "Redirecting to checkout..." : "Subscribe now — $" + DEFAULT_MONTHLY_SUBSCRIPTION + "/month"}
           </button>
@@ -180,7 +180,7 @@ export function PaywallScreen({ profile, serverBaseUrl }) {
 
 export function SectionCard({ title, children, right }) {
   return (
-    <div className="sas-section-card" style={{ ...cardStyle, padding: 22 }}>
+    <div className="sas-section-card" style={{ ...cardStyle, padding: 22, overflow: "hidden" }}>
       <div
         style={{
           display: "flex",
@@ -209,13 +209,13 @@ export function SectionCard({ title, children, right }) {
 
 export function SummaryBox({ title, value, subtitle }) {
   return (
-    <div className="sas-summary-box" style={{ ...cardStyle, padding: 20, minHeight: 124, display: "flex", flexDirection: "column", justifyContent: "center" }}>
+    <div className="sas-summary-box" style={{ ...cardStyle, padding: 20, minHeight: 128 }}>
       <div style={{ fontSize: 13, fontWeight: 700, color: colours.muted }}>
         {title}
       </div>
       <div
         style={{
-          fontSize: 28,
+          fontSize: 30,
           fontWeight: 800,
           color: colours.text,
           marginTop: 6,
@@ -238,14 +238,14 @@ export function DashboardHero({ title, subtitle, highlight, children }) {
       className="sas-dashboard-hero sas-hero-grid"
       style={{
         background: `linear-gradient(135deg, ${colours.navy} 0%, ${colours.purple} 58%, ${colours.teal} 100%)`,
-        borderRadius: 28,
+        borderRadius: 26,
         padding: 30,
         color: "#FFFFFF",
         display: "grid",
         gridTemplateColumns: "minmax(0, 1.7fr) minmax(280px, 1fr)",
         gap: 24,
         alignItems: "stretch",
-        boxShadow: "0 22px 50px rgba(43, 47, 107, 0.16)",
+        boxShadow: "0 18px 40px rgba(43, 47, 107, 0.18)",
       }}
     >
       <div className="sas-hero-content" style={{ minWidth: 0 }}>
@@ -319,10 +319,10 @@ export function MetricCard({ title, value, subtitle, accent = colours.purple }) 
       className="sas-metric-card"
       style={{
         ...cardStyle,
-        padding: 20,
+        padding: 18,
         position: "relative",
         overflow: "hidden",
-        minHeight: 132,
+        minHeight: 144,
       }}
     >
       <div
@@ -352,7 +352,7 @@ export function ActionHubCard({ icon, title, description, buttonLabel, onClick, 
         display: "grid",
         gap: 12,
         border: `1px solid ${colours.border}`,
-        minHeight: 196,
+        minHeight: 208,
       }}
     >
       <div
@@ -534,8 +534,8 @@ export function DataTable({ columns, rows, emptyState }) {
     return <EmptyState {...emptyState} />;
   }
   return (
-    <div className="sas-table-wrap" style={{ overflowX: "auto" }}>
-      <table className="sas-data-table" style={{ width: "100%", borderCollapse: "collapse", minWidth: 780 }}>
+    <div className="sas-table-wrap" style={{ overflowX: "auto", border: `1px solid ${colours.border}`, borderRadius: 18, background: "#fff" }}>
+      <table className="sas-data-table" style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0, minWidth: 780 }}>
         <thead>
           <tr style={{ background: "#F8FAFC" }}>
             {columns.map((col) => (
@@ -543,7 +543,7 @@ export function DataTable({ columns, rows, emptyState }) {
                 key={col.key}
                 style={{
                   textAlign: "left",
-                  padding: 12,
+                  padding: "13px 14px",
                   fontSize: 13,
                   color: colours.muted,
                   borderBottom: `1px solid ${colours.border}`,
@@ -561,7 +561,7 @@ export function DataTable({ columns, rows, emptyState }) {
                 <td
                   key={col.key}
                   style={{
-                    padding: 12,
+                    padding: "13px 14px",
                     borderBottom: `1px solid ${colours.border}`,
                     fontSize: 14,
                     color: colours.text,

@@ -78,7 +78,7 @@ import {
 } from "./PortalDocumentBuilders";
 
 
-// ─── Page components ──────────────────────────────────────────────────────────
+// --- Page components ----------------------------------------------------------
 import DashboardPage        from "./pages/DashboardPage";
 import FinancialInsightsPage from "./pages/FinancialInsightsPage";
 import ClientsPage          from "./pages/ClientsPage";
@@ -94,7 +94,7 @@ import AuthPage             from "./pages/AuthPage";
 import BASReportPage        from "./pages/BASReportPage";
 import SettingsPage         from "./pages/SettingsPage";
 import ATOTaxFormPage       from "./ATOTaxFormPage";
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 
 export default function AccountingPortalPrototype() {
@@ -906,7 +906,7 @@ export default function AccountingPortalPrototype() {
         if (signUpData?.session) {
           toast.success("Account created! Welcome to the portal.");
         } else {
-          // Email confirmation is on — ask them to confirm
+          // Email confirmation is on -- ask them to confirm
           toast.success("Account created! Check your email to confirm, then sign in.");
           setAuthMode("signin");
         }
@@ -1252,8 +1252,8 @@ export default function AccountingPortalPrototype() {
       const failures = saveResults.filter((r) => !r.ok);
       if (failures.length) {
         const summary = failures.map((f) => `${f.name}: ${f.message}`).join("; ");
-        console.error("SUPABASE BULK SAVE — partial failure:", summary);
-        setSupabaseSyncStatus(`Saved with errors — ${summary}`);
+        console.error("SUPABASE BULK SAVE -- partial failure:", summary);
+        setSupabaseSyncStatus(`Saved with errors -- ${summary}`);
       } else {
         setSupabaseSyncStatus("All portal records saved to Supabase database");
       }
@@ -2536,7 +2536,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       const savedQuote = await upsertRecordInDatabase(SUPABASE_TABLES.quotes, acceptedQuote);
       setQuotes((prev) => prev.map((q) => q.id === quote.id ? savedQuote : q));
 
-      // 2. Build the invoice payload from the quote — preserve all line items, amounts, client
+      // 2. Build the invoice payload from the quote -- preserve all line items, amounts, client
       const invoiceNumber = nextNumber(profile.invoicePrefix, invoices, "invoiceNumber");
       const invoiceDate = todayLocal();
       const dueDate = addDays(invoiceDate, safeNumber(profile.paymentTermsDays) || 14);
@@ -3225,7 +3225,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
         type: "Invoice",
         sortDate: invoice.paidAt || invoice.invoiceDate || "",
         date: formatDateAU(invoice.paidAt || invoice.invoiceDate),
-        label: `${invoice.invoiceNumber || "Invoice"} · ${getClientName(invoice.clientId)}`,
+        label: `${invoice.invoiceNumber || "Invoice"} . ${getClientName(invoice.clientId)}`,
         caption: `${invoice.status || "Draft"} invoice`,
         value: currency(invoice.total),
       }));
@@ -3360,7 +3360,23 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     }
 
     if (!authUser) {
-    return renderAuthScreen();
+    return (
+      <AuthPage
+        authMode={authMode}
+        setAuthMode={setAuthMode}
+        authForm={authForm}
+        setAuthForm={setAuthForm}
+        authLoading={authLoading}
+        handleAuthSubmit={handleAuthSubmit}
+        handlePasswordReset={handlePasswordReset}
+        colours={colours}
+        cardStyle={cardStyle}
+        inputStyle={inputStyle}
+        labelStyle={labelStyle}
+        buttonPrimary={buttonPrimary}
+        buttonSecondary={buttonSecondary}
+      />
+    );
     }
 
     if (isResettingPassword) {
@@ -3417,14 +3433,28 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
     }
 
     if (!setupComplete) {
-    return renderSetupWizard();
+    return (
+      <SetupWizardPage
+        wizardForm={wizardForm}
+        setWizardForm={setWizardForm}
+        wizardSaving={wizardSaving}
+        completeSetupWizard={completeSetupWizard}
+        authUser={authUser}
+        colours={colours}
+        cardStyle={cardStyle}
+        inputStyle={inputStyle}
+        labelStyle={labelStyle}
+        buttonPrimary={buttonPrimary}
+        buttonSecondary={buttonSecondary}
+      />
+    );
     }
 
     if (profile?.accountStatus === "closed") {
     return (
       <div style={{ minHeight: "100vh", background: colours.bg, display: "flex", alignItems: "center", justifyContent: "center", padding: 24, fontFamily: "sans-serif" }}>
         <div style={{ maxWidth: 480, width: "100%", textAlign: "center" }}>
-          <div style={{ fontSize: 48, marginBottom: 16 }}>🔒</div>
+          <div style={{ fontSize: 48, marginBottom: 16 }}>[locked]</div>
           <div style={{ fontSize: 22, fontWeight: 800, color: colours.text, marginBottom: 10 }}>Account closed</div>
           <div style={{ fontSize: 15, color: colours.muted, lineHeight: 1.7, marginBottom: 28 }}>
             Your account has been closed. Your data is safe and your account can be reactivated at any time.
@@ -4038,11 +4068,11 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
       <ToastContainer toasts={toasts} onRemove={removeToast} />
       {confirmModal}
 
-      {/* ── Password Reset Sent Modal ── */}
+      {/* -- Password Reset Sent Modal -- */}
       {showResetSentModal && (
         <div style={{ position: "fixed", inset: 0, zIndex: 99999, background: "rgba(15,23,42,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
           <div style={{ background: "#fff", borderRadius: 18, padding: 36, width: "100%", maxWidth: 420, boxShadow: "0 20px 60px rgba(0,0,0,0.2)", textAlign: "center", fontFamily: "sans-serif" }}>
-            <div style={{ fontSize: 48, marginBottom: 16 }}>📧</div>
+            <div style={{ fontSize: 48, marginBottom: 16 }}>[email]</div>
             <div style={{ fontSize: 20, fontWeight: 800, color: "#14202B", marginBottom: 12 }}>Check your email</div>
             <div style={{ fontSize: 14, color: "#64748B", lineHeight: 1.7, marginBottom: 8 }}>
               A password reset link has been sent to
@@ -4061,7 +4091,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
         </div>
       )}
 
-      {/* ── Import Modal ── */}
+      {/* -- Import Modal -- */}
       {showImportModal && (
         <div style={{ position: "fixed", inset: 0, zIndex: 99993, background: "rgba(15,23,42,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
           <div style={{ background: "#fff", borderRadius: 18, padding: 28, width: "100%", maxWidth: 580, boxShadow: "0 20px 60px rgba(0,0,0,0.2)", fontFamily: "sans-serif", maxHeight: "90vh", overflowY: "auto" }}>
@@ -4081,17 +4111,17 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
 
             {/* How to section */}
             <div style={{ background: colours.lightPurple, borderRadius: 12, padding: 16, marginBottom: 20 }}>
-              <div style={{ fontSize: 13, fontWeight: 800, color: colours.purple, marginBottom: 10 }}>📋 How to import</div>
+              <div style={{ fontSize: 13, fontWeight: 800, color: colours.purple, marginBottom: 10 }}>[clipboard] How to import</div>
               <ol style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: colours.text, lineHeight: 2 }}>
                 <li>Click <strong>Download Template</strong> below to get the Excel/CSV file</li>
                 <li>Open it in Excel or Google Sheets</li>
-                <li>Fill in your {importType} — <strong>Name is required</strong>, all other columns are optional</li>
-                <li>Save as <strong>CSV</strong> (File → Save As → CSV)</li>
+                <li>Fill in your {importType} -- <strong>Name is required</strong>, all other columns are optional</li>
+                <li>Save as <strong>CSV</strong> (File - Save As - CSV)</li>
                 <li>Click <strong>Choose File</strong> below and select your saved CSV</li>
                 <li>Review the preview, then click <strong>Confirm Import</strong></li>
               </ol>
               <div style={{ marginTop: 12, fontSize: 12, color: colours.muted }}>
-                ℹ️ Duplicates are skipped automatically — existing {importType} with the same name won't be overwritten.
+                (i) Duplicates are skipped automatically -- existing {importType} with the same name won't be overwritten.
               </div>
             </div>
 
@@ -4113,7 +4143,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
             {/* Download template button */}
             <button onClick={() => downloadTemplate(importType)}
               style={{ ...buttonSecondary, marginBottom: 20, display: "flex", alignItems: "center", gap: 8 }}>
-              ⬇ Download {importType === "clients" ? "Clients" : "Suppliers"} Template
+              Download {importType === "clients" ? "Clients" : "Suppliers"} Template
             </button>
 
             {/* File upload */}
@@ -4141,14 +4171,14 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
             {/* Preview */}
             {importRows.length > 0 && (
               <div style={{ marginBottom: 20 }}>
-                <div style={{ fontSize: 13, fontWeight: 800, color: colours.text, marginBottom: 8 }}>Preview — {importRows.length} row{importRows.length !== 1 ? "s" : ""} ready to import</div>
+                <div style={{ fontSize: 13, fontWeight: 800, color: colours.text, marginBottom: 8 }}>Preview -- {importRows.length} row{importRows.length !== 1 ? "s" : ""} ready to import</div>
                 <div style={{ maxHeight: 200, overflowY: "auto", border: `1px solid ${colours.border}`, borderRadius: 10 }}>
                   {importRows.slice(0, 10).map((row, i) => (
                     <div key={i} style={{ padding: "10px 14px", borderBottom: `1px solid ${colours.border}`, fontSize: 13 }}>
                       <strong>{row.name}</strong>
-                      {row.businessName && <span style={{ color: colours.muted }}> — {row.businessName}</span>}
-                      {row.email && <span style={{ color: colours.muted }}> · {row.email}</span>}
-                      {row.phone && <span style={{ color: colours.muted }}> · {row.phone}</span>}
+                      {row.businessName && <span style={{ color: colours.muted }}> -- {row.businessName}</span>}
+                      {row.email && <span style={{ color: colours.muted }}> . {row.email}</span>}
+                      {row.phone && <span style={{ color: colours.muted }}> . {row.phone}</span>}
                     </div>
                   ))}
                   {importRows.length > 10 && <div style={{ padding: "8px 14px", fontSize: 12, color: colours.muted }}>...and {importRows.length - 10} more</div>}
@@ -4170,7 +4200,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
         </div>
       )}
 
-      {/* ── Client Modal ── */}
+      {/* -- Client Modal -- */}
       {showClientModal && (
         <div style={{ position: "fixed", inset: 0, zIndex: 99994, background: "rgba(15,23,42,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
           <div style={{ background: "#fff", borderRadius: 18, padding: 28, width: "100%", maxWidth: 500, boxShadow: "0 20px 60px rgba(0,0,0,0.2)", fontFamily: "sans-serif" }}>
@@ -4202,8 +4232,8 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
                   <option value="AUD $">AUD $</option>
                   <option value="USD $">USD $</option>
                   <option value="NZD $">NZD $</option>
-                  <option value="GBP £">GBP £</option>
-                  <option value="EUR €">EUR €</option>
+                  <option value="GBP">GBP</option>
+                  <option value="EUR">EUR</option>
                 </select>
               </div>
               <div style={{ gridColumn: "1 / -1" }}>
@@ -4227,7 +4257,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
         </div>
       )}
 
-      {/* ── Supplier Modal ── */}
+      {/* -- Supplier Modal -- */}
       {showSupplierModal && (
         <div style={{ position: "fixed", inset: 0, zIndex: 99995, background: "rgba(15,23,42,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
           <div style={{ background: "#fff", borderRadius: 18, padding: 28, width: "100%", maxWidth: 500, boxShadow: "0 20px 60px rgba(0,0,0,0.2)", fontFamily: "sans-serif" }}>
@@ -4274,13 +4304,13 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
         </div>
       )}
 
-      {/* ── AR Credit Note Modal ── */}
+      {/* -- AR Credit Note Modal -- */}
       {showARCreditNoteModal && creditNoteSource && (
         <div style={{ position: "fixed", inset: 0, zIndex: 99996, background: "rgba(15,23,42,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
           <div style={{ background: "#fff", borderRadius: 18, padding: 28, width: "100%", maxWidth: 440, boxShadow: "0 20px 60px rgba(0,0,0,0.2)", fontFamily: "sans-serif" }}>
             <div style={{ fontSize: 18, fontWeight: 800, color: colours.text, marginBottom: 4 }}>AR Credit Note</div>
             <div style={{ fontSize: 13, color: colours.muted, marginBottom: 20 }}>
-              Against invoice <strong>{creditNoteSource.invoiceNumber || creditNoteSource.id}</strong> — {getClientName(creditNoteSource.clientId)}
+              Against invoice <strong>{creditNoteSource.invoiceNumber || creditNoteSource.id}</strong> -- {getClientName(creditNoteSource.clientId)}
             </div>
             <div style={{ display: "grid", gap: 14 }}>
               <div>
@@ -4311,7 +4341,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
         </div>
       )}
 
-      {/* ── AP Credit Note Modal ── */}
+      {/* -- AP Credit Note Modal -- */}
       {showAPCreditNoteModal && creditNoteSource && (
         <div style={{ position: "fixed", inset: 0, zIndex: 99996, background: "rgba(15,23,42,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
           <div style={{ background: "#fff", borderRadius: 18, padding: 28, width: "100%", maxWidth: 440, boxShadow: "0 20px 60px rgba(0,0,0,0.2)", fontFamily: "sans-serif" }}>
@@ -4347,12 +4377,12 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
           </div>
         </div>
       )}
-      {/* ── Recurring Invoices Modal ── */}
+      {/* -- Recurring Invoices Modal -- */}
       {showRecurringModal && recurringDue.length > 0 && (
         <div style={{ position: "fixed", inset: 0, zIndex: 99996, background: "rgba(15,23,42,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
           <div style={{ background: "#fff", borderRadius: 18, padding: 28, width: "100%", maxWidth: 500, boxShadow: "0 20px 60px rgba(0,0,0,0.2)", fontFamily: "sans-serif" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
-              <div style={{ fontSize: 28 }}>🔁</div>
+              <div style={{ fontSize: 28 }}>[repeat]</div>
               <div>
                 <div style={{ fontSize: 17, fontWeight: 800, color: "#14202B" }}>Recurring Invoices Due</div>
                 <div style={{ fontSize: 13, color: "#64748B", marginTop: 2 }}>{recurringDue.length} invoice{recurringDue.length !== 1 ? "s" : ""} ready to be created</div>
@@ -4370,7 +4400,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 14, fontWeight: 700, color: colours.text }}>{inv.clientName}</div>
                     <div style={{ fontSize: 12, color: colours.muted, marginTop: 2 }}>
-                      {inv.recurs} · Due {formatDateAU(inv.dueRecurDate)} · {currency(safeNumber(inv.total))}
+                      {inv.recurs} . Due {formatDateAU(inv.dueRecurDate)} . {currency(safeNumber(inv.total))}
                     </div>
                   </div>
                   <span style={{ fontSize: 11, fontWeight: 700, color: colours.purple, background: colours.lightPurple, padding: "2px 8px", borderRadius: 6 }}>
@@ -4397,7 +4427,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
         <div style={{ position: "fixed", inset: 0, zIndex: 99997, background: "rgba(15,23,42,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
           <div style={{ background: "#fff", borderRadius: 18, padding: 28, width: "100%", maxWidth: 460, boxShadow: "0 20px 60px rgba(0,0,0,0.2)", fontFamily: "sans-serif" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
-              <div style={{ fontSize: 28 }}>🔔</div>
+              <div style={{ fontSize: 28 }}>[bell]</div>
               <div>
                 <div style={{ fontSize: 17, fontWeight: 800, color: "#14202B" }}>Bills & Payables Reminders</div>
                 <div style={{ fontSize: 13, color: "#64748B", marginTop: 2 }}>
@@ -4412,7 +4442,7 @@ body { font-family: Arial, sans-serif; padding: 40px; color: #14202B; }
                   background: alert.type === "overdue" ? "#FEF2F2" : alert.type === "today" ? "#FFF7ED" : "#FEFCE8",
                   border: `1px solid ${alert.type === "overdue" ? "#FECACA" : alert.type === "today" ? "#FED7AA" : "#FDE68A"}`,
                 }}>
-                  <div style={{ fontSize: 18 }}>{alert.type === "overdue" ? "🔴" : alert.type === "today" ? "🟠" : "🟡"}</div>
+                  <div style={{ fontSize: 18 }}>{alert.type === "overdue" ? "[red]" : alert.type === "today" ? "[orange]" : "[yellow]"}</div>
                   <div style={{ fontSize: 14, fontWeight: 600, color: alert.type === "overdue" ? "#991B1B" : alert.type === "today" ? "#92400E" : "#78350F" }}>
                     {alert.label}
                   </div>

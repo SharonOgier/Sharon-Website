@@ -281,27 +281,28 @@ export const inputStyle = {
   width: "100%",
   border: `1px solid ${colours.border}`,
   borderRadius: 12,
-  padding: "12px 14px",
+  padding: "11px 13px",
   fontSize: 14,
   lineHeight: 1.4,
   boxSizing: "border-box",
-  background: colours.white,
+  background: "#FCFDFE",
+  color: colours.text,
   boxShadow: "inset 0 1px 2px rgba(15, 23, 42, 0.03)",
 };
 
 export const labelStyle = {
   display: "block",
   fontSize: 13,
-  fontWeight: 700,
+  fontWeight: 600,
   color: colours.text,
-  marginBottom: 8,
+  marginBottom: 6,
 };
 
 export const cardStyle = {
   background: colours.white,
   border: `1px solid ${colours.border}`,
-  borderRadius: 22,
-  boxShadow: "0 12px 32px rgba(15, 23, 42, 0.06)",
+  borderRadius: 20,
+  boxShadow: "0 10px 30px rgba(15, 23, 42, 0.06)",
 };
 
 export const buttonPrimary = {
@@ -312,7 +313,7 @@ export const buttonPrimary = {
   padding: "11px 16px",
   fontWeight: 800,
   cursor: "pointer",
-  boxShadow: "0 10px 24px rgba(106, 27, 154, 0.18)",
+  boxShadow: "0 8px 18px rgba(106, 27, 154, 0.18)",
 };
 
 export const buttonSecondary = {
@@ -321,9 +322,9 @@ export const buttonSecondary = {
   border: `1px solid ${colours.border}`,
   borderRadius: 12,
   padding: "11px 16px",
-  fontWeight: 800,
+  fontWeight: 700,
   cursor: "pointer",
-  boxShadow: "0 6px 18px rgba(15, 23, 42, 0.04)",
+  boxShadow: "0 2px 10px rgba(15, 23, 42, 0.04)",
 };
 
 export const currency = (value) =>
