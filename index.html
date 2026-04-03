@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sharon's Accounting Service</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary: #6a1b9a;
+      --primary-dark: #4a136d;
+      --accent: #006d6d;
+      --bg: #f6f4fb;
+      --panel: #ffffff;
+      --panel-soft: #f4eef8;
+      --text: #1f2230;
+      --muted: #697083;
+      --border: #e8e0f0;
+      --shadow: 0 18px 45px rgba(106, 27, 154, 0.1);
+      --radius-xl: 24px;
+      --radius-lg: 18px;
+      --radius-md: 14px;
+      --sidebar-w: 250px;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      font-family: Inter, sans-serif;
+      background: linear-gradient(180deg, #faf8fd 0%, #f6f4fb 100%);
+      color: var(--text);
+    }
+
+    a { color: inherit; text-decoration: none; }
+
+    .site {
+      display: grid;
+      grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
+      gap: 1.5rem;
+      max-width: 1380px;
+      margin: 0 auto;
+      padding: 1.5rem;
+      align-items: start;
+    }
+
+    .main {
+      padding: 0;
+      min-width: 0;
+    }
+
+    .sidebar {
+      position: sticky;
+      top: 1.5rem;
+      align-self: start;
+      height: fit-content;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-xl);
+      padding: 1.1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      box-shadow: var(--shadow);
+    }
+
+    .brand {
+      background: linear-gradient(135deg, var(--primary), #8e24aa);
+      color: #fff;
+      border-radius: 22px;
+      padding: 1rem;
+      box-shadow: var(--shadow);
+    }
+
+    .brand img {
+      width: 100%;
+      max-width: 130px;
+      display: block;
+      margin: 0 auto 0.7rem;
+      border-radius: 14px;
+      background: rgba(255,255,255,0.15);
+      padding: 0.45rem;
+    }
+
+    .brand h2 {
+      font-size: 1rem;
+      line-height: 1.25;
+      margin: 0 0 0.4rem;
+      text-align: center;
+    }
+
+    .brand p {
+      margin: 0;
+      font-size: 0.84rem;
+      line-height: 1.5;
+      text-align: center;
+      color: rgba(255,255,255,0.9);
+    }
+
+    .menu {
+      display: grid;
+      gap: 0.55rem;
+    }
+
+    .menu-btn {
+      width: 100%;
+      border: 1px solid var(--border);
+      background: #fff;
+      color: var(--text);
+      border-radius: 14px;
+      padding: 0.88rem 0.95rem;
+      text-align: left;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+      transition: 0.2s ease;
+    }
+
+    .menu-btn:hover,
+    .menu-btn.active {
+      background: var(--panel-soft);
+      border-color: #d6c5e8;
+      color: var(--primary);
+    }
+
+    .sidebar-cta {
+      display: grid;
+      gap: 0.7rem;
+    }
+
+    .btn {
+      display: inline-flex;
+      justify-content: center;
+      align-items: center;
+      width: 100%;
+      padding: 0.92rem 1rem;
+      border-radius: 14px;
+      font-weight: 800;
+      border: 1px solid transparent;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: #fff;
+    }
+
+    .btn-secondary {
+      background: #fff;
+      color: var(--primary);
+      border-color: var(--border);
+    }
+
+    .page {
+      display: none;
+      max-width: 1080px;
+      margin: 0 auto;
+    }
+
+    .page.active { display: block; }
+
+    .hero {
+      display: grid;
+      grid-template-columns: 1.08fr 0.92fr;
+      gap: 1.2rem;
+      align-items: start;
+      margin-bottom: 1.2rem;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-xl);
+      box-shadow: var(--shadow);
+      padding: 1.5rem;
+    }
+
+    .eyebrow {
+      display: inline-block;
+      padding: 0.45rem 0.8rem;
+      border-radius: 999px;
+      background: var(--panel-soft);
+      color: var(--primary);
+      font-size: 0.86rem;
+      font-weight: 800;
+      margin-bottom: 1rem;
+    }
+
+    h1, h2, h3 { margin-top: 0; }
+
+    h1 {
+      font-size: clamp(2.2rem, 4vw, 3.7rem);
+      line-height: 1.05;
+      letter-spacing: -0.04em;
+      margin-bottom: 0.9rem;
+    }
+
+    h2 {
+      font-size: clamp(1.8rem, 3vw, 2.7rem);
+      letter-spacing: -0.03em;
+      margin-bottom: 0.9rem;
+    }
+
+    h3 {
+      font-size: 1.25rem;
+      margin-bottom: 0.65rem;
+    }
+
+    p, li, span {
+      color: var(--muted);
+      line-height: 1.7;
+      font-size: 1rem;
+    }
+
+    .button-row {
+      display: flex;
+      gap: 0.8rem;
+      flex-wrap: wrap;
+      margin-top: 1.2rem;
+    }
+
+    .button-row a {
+      width: auto;
+      min-width: 170px;
+    }
+
+    .stats,
+    .cards,
+    .team,
+    .contact-grid {
+      display: grid;
+      gap: 1rem;
+    }
+
+    .stats { grid-template-columns: repeat(2, 1fr); margin-top: 1.2rem; }
+    .cards { grid-template-columns: repeat(3, 1fr); }
+    .team { grid-template-columns: 1fr 1fr; }
+    .contact-grid { grid-template-columns: 1fr 1fr; }
+
+    .stat,
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow);
+      padding: 1.15rem;
+      height: 100%;
+    }
+
+    .stat strong {
+      display: block;
+      color: var(--primary);
+      font-size: 1.08rem;
+      margin-bottom: 0.3rem;
+    }
+
+    .icon {
+      width: 44px;
+      height: 44px;
+      display: grid;
+      place-items: center;
+      border-radius: 12px;
+      background: var(--panel-soft);
+      color: var(--primary);
+      font-weight: 800;
+      margin-bottom: 0.8rem;
+    }
+
+    .hero-shot {
+      width: 100%;
+      border-radius: 16px;
+      border: 1px solid var(--border);
+      display: block;
+      margin-top: 1rem;
+      background: #fff;
+    }
+
+    .portal-frame {
+      padding: 0.8rem;
+      background: #fbf9fd;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      margin-top: 1rem;
+    }
+
+    .section-gap { margin-top: 1.1rem; }
+
+    .quote-box {
+      background: linear-gradient(135deg, var(--primary), #8e24aa);
+      color: #fff;
+      border-radius: var(--radius-xl);
+      padding: 1.45rem;
+      box-shadow: var(--shadow);
+    }
+
+    .quote-box p,
+    .quote-box span {
+      color: rgba(255,255,255,0.92);
+      margin-bottom: 0;
+    }
+
+    .contact-list {
+      display: grid;
+      gap: 0.8rem;
+      margin-top: 1rem;
+    }
+
+    .contact-item {
+      background: var(--panel-soft);
+      border-radius: 14px;
+      padding: 0.9rem 1rem;
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    .home-grid-bottom {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.2rem;
+      margin-top: 1.2rem;
+    }
+
+    @media (max-width: 1050px) {
+      .site {
+        grid-template-columns: 1fr;
+        padding: 1.1rem;
+      }
+
+      .sidebar {
+        position: static;
+        height: auto;
+      }
+
+      .hero,
+      .cards,
+      .team,
+      .contact-grid,
+      .home-grid-bottom {
+        grid-template-columns: 1fr;
+      }
+
+      .stats {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .stats { grid-template-columns: 1fr; }
+      .sidebar { padding: 1rem; }
+      .button-row a { min-width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="site">
+    <aside class="sidebar">
+      <div class="brand">
+        <img src="https://152367768-799925207664624360.preview.editmysite.com/uploads/1/5/2/3/152367768/logo_orig.png" alt="Sharon's Accounting Service logo">
+        <h2>Sharon's Accounting Service</h2>
+        <p>Financial clarity and practical business insight for farms and small business.</p>
+      </div>
+
+      <nav class="menu">
+        <button class="menu-btn active" data-page="home">Home</button>
+        <button class="menu-btn" data-page="services">Services</button>
+        <button class="menu-btn" data-page="about">About</button>
+        <button class="menu-btn" data-page="portal">Portal</button>
+        <button class="menu-btn" data-page="contact">Contact</button>
+      </nav>
+
+      <div class="sidebar-cta">
+        <a class="btn btn-primary" href="https://portal.sharonogier.com/" target="_blank" rel="noopener">Portal Login</a>
+        <a class="btn btn-secondary" href="https://calendly.com/sharonogier-info" target="_blank" rel="noopener">Book a Review</a>
+      </div>
+    </aside>
+
+    <main class="main">
+      <section id="page-home" class="page active">
+        <div class="hero">
+          <div class="panel">
+            <div class="eyebrow">Clear systems for farms and small business</div>
+            <h1>Built for farms… but small business fits right in.</h1>
+            <p>
+              Sharon handles the financial side. Mitchell brings practical operational insight. Together, the service is built to help farms and small businesses make better decisions with clearer numbers and better systems.
+            </p>
+            <div class="button-row">
+              <a class="btn btn-primary" href="https://portal.sharonogier.com/" target="_blank" rel="noopener">Portal Login</a>
+              <a class="btn btn-secondary" href="https://calendly.com/sharonogier-info" target="_blank" rel="noopener">Book a Review</a>
+            </div>
+            <div class="stats">
+              <div class="stat"><strong>Financial clarity</strong><span>Reporting, structure and better business visibility.</span></div>
+              <div class="stat"><strong>Operational insight</strong><span>Practical support grounded in real experience.</span></div>
+              <div class="stat"><strong>Portal connected</strong><span>One place for invoices, expenses and records.</span></div>
+              <div class="stat"><strong>Built to be useful</strong><span>Less chaos. Better systems. Clearer decisions.</span></div>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="eyebrow">Portal preview</div>
+            <h3>Your business dashboard</h3>
+            <p>Use the portal to bring records, visibility and day-to-day management into one connected place.</p>
+            <div class="portal-frame">
+              <img class="hero-shot" src="https://152367768-799925207664624360.preview.editmysite.com/uploads/1/5/2/3/152367768/screenshot-76_orig.jpg" alt="Portal dashboard preview">
+            </div>
+          </div>
+        </div>
+
+        <div class="home-grid-bottom">
+          <div class="quote-box">
+            <h3 style="margin-bottom:0.5rem; color:#fff;">One system. Better decisions.</h3>
+            <p>Whether you are running a farm or a small business, the goal is the same: clear numbers, practical insight and a setup that actually works.</p>
+          </div>
+          <div class="panel">
+            <div class="eyebrow">Why it works</div>
+            <h3>Support that connects finance and operations</h3>
+            <p>You are not just getting bookkeeping. You are getting a clearer way to run the business, backed by financial structure and practical insight.</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="page-services" class="page">
+        <div class="panel">
+          <div class="eyebrow">Services</div>
+          <h2>Services that make sense in the real world</h2>
+          <p>
+            The service model is not just about bookkeeping tasks. It is about setting up better business decisions across finance, operations and day-to-day systems.
+          </p>
+        </div>
+        <div class="cards section-gap">
+          <div class="card">
+            <div class="icon">01</div>
+            <h3>Business Setup</h3>
+            <p>Set your business up properly from the start, whether it is a farm or a small business. Clean records, better structure and a stronger foundation.</p>
+          </div>
+          <div class="card">
+            <div class="icon">02</div>
+            <h3>Ongoing Support</h3>
+            <p>Bookkeeping, GST tracking, reporting and business organisation that keeps things moving through the year.</p>
+          </div>
+          <div class="card">
+            <div class="icon">03</div>
+            <h3>Performance & Profitability</h3>
+            <p>Understand where your business is making or losing money across jobs, services, operations or production.</p>
+          </div>
+          <div class="card">
+            <div class="icon">04</div>
+            <h3>Equipment & Operational Advisory</h3>
+            <p>Practical advice on equipment and operational decisions, especially valuable for farming businesses and useful for improving business efficiency more broadly.</p>
+          </div>
+          <div class="card">
+            <div class="icon">05</div>
+            <h3>Compliance & Financial Structure</h3>
+            <p>Support to keep records organised and the business structured properly so reporting and administration are more manageable.</p>
+          </div>
+          <div class="card">
+            <div class="icon">06</div>
+            <h3>Portal-Connected System</h3>
+            <p>One connected system for invoices, expenses, records and visibility so everything is easier to manage.</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="page-about" class="page">
+        <div class="panel">
+          <div class="eyebrow">About</div>
+          <h2>Sharon and Mitchell</h2>
+          <p>
+            This is a combined service built around financial clarity and practical business insight.
+          </p>
+        </div>
+        <div class="team section-gap">
+          <div class="card">
+            <div class="icon">S</div>
+            <h3>Sharon</h3>
+            <p>Sharon brings a strong analytical and professional foundation, holding bachelor degrees in Business and Data Analytics and Law, and is close to completing Accounting within the next six months.</p>
+            <p>Her focus is on financial clarity, reporting, structure and helping clients make informed business decisions.</p>
+          </div>
+          <div class="card">
+            <div class="icon">M</div>
+            <h3>Mitchell</h3>
+            <p>Mitchell brings extensive farming experience and can guide clients across farming operations, equipment upgrades and practical ways to improve efficiency.</p>
+            <p>His operational perspective complements the financial side of the business and strengthens decision-making.</p>
+          </div>
+        </div>
+        <div class="quote-box section-gap">
+          <h3 style="margin-bottom:0.5rem; color:#fff;">Together</h3>
+          <p>Together, Sharon and Mitchell provide a service designed for farming businesses and small business owners who want clearer decisions and better systems.</p>
+        </div>
+      </section>
+
+      <section id="page-portal" class="page">
+        <div class="panel">
+          <div class="eyebrow">Portal</div>
+          <h2>One place to run the moving parts</h2>
+          <p>
+            The portal ties the service together. It gives clients a central place for visibility, organisation and cleaner day-to-day management.
+          </p>
+        </div>
+        <div class="cards section-gap">
+          <div class="card">
+            <div class="icon">A</div>
+            <h3>Invoices</h3>
+            <p>Create and manage professional invoices within a cleaner system.</p>
+          </div>
+          <div class="card">
+            <div class="icon">B</div>
+            <h3>Expenses</h3>
+            <p>Track spending and keep records together instead of losing information across different places.</p>
+          </div>
+          <div class="card">
+            <div class="icon">C</div>
+            <h3>Reports</h3>
+            <p>Use reporting and visibility tools to better understand what is happening in the business.</p>
+          </div>
+        </div>
+        <div class="panel section-gap">
+          <img class="hero-shot" src="https://152367768-799925207664624360.preview.editmysite.com/uploads/1/5/2/3/152367768/screenshot-76_orig.jpg" alt="Portal dashboard preview">
+          <div class="button-row">
+            <a class="btn btn-primary" href="https://portal.sharonogier.com/" target="_blank" rel="noopener">Go to Portal</a>
+          </div>
+        </div>
+      </section>
+
+      <section id="page-contact" class="page">
+        <div class="panel">
+          <div class="eyebrow">Contact</div>
+          <h2>Ready to tidy things up?</h2>
+          <p>
+            Start with a review, then build a better system from there.
+          </p>
+          <div class="contact-grid section-gap">
+            <div class="card">
+              <h3>Get in touch</h3>
+              <div class="contact-list">
+                <div class="contact-item">Email: info@sharonogier.com</div>
+                <div class="contact-item">Phone: 1300 017 167</div>
+                <div class="contact-item">Location focus: Casino NSW and surrounding areas</div>
+              </div>
+            </div>
+            <div class="card">
+              <h3>Next step</h3>
+              <p>Use the booking link for a review or head straight into the portal if you are already a client.</p>
+              <div class="button-row">
+                <a class="btn btn-primary" href="https://calendly.com/sharonogier-info" target="_blank" rel="noopener">Book a Review</a>
+                <a class="btn btn-secondary" href="https://portal.sharonogier.com/" target="_blank" rel="noopener">Portal Login</a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const buttons = document.querySelectorAll('.menu-btn');
+    const pages = document.querySelectorAll('.page');
+
+    buttons.forEach((button) => {
+      button.addEventListener('click', () => {
+        const target = button.dataset.page;
+
+        buttons.forEach((btn) => btn.classList.remove('active'));
+        pages.forEach((page) => page.classList.remove('active'));
+
+        button.classList.add('active');
+        document.getElementById(`page-${target}`).classList.add('active');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+    });
+  </script>
+</body>
+</html>
