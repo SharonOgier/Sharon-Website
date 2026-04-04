@@ -66,6 +66,11 @@ const EMAIL_REPLY_TO = String(process.env.EMAIL_REPLY_TO || "").trim();
 
 const stripeSecretKey = String(process.env.STRIPE_SECRET_KEY || "").trim();
 const stripe = stripeSecretKey ? new Stripe(stripeSecretKey) : null;
+const paypalClientId = String(process.env.PAYPAL_CLIENT_ID || "").trim();
+const paypalClientSecret = String(process.env.PAYPAL_CLIENT_SECRET || "").trim();
+const paypalBaseUrl = process.env.PAYPAL_ENV === "live"
+  ? "https://api-m.paypal.com"
+  : "https://api-m.sandbox.paypal.com";
 const resend = resendApiKey ? new Resend(resendApiKey) : null;
 app.use("/api/stripe-webhook", express.raw({ type: "application/json" }));
 app.use(express.json({ limit: "10mb" }));
@@ -149,6 +154,7 @@ app.use("/api/send-invoice-attachment-email", emailRateLimit);
 const stripeRateLimit = rateLimit({ windowMs: 10 * 60_000, max: 10 });
 app.use("/api/create-checkout-session", stripeRateLimit);
 app.use("/api/create-subscription-checkout", stripeRateLimit);
+app.use("/api/create-paypal-order", rateLimit({ windowMs: 10 * 60_000, max: 10 }));
 
 // ── PDF generation: max 20 per minute per IP ─────────────────
 app.use("/api/test-pdf", rateLimit({ windowMs: 60_000, max: 20 }));
@@ -837,6 +843,139 @@ app.post("/api/create-checkout-session", async (req, res) => {
   }
 });
 
+
+// ── PayPal order creation ─────────────────────────────────────
+app.post("/api/create-paypal-order", async (req, res) => {
+  try {
+    if (!paypalClientId || !paypalClientSecret) {
+      return res.status(500).json({ ok: false, error: "PayPal is not configured." });
+    }
+
+    const {
+      invoiceId,
+      invoiceNumber,
+      customerName,
+      customerEmail,
+      description,
+      currency,
+      amount,
+      total,
+      totalAmount,
+      invoiceTotal,
+      grandTotal,
+      successUrl,
+      cancelUrl,
+    } = req.body || {};
+
+    const rawAmount = amount ?? total ?? totalAmount ?? invoiceTotal ?? grandTotal ?? 0;
+    const resolvedAmount = safeNumber(rawAmount);
+
+    if (!resolvedAmount || resolvedAmount <= 0) {
+      return res.status(400).json({
+        ok: false,
+        error: "Invoice amount is required and must be greater than zero.",
+      });
+    }
+
+    const resolvedCurrency = String(currency || "AUD").toUpperCase();
+    const resolvedDescription = description || `Invoice ${invoiceNumber || invoiceId || ""}`.trim();
+
+    const requestOrigin = String(req.headers.origin || "").trim();
+    const fallbackBaseUrl =
+      (requestOrigin && isSafeHttpsUrl(requestOrigin) && requestOrigin) ||
+      CLIENT_URLS.find((url) => isSafeHttpsUrl(url)) ||
+      "http://localhost:5173";
+
+    const resolvedSuccessUrl = String(
+      successUrl || `${fallbackBaseUrl}?paypal=success&invoice=${encodeURIComponent(String(invoiceNumber || ""))}&invoiceId=${encodeURIComponent(String(invoiceId || ""))}`
+    ).trim();
+
+    const resolvedCancelUrl = String(
+      cancelUrl || `${fallbackBaseUrl}?paypal=cancel&invoice=${encodeURIComponent(String(invoiceNumber || ""))}&invoiceId=${encodeURIComponent(String(invoiceId || ""))}`
+    ).trim();
+
+    // Step 1: Get PayPal access token
+    const authResponse = await fetch(`${paypalBaseUrl}/v1/oauth2/token`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Authorization": "Basic " + Buffer.from(`${paypalClientId}:${paypalClientSecret}`).toString("base64"),
+      },
+      body: "grant_type=client_credentials",
+    });
+
+    if (!authResponse.ok) {
+      const authError = await authResponse.text();
+      console.error("PayPal auth failed:", authError);
+      return res.status(500).json({ ok: false, error: "PayPal authentication failed." });
+    }
+
+    const { access_token } = await authResponse.json();
+
+    // Step 2: Create the order
+    const orderPayload = {
+      intent: "CAPTURE",
+      purchase_units: [
+        {
+          reference_id: String(invoiceId || invoiceNumber || ""),
+          description: resolvedDescription,
+          custom_id: String(invoiceNumber || invoiceId || ""),
+          invoice_id: String(invoiceNumber || invoiceId || ""),
+          amount: {
+            currency_code: resolvedCurrency,
+            value: resolvedAmount.toFixed(2),
+          },
+        },
+      ],
+      application_context: {
+        brand_name: "Sharon's Accounting Service",
+        landing_page: "BILLING",
+        user_action: "PAY_NOW",
+        return_url: resolvedSuccessUrl,
+        cancel_url: resolvedCancelUrl,
+      },
+    };
+
+    const orderResponse = await fetch(`${paypalBaseUrl}/v2/checkout/orders`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${access_token}`,
+        "PayPal-Request-Id": `sharon-${invoiceId || invoiceNumber || Date.now()}`,
+      },
+      body: JSON.stringify(orderPayload),
+    });
+
+    if (!orderResponse.ok) {
+      const orderError = await orderResponse.text();
+      console.error("PayPal order creation failed:", orderError);
+      return res.status(500).json({ ok: false, error: "PayPal order creation failed.", details: orderError });
+    }
+
+    const order = await orderResponse.json();
+
+    // Find the approve link
+    const approveLink = order.links?.find((l) => l.rel === "approve")?.href || null;
+
+    console.log("PayPal order created:", order.id, "amount:", resolvedAmount, currency, "invoice:", invoiceNumber);
+
+    return res.json({
+      ok: true,
+      orderId: order.id,
+      url: approveLink,
+      status: order.status,
+    });
+
+  } catch (error) {
+    console.error("PayPal order creation error:", error);
+    return res.status(500).json({
+      ok: false,
+      error: "PayPal order creation failed.",
+      details: error.message,
+    });
+  }
+});
+
 app.post("/api/send-document-email", async (req, res) => {
   console.log("[EMAIL] Route hit, body size:", JSON.stringify(req.body || {}).length, "keys:", Object.keys(req.body || {}));
   try {
@@ -1290,4 +1429,5 @@ app.listen(PORT, () => {
     .catch((error) => console.error("Chromium diagnostics failed:", error));
   if (!stripeSecretKey) console.warn("WARNING: STRIPE_SECRET_KEY is not set.");
   if (!resendApiKey) console.warn("WARNING: RESEND_API_KEY is not set.");
+  if (!paypalClientId || !paypalClientSecret) console.warn("WARNING: PAYPAL_CLIENT_ID / PAYPAL_CLIENT_SECRET not set — PayPal payments disabled.");
 });
