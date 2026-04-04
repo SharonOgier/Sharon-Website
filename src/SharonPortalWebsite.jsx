@@ -1626,6 +1626,64 @@ export default function AccountingPortalPrototype() {
     };
   };
 
+  const getResolvedPayPalBusinessEmail = () => {
+    const candidates = [
+      profile?.paypalBusinessEmail,
+      profile?.paypalEmail,
+      profile?.paypalPaymentLink,
+    ];
+
+    for (const candidate of candidates) {
+      const value = String(candidate || "").trim();
+      if (!value) continue;
+      if (/^https?:\/\//i.test(value)) continue;
+      if (isValidEmail(value)) return value;
+    }
+
+    return "";
+  };
+
+  const buildPayPalCheckoutUrl = (documentRecord = {}) => {
+    const businessEmail = getResolvedPayPalBusinessEmail();
+    if (!businessEmail) return "";
+
+    const resolvedTotal = safeNumber(
+      documentRecord?.total ??
+      documentRecord?.grandTotal ??
+      documentRecord?.invoiceTotal ??
+      documentRecord?.amount ??
+      documentRecord?.totalAmount
+    );
+
+    if (resolvedTotal <= 0) return "";
+
+    const currencyCode = String(documentRecord?.currencyCode || "AUD").trim().toUpperCase() || "AUD";
+    const documentNumber = String(
+      documentRecord?.invoiceNumber ||
+      documentRecord?.quoteNumber ||
+      documentRecord?.paymentReference ||
+      documentRecord?.id ||
+      "Portal payment"
+    ).trim();
+
+    const params = new URLSearchParams({
+      cmd: '_xclick',
+      business: businessEmail,
+      amount: resolvedTotal.toFixed(2),
+      currency_code: currencyCode,
+      item_name: documentRecord?.invoiceNumber
+        ? `Invoice ${documentNumber}`
+        : documentRecord?.quoteNumber
+          ? `Quote ${documentNumber}`
+          : documentNumber,
+      invoice: documentNumber,
+      custom: documentRecord?.paymentReference || documentNumber,
+      no_shipping: '1',
+    });
+
+    return `https://www.paypal.com/cgi-bin/webscr?${params.toString()}`;
+  };
+
   const sendSavedDocumentEmail = async ({ documentType, documentRecord }) => {
   let emailDocumentRecord = { ...(documentRecord || {}) };
   let stripeCheckoutUrl = emailDocumentRecord?.stripeCheckoutUrl || "";
@@ -1680,6 +1738,8 @@ export default function AccountingPortalPrototype() {
     emailDocumentRecord?.amount ??
     emailDocumentRecord?.totalAmount
   );
+
+  const paypalCheckoutUrl = documentType === "invoice" ? buildPayPalCheckoutUrl(emailDocumentRecord) : "";
 
   // Build self-contained HTML email body -- no logo, no interactive buttons
   const emailClient = getClientById(emailDocumentRecord?.clientId);
@@ -1809,7 +1869,7 @@ export default function AccountingPortalPrototype() {
       </tr>
 
       <!-- Payment Details (invoices only) -->
-      ${isInvoice && (profile?.bankName || profile?.bsb || profile?.accountNumber || profile?.payId || profile?.stripePaymentLink || profile?.paypalPaymentLink || stripeCheckoutUrl || emailDocumentRecord?.paymentReference) ? `
+      ${isInvoice && (profile?.bankName || profile?.bsb || profile?.accountNumber || profile?.payId || profile?.stripePaymentLink || paypalCheckoutUrl || stripeCheckoutUrl || emailDocumentRecord?.paymentReference) ? `
       <tr>
         <td colspan="2" style="padding:16px 32px 0;">
           <div style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:10px;padding:18px 20px;">
@@ -1836,10 +1896,10 @@ export default function AccountingPortalPrototype() {
                 <td style="padding:4px 0;font-size:13px;color:#14532D;font-weight:600;">${profile.payId}</td>
               </tr>` : ""}
             </table>
-            ${(stripeCheckoutUrl || profile?.stripePaymentLink || profile?.paypalPaymentLink) ? `
+            ${(stripeCheckoutUrl || profile?.stripePaymentLink || paypalCheckoutUrl) ? `
             <div style="margin-top:14px;padding-top:14px;border-top:1px solid #BBF7D0;">
               ${(stripeCheckoutUrl || profile?.stripePaymentLink) ? `<a href="${stripeCheckoutUrl || profile.stripePaymentLink}" style="display:inline-block;background:#6A1B9A;color:#ffffff;text-decoration:none;font-weight:700;font-size:14px;padding:11px 28px;border-radius:8px;margin-right:10px;">Pay with Card</a>` : ""}
-              ${profile?.paypalPaymentLink ? `<a href="${profile.paypalPaymentLink}" style="display:inline-block;background:#003087;color:#ffffff;text-decoration:none;font-weight:700;font-size:14px;padding:11px 28px;border-radius:8px;">Pay with PayPal</a>` : ""}
+              ${paypalCheckoutUrl ? `<a href="${paypalCheckoutUrl}" style="display:inline-block;background:#003087;color:#ffffff;text-decoration:none;font-weight:700;font-size:14px;padding:11px 28px;border-radius:8px;">Pay with PayPal</a>` : ""}
             </div>` : ""}
           </div>
         </td>

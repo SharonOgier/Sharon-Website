@@ -34,6 +34,7 @@ export default function DocumentsPage(props) {
     openDocumentEditor,
     closeDocumentEditor,
     saveDocumentEdits,
+    openDocumentFile = null,
   } = props;
 
     const recentDocs = [...documents].sort((a, b) => new Date(b.uploadedAt || 0) - new Date(a.uploadedAt || 0)).slice(0, 1);
@@ -76,8 +77,11 @@ export default function DocumentsPage(props) {
               { key: "uploadedAt", label: "Uploaded", render: (v) => formatDateAU(v) },
               { key: "actions", label: "", render: (_, row) => (
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  {row.url && (
-                    <button style={{ ...buttonSecondary, color: colours.teal, borderColor: colours.teal }} onClick={() => window.open(row.url, "_blank")}>View</button>
+                  {(row.filePath || row.url) && (
+                    <button
+                      style={{ ...buttonSecondary, color: colours.teal, borderColor: colours.teal }}
+                      onClick={() => openDocumentFile ? openDocumentFile(row) : row.url && window.open(row.url, "_blank", "noopener,noreferrer")}
+                    >View</button>
                   )}
                   <button style={buttonSecondary} onClick={() => openDocumentEditor(row)}>Edit</button>
                   <button style={buttonSecondary} onClick={() => deleteDocument(row.id)}>Delete</button>
@@ -97,7 +101,7 @@ export default function DocumentsPage(props) {
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14 }}>
               <div><label style={labelStyle}>Document name</label><input style={inputStyle} value={documentEditorForm.name || ""} onChange={(e) => setDocumentEditorForm((prev) => ({ ...prev, name: e.target.value }))} /></div>
-              <div><label style={labelStyle}>URL</label><input style={inputStyle} value={documentEditorForm.url || ""} onChange={(e) => setDocumentEditorForm((prev) => ({ ...prev, url: e.target.value }))} /></div>
+              <div><label style={labelStyle}>{documentEditorForm.filePath ? "Stored file path" : "URL"}</label><input style={inputStyle} value={documentEditorForm.filePath || documentEditorForm.url || ""} onChange={(e) => !documentEditorForm.filePath && setDocumentEditorForm((prev) => ({ ...prev, url: e.target.value }))} readOnly={Boolean(documentEditorForm.filePath)} /></div>
             </div>
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, marginTop: 16 }}>
               <button style={buttonSecondary} onClick={closeDocumentEditor}>Cancel</button>

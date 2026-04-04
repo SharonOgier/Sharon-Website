@@ -250,13 +250,16 @@ export default function SettingsPage(props) {
             </div>
 
             <div style={{ gridColumn: "1 / -1" }}>
-              <label style={labelStyle}>PayPal Payment Link</label>
+              <label style={labelStyle}>PayPal Business Email</label>
               <input
                 style={inputStyle}
-                value={profile.paypalPaymentLink || ""}
-                onChange={(e) => setProfile({ ...profile, paypalPaymentLink: e.target.value })}
-                placeholder="https://www.paypal.com/paypalme/yourname"
+                value={profile.paypalBusinessEmail || ""}
+                onChange={(e) => setProfile({ ...profile, paypalBusinessEmail: e.target.value.trim() })}
+                placeholder="your-paypal-email@example.com"
               />
+              <div style={{ fontSize: 12, color: colours.muted, marginTop: 4 }}>
+                Used to generate a PayPal checkout link with the invoice amount prefilled. Do not use a PayPal.Me link here.
+              </div>
             </div>
 
             <div style={{ gridColumn: "1 / -1" }}>

@@ -147,6 +147,8 @@ export default function AuthPage(props) {
                 <label style={labelStyle}>Email</label>
                 <input
                   style={inputStyle}
+                  type="email"
+                  autoComplete="email"
                   value={authForm.email}
                   onChange={(e) => setAuthForm((prev) => ({ ...prev, email: e.target.value }))}
                   placeholder="you@example.com"
@@ -156,10 +158,11 @@ export default function AuthPage(props) {
                 <label style={labelStyle}>Password</label>
                 <input
                   type="password"
+                  autoComplete={authMode === "signup" ? "new-password" : "current-password"}
                   style={inputStyle}
                   value={authForm.password}
                   onChange={(e) => setAuthForm((prev) => ({ ...prev, password: e.target.value }))}
-                  placeholder="Enter your password"
+                  placeholder={authMode === "signup" ? "Minimum 8 characters, upper/lowercase and a number" : "Enter your password"}
                 />
               </div>
               {authMode === "signup" ? (
@@ -175,6 +178,10 @@ export default function AuthPage(props) {
                 </div>
               ) : null}
             </div>
+
+            {authMode === "signup" ? (
+              <div style={{ fontSize: 12, color: colours.muted, lineHeight: 1.7 }}>Use at least 8 characters with upper-case, lower-case and a number.</div>
+            ) : null}
 
             <div style={{ display: "grid", gap: 10 }}>
               <button style={{ ...buttonPrimary, width: "100%", justifyContent: "center" }} onClick={handleAuthSubmit} disabled={authLoading}>

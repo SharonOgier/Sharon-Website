@@ -61,6 +61,7 @@ export default function ExpensesPage(props) {
     nextExpenseModalStep,
     totals,
     uploadReceiptToSupabase,
+    openReceiptFile = null,
   } = props;
 
     const totalExpenseAmt = expenses.reduce((s, e) => s + safeNumber(e.amount), 0);
@@ -240,10 +241,10 @@ export default function ExpensesPage(props) {
               label: "Actions",
               render: (_, row) => (
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  {row.receiptUrl ? (
+                  {row.filePath || row.receiptUrl ? (
                     <button
                       style={buttonPrimary}
-                      onClick={() => window.open(row.receiptUrl, "_blank")}
+                      onClick={() => openReceiptFile ? openReceiptFile(row) : row.receiptUrl && window.open(row.receiptUrl, "_blank", "noopener,noreferrer")}
                     >
                       View Receipt
                     </button>

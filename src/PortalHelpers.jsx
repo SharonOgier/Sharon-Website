@@ -136,6 +136,40 @@ export const getApiBaseUrl = (preferredValue = "") => {
 export const LOCKED_FEE_RATE_PERCENT = 1;
 export const DEFAULT_MONTHLY_SUBSCRIPTION = 45;
 
+export const STORAGE_SIGNED_URL_TTL_SECONDS = 60 * 30;
+
+export const isStrongPassword = (value) => {
+  const raw = String(value || "");
+  return raw.length >= 8 && /[A-Z]/.test(raw) && /[a-z]/.test(raw) && /\d/.test(raw);
+};
+
+export const sanitiseStorageFileName = (value) =>
+  String(value || "file")
+    .trim()
+    .replace(/[^a-zA-Z0-9._-]/g, "_")
+    .replace(/_+/g, "_")
+    .slice(0, 120) || "file";
+
+export const buildScopedStoragePath = ({ userId, area = "files", dateKey = "", fileName = "file" }) => {
+  const safeUserId = String(userId || "anonymous")
+    .replace(/[^a-zA-Z0-9_-]/g, "-")
+    .replace(/-+/g, "-")
+    .slice(0, 80) || "anonymous";
+  const safeArea = String(area || "files")
+    .replace(/[^a-zA-Z0-9/_-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^\/+|\/+$/g, "") || "files";
+  const safeDateKey = String(dateKey || "")
+    .replace(/[^0-9-]/g, "")
+    .slice(0, 10);
+  const safeName = sanitiseStorageFileName(fileName);
+  const randomSuffix = Math.random().toString(36).slice(2, 10);
+  const parts = ["users", safeUserId, safeArea];
+  if (safeDateKey) parts.push(safeDateKey);
+  parts.push(`${Date.now()}-${randomSuffix}-${safeName}`);
+  return parts.join("/");
+};
+
 export const SUPABASE_STORAGE_BUCKET = "receipts";
 
 export const SUPABASE_TABLES = {
@@ -150,7 +184,7 @@ export const SUPABASE_TABLES = {
   suppliers: "sas_suppliers",
 };
 
-const SUPABASE_SCHEMA_SQL = `-- Run this once in Supabase SQL Editor
+export const SUPABASE_SCHEMA_SQL = `-- Run this once in Supabase SQL Editor
 create table if not exists sas_profile (
   id bigint primary key,
   user_id text not null,
@@ -221,7 +255,62 @@ create table if not exists sas_suppliers (
   data jsonb not null default '{}'::jsonb,
   updated_at timestamptz not null default timezone('utc', now())
 );
-create index if not exists sas_suppliers_user_id_idx on sas_suppliers (user_id);`;
+create index if not exists sas_suppliers_user_id_idx on sas_suppliers (user_id);
+
+alter table sas_profile enable row level security;
+alter table sas_clients enable row level security;
+alter table sas_invoices enable row level security;
+alter table sas_quotes enable row level security;
+alter table sas_expenses enable row level security;
+alter table sas_income_sources enable row level security;
+alter table sas_services enable row level security;
+alter table sas_documents enable row level security;
+alter table sas_suppliers enable row level security;
+
+create policy if not exists "profile_select_own" on sas_profile for select using (auth.uid()::text = user_id);
+create policy if not exists "profile_insert_own" on sas_profile for insert with check (auth.uid()::text = user_id);
+create policy if not exists "profile_update_own" on sas_profile for update using (auth.uid()::text = user_id) with check (auth.uid()::text = user_id);
+create policy if not exists "profile_delete_own" on sas_profile for delete using (auth.uid()::text = user_id);
+
+create policy if not exists "clients_select_own" on sas_clients for select using (auth.uid()::text = user_id);
+create policy if not exists "clients_insert_own" on sas_clients for insert with check (auth.uid()::text = user_id);
+create policy if not exists "clients_update_own" on sas_clients for update using (auth.uid()::text = user_id) with check (auth.uid()::text = user_id);
+create policy if not exists "clients_delete_own" on sas_clients for delete using (auth.uid()::text = user_id);
+
+create policy if not exists "invoices_select_own" on sas_invoices for select using (auth.uid()::text = user_id);
+create policy if not exists "invoices_insert_own" on sas_invoices for insert with check (auth.uid()::text = user_id);
+create policy if not exists "invoices_update_own" on sas_invoices for update using (auth.uid()::text = user_id) with check (auth.uid()::text = user_id);
+create policy if not exists "invoices_delete_own" on sas_invoices for delete using (auth.uid()::text = user_id);
+
+create policy if not exists "quotes_select_own" on sas_quotes for select using (auth.uid()::text = user_id);
+create policy if not exists "quotes_insert_own" on sas_quotes for insert with check (auth.uid()::text = user_id);
+create policy if not exists "quotes_update_own" on sas_quotes for update using (auth.uid()::text = user_id) with check (auth.uid()::text = user_id);
+create policy if not exists "quotes_delete_own" on sas_quotes for delete using (auth.uid()::text = user_id);
+
+create policy if not exists "expenses_select_own" on sas_expenses for select using (auth.uid()::text = user_id);
+create policy if not exists "expenses_insert_own" on sas_expenses for insert with check (auth.uid()::text = user_id);
+create policy if not exists "expenses_update_own" on sas_expenses for update using (auth.uid()::text = user_id) with check (auth.uid()::text = user_id);
+create policy if not exists "expenses_delete_own" on sas_expenses for delete using (auth.uid()::text = user_id);
+
+create policy if not exists "income_sources_select_own" on sas_income_sources for select using (auth.uid()::text = user_id);
+create policy if not exists "income_sources_insert_own" on sas_income_sources for insert with check (auth.uid()::text = user_id);
+create policy if not exists "income_sources_update_own" on sas_income_sources for update using (auth.uid()::text = user_id) with check (auth.uid()::text = user_id);
+create policy if not exists "income_sources_delete_own" on sas_income_sources for delete using (auth.uid()::text = user_id);
+
+create policy if not exists "services_select_own" on sas_services for select using (auth.uid()::text = user_id);
+create policy if not exists "services_insert_own" on sas_services for insert with check (auth.uid()::text = user_id);
+create policy if not exists "services_update_own" on sas_services for update using (auth.uid()::text = user_id) with check (auth.uid()::text = user_id);
+create policy if not exists "services_delete_own" on sas_services for delete using (auth.uid()::text = user_id);
+
+create policy if not exists "documents_select_own" on sas_documents for select using (auth.uid()::text = user_id);
+create policy if not exists "documents_insert_own" on sas_documents for insert with check (auth.uid()::text = user_id);
+create policy if not exists "documents_update_own" on sas_documents for update using (auth.uid()::text = user_id) with check (auth.uid()::text = user_id);
+create policy if not exists "documents_delete_own" on sas_documents for delete using (auth.uid()::text = user_id);
+
+create policy if not exists "suppliers_select_own" on sas_suppliers for select using (auth.uid()::text = user_id);
+create policy if not exists "suppliers_insert_own" on sas_suppliers for insert with check (auth.uid()::text = user_id);
+create policy if not exists "suppliers_update_own" on sas_suppliers for update using (auth.uid()::text = user_id) with check (auth.uid()::text = user_id);
+create policy if not exists "suppliers_delete_own" on sas_suppliers for delete using (auth.uid()::text = user_id);`;
 
 export const GST_TYPE_OPTIONS = [
   { value: "GST on Income (10%)", label: "GST on Income (10%)" },
