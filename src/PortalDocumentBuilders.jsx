@@ -291,7 +291,7 @@ const escapeHtml = (value) =>
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
 
-// Only allow genuine base64 image data URLs -- prevents HTML/script injection via logo field
+// Only allow genuine base64 image data URLs — prevents HTML/script injection via logo field
 const safeLogoDataUrl = (value) =>
   typeof value === "string" && /^data:image\/(png|jpeg|jpg|gif|webp|svg\+xml);base64,[A-Za-z0-9+/=]+$/.test(value.trim())
     ? value.trim()
@@ -299,7 +299,7 @@ const safeLogoDataUrl = (value) =>
 
 const nl2br = (value) => escapeHtml(value).replace(/\n/g, "<br/>");
 
-// Parse YYYY-MM-DD as LOCAL date (not UTC) -- prevents day-shift in AU timezones
+// Parse YYYY-MM-DD as LOCAL date (not UTC) — prevents day-shift in AU timezones
 const parseLocalDate = (dateString) => {
   if (!dateString) return new Date();
   const parts = String(dateString).slice(0, 10).split("-");
@@ -387,22 +387,6 @@ const calculateAdjustmentValues = ({ subtotal = 0, total = 0, client, profile })
   };
 };
 
-const buildPayPalInvoiceUrl = ({ businessEmail = "", amount = 0, currencyCode = "AUD", invoiceNumber = "" }) => {
-  const email = String(businessEmail || "").trim();
-  const total = safeNumber(amount);
-  if (!email || total <= 0) return "";
-  const params = new URLSearchParams({
-    cmd: "_xclick",
-    business: email,
-    amount: total.toFixed(2),
-    currency_code: String(currencyCode || "AUD").toUpperCase(),
-    item_name: `Invoice ${invoiceNumber || ""}`.trim(),
-    invoice: String(invoiceNumber || ""),
-    charset: "UTF-8",
-  });
-  return `https://www.paypal.com/cgi-bin/webscr?${params.toString()}`;
-};
-
 
 export function buildQuoteHtml(quote, options = {}, ctx = {}) {
   const { profile, clients } = ctx;
@@ -411,7 +395,7 @@ export function buildQuoteHtml(quote, options = {}, ctx = {}) {
   const gstAppliesToClient = (id) => Boolean(profile.gstRegistered) && !clientIsGstExempt(id);
   const getDocumentBusinessName = () => profile.hideLegalNameOnDocs || !profile.legalBusinessName ? profile.businessName : profile.legalBusinessName;
   const getDocumentAddress = () => profile.hideAddressOnDocs ? "" : profile.address || "";
-const { allowEmail = false } = options;
+const { allowEmail = false, paypalCheckoutUrl = "" } = options;
 const qClient = getClientById(quote.clientId);
 const currencyCode = quote.currencyCode || getClientCurrencyCode(qClient);
 const money = (value) => formatCurrencyByCode(value, currencyCode);
@@ -461,7 +445,6 @@ th { text-align:left; color:#667085; }
 .preview-status { font-size:13px; color:#64748B; }
 .print-button { background:#6A1B9A; color:#fff; border:none; border-radius:10px; padding:10px 16px; font-weight:700; cursor:pointer; text-decoration:none; display:inline-block; }
 .email-button { background:#006D6D; color:#fff; border:none; border-radius:10px; padding:10px 16px; font-weight:700; cursor:pointer; }
-.paypal-button { background:#003087; color:#fff; border:none; border-radius:10px; padding:10px 16px; font-weight:700; cursor:pointer; }
 @media print {
   .print-toolbar { display:none !important; }
   body { padding: 0; }
@@ -710,12 +693,6 @@ const businessEmail = escapeHtml(profile.email || "");
 const businessPhone = escapeHtml(profile.phone || "");
 const businessAbn = escapeHtml(profile.abn || "");
 const paymentReference = escapeHtml(invoice.paymentReference || invoice.invoiceNumber || "");
-const paypalCheckoutUrl = buildPayPalInvoiceUrl({
-  businessEmail: profile.paypalBusinessEmail,
-  amount: invoice.total,
-  currencyCode,
-  invoiceNumber: invoice.invoiceNumber || paymentReference,
-});
 
 const clientDetails =
   previewClient?.includeAddressDetails && previewClient?.addressDetails
@@ -747,7 +724,6 @@ th { text-align:left; color:#64748B; }
 .preview-status { font-size:13px; color:#64748B; }
 .print-button { background:#6A1B9A; color:#fff; border:none; border-radius:10px; padding:10px 16px; font-weight:700; cursor:pointer; text-decoration:none; display:inline-block; }
 .email-button { background:#006D6D; color:#fff; border:none; border-radius:10px; padding:10px 16px; font-weight:700; cursor:pointer; }
-.paypal-button { background:#003087; color:#fff; border:none; border-radius:10px; padding:10px 16px; font-weight:700; cursor:pointer; }
 @media print {
   .print-toolbar { display:none !important; }
   body { padding: 0; }
@@ -844,22 +820,23 @@ ${purchaseOrderBlock}
 <div style="margin-top:10px; font-size:13px; color:#555;">
   Please use reference: ${paymentReference}
 </div>
-<div style="margin-top:16px; padding:14px; border:1px solid #E2E8F0; border-radius:12px; background:#F7F6F5;">
-  <div style="font-weight:700; color:#14202B; margin-bottom:8px;">Pay Online</div>
-  <div style="font-size:13px; color:#555; margin-bottom:10px;">Choose your preferred payment method below.</div>
-  ${stripeCheckoutUrl
-    ? `<a href="${stripeCheckoutUrl}" target="_blank" rel="noreferrer" style="display:inline-block; margin-right:10px; background:#6A1B9A; color:#FFFFFF; text-decoration:none; padding:10px 16px; border-radius:10px; font-weight:700;">Pay with Card</a>`
-    : ""
-  }
-  <button
-    onclick="var d=this.dataset; if(window.opener&&window.opener.payInvoiceWithPayPal){window.opener.payInvoiceWithPayPal({id:d.id,invoiceNumber:d.inv,total:parseFloat(d.total),currencyCode:d.currency,clientId:d.client});}else{alert('Please open this from the portal to pay with PayPal.');}"
-    data-id="${invoice.id}"
-    data-inv="${invoice.invoiceNumber || ''}"
-    data-total="${safeNumber(invoice.total).toFixed(2)}"
-    data-currency="${invoice.currencyCode || 'AUD'}"
-    data-client="${invoice.clientId || ''}"
-    style="display:inline-block; background:#003087; color:#FFFFFF; border:none; padding:10px 16px; border-radius:10px; font-weight:700; cursor:pointer;">Pay with PayPal</button>
-</div>
+${(() => {
+    const resolvedPaypalUrl = paypalCheckoutUrl || profile.paypalPaymentLink || "";
+    return (stripeCheckoutUrl || resolvedPaypalUrl)
+    ? `<div style="margin-top:16px; padding:14px; border:1px solid #E2E8F0; border-radius:12px; background:#F7F6F5;">
+        <div style="font-weight:700; color:#14202B; margin-bottom:8px;">Pay Online</div>
+        <div style="font-size:13px; color:#555; margin-bottom:10px;">Choose your preferred payment method below.</div>
+        ${stripeCheckoutUrl
+      ? `<a href="${stripeCheckoutUrl}" target="_blank" rel="noreferrer" style="display:inline-block; margin-right:10px; background:#6A1B9A; color:#FFFFFF; text-decoration:none; padding:10px 16px; border-radius:10px; font-weight:700;">Pay with Card</a>`
+      : ""
+    }
+        ${resolvedPaypalUrl
+      ? `<a href="${resolvedPaypalUrl}" target="_blank" rel="noreferrer" style="display:inline-block; background:#0070BA; color:#FFFFFF; text-decoration:none; padding:10px 16px; border-radius:10px; font-weight:700;">Pay with PayPal</a>`
+      : ""
+    }
+      </div>`
+    : "";
+  })()}
 </div>
 
 <div class="footer">
