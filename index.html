@@ -3,9 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data:; font-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'nonce-sharon-static-2026'; connect-src 'self'; form-action 'self'; upgrade-insecure-requests; block-all-mixed-content" />
+  <meta name="referrer" content="strict-origin-when-cross-origin" />
+  <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+  <meta http-equiv="Permissions-Policy" content="geolocation=(), microphone=(), camera=(), payment=(), usb=(), interest-cohort=()" />
+  <meta name="color-scheme" content="light" />
   <title>Sharon's Accounting Service</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <style>
+    <style>
     :root {
       --primary: #6a1b9a;
       --primary-dark: #4a136d;
@@ -26,7 +30,7 @@
     * { box-sizing: border-box; }
     html, body { margin: 0; padding: 0; }
     body {
-      font-family: Inter, sans-serif;
+      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       background: linear-gradient(180deg, #faf8fd 0%, #f6f4fb 100%);
       color: var(--text);
     }
@@ -156,6 +160,21 @@
     }
 
     .page.active { display: block; }
+
+    .skip-link {
+      position: absolute;
+      left: -9999px;
+      top: 0;
+      background: var(--primary);
+      color: #fff;
+      padding: 0.75rem 1rem;
+      border-radius: 0 0 12px 12px;
+      z-index: 9999;
+    }
+
+    .skip-link:focus {
+      left: 1rem;
+    }
 
     .hero {
       display: grid;
@@ -350,42 +369,43 @@
   </style>
 </head>
 <body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
   <!-- Top contact bar -->
   <div style="background:#6a1b9a;color:#fff;padding:0.55rem 1.5rem;display:flex;justify-content:flex-end;align-items:center;gap:1.5rem;font-size:0.88rem;font-weight:600;flex-wrap:wrap;">
     <span>Sharon's Accounting Service</span>
     <span style="opacity:0.85;">&#128205; Casino NSW &amp; surrounds</span>
     <a href="tel:1300017167" style="color:#fff;display:flex;align-items:center;gap:0.4rem;">&#128222; 1300 017 167</a>
-    <a href="/cdn-cgi/l/email-protection#d8b1b6beb798abb0b9aab7b6b7bfb1bdaaf6bbb7b5" style="color:#fff;display:flex;align-items:center;gap:0.4rem;">&#9993; <span class="__cf_email__" data-cfemail="f1989f979eb1829990839e9f9e96989483df929e9c">[email&#160;protected]</span></a>
-    <a href="https://portal.sharonogier.com/" target="_blank" rel="noopener" style="background:rgba(255,255,255,0.2);color:#fff;padding:0.3rem 0.9rem;border-radius:999px;font-weight:800;">Portal Login</a>
+    <a href="mailto:info@sharonogier.com" style="color:#fff;display:flex;align-items:center;gap:0.4rem;">&#9993; info@sharonogier.com</a>
+    <a href="https://portal.sharonogier.com/" target="_blank" rel="noopener noreferrer" style="background:rgba(255,255,255,0.2);color:#fff;padding:0.3rem 0.9rem;border-radius:999px;font-weight:800;">Portal Login</a>
   </div>
 
   <div class="site">
     <aside class="sidebar">
       <div class="brand">
-        <img src="https://152367768-799925207664624360.preview.editmysite.com/uploads/1/5/2/3/152367768/logo_orig.png" alt="Sharon's Accounting Service logo">
+        <img src="./logo_orig.png" alt="Sharon's Accounting Service logo" loading="eager" decoding="async" referrerpolicy="strict-origin-when-cross-origin">
         <h2>Sharon's Accounting Service</h2>
         <p>Financial clarity and practical business insight for farms and small business.</p>
         <p style="margin-top:0.5rem;font-size:0.8rem;opacity:0.85;">&#128205; Casino NSW &amp; surrounds</p>
       </div>
 
       <nav class="menu">
-        <button class="menu-btn active" data-page="home">Home</button>
-        <button class="menu-btn" data-page="services">Services</button>
-        <button class="menu-btn" data-page="about">About</button>
-        <button class="menu-btn" data-page="portal">Portal</button>
-        <button class="menu-btn" data-page="why">Why Sharon</button>
-        <button class="menu-btn" data-page="mitchell">Mitchell</button>
-        <button class="menu-btn" data-page="contact">Contact</button>
+        <button class="menu-btn active" type="button" data-page="home" aria-controls="page-home" aria-pressed="true">Home</button>
+        <button class="menu-btn" type="button" data-page="services" aria-controls="page-services" aria-pressed="false">Services</button>
+        <button class="menu-btn" type="button" data-page="about" aria-controls="page-about" aria-pressed="false">About</button>
+        <button class="menu-btn" type="button" data-page="portal" aria-controls="page-portal" aria-pressed="false">Portal</button>
+        <button class="menu-btn" type="button" data-page="why" aria-controls="page-why" aria-pressed="false">Why Sharon</button>
+        <button class="menu-btn" type="button" data-page="mitchell" aria-controls="page-mitchell" aria-pressed="false">Mitchell</button>
+        <button class="menu-btn" type="button" data-page="contact" aria-controls="page-contact" aria-pressed="false">Contact</button>
       </nav>
 
       <div class="sidebar-cta">
-        <a class="btn btn-primary" href="https://portal.sharonogier.com/" target="_blank" rel="noopener">Portal Login</a>
-        <a class="btn btn-secondary" href="https://calendly.com/sharonogier-info" target="_blank" rel="noopener">Book a Review</a>
+        <a class="btn btn-primary" href="https://portal.sharonogier.com/" target="_blank" rel="noopener noreferrer">Portal Login</a>
+        <a class="btn btn-secondary" href="https://calendly.com/sharonogier-info" target="_blank" rel="noopener noreferrer">Book a Review</a>
       </div>
     </aside>
 
-    <main class="main">
-      <section id="page-home" class="page active">
+    <main class="main" id="main-content" tabindex="-1">
+      <section id="page-home" class="page active" aria-hidden="false">
         <div class="hero">
           <div class="panel">
             <div class="eyebrow">Bookkeeping &amp; financial analysis — Casino NSW</div>
@@ -394,8 +414,8 @@
               Sharon handles the books, the BAS, the invoices and the reporting — and goes further to analyse what the numbers actually mean for your business. Mitchell brings real farming experience. Together they give farms and small businesses in Casino NSW practical support that connects finance with operations.
             </p>
             <div class="button-row">
-              <a class="btn btn-primary" href="https://portal.sharonogier.com/" target="_blank" rel="noopener">Portal Login</a>
-              <a class="btn btn-secondary" href="https://calendly.com/sharonogier-info" target="_blank" rel="noopener">Book a Review</a>
+              <a class="btn btn-primary" href="https://portal.sharonogier.com/" target="_blank" rel="noopener noreferrer">Portal Login</a>
+              <a class="btn btn-secondary" href="https://calendly.com/sharonogier-info" target="_blank" rel="noopener noreferrer">Book a Review</a>
             </div>
             <div class="stats">
               <div class="stat"><strong>Based in Casino NSW</strong><span>Serving Casino, Lismore, Ballina and surrounding Northern Rivers region.</span></div>
@@ -410,7 +430,7 @@
             <h3>Your business dashboard</h3>
             <p>Use the portal to bring records, visibility and day-to-day management into one connected place.</p>
             <div class="portal-frame">
-              <img class="hero-shot" src="https://152367768-799925207664624360.preview.editmysite.com/uploads/1/5/2/3/152367768/screenshot-76_orig.jpg" alt="Portal dashboard preview">
+              <img class="hero-shot" src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='1280' height='720' viewBox='0 0 1280 720'><rect width='1280' height='720' fill='%23fbf9fd'/><rect x='40' y='40' width='1200' height='640' rx='24' fill='%23ffffff' stroke='%23e8e0f0' stroke-width='3'/><rect x='90' y='95' width='250' height='40' rx='20' fill='%23f4eef8'/><rect x='90' y='165' width='300' height='170' rx='16' fill='%23f6f4fb'/><rect x='420' y='165' width='300' height='170' rx='16' fill='%23f6f4fb'/><rect x='750' y='165' width='300' height='170' rx='16' fill='%23f6f4fb'/><rect x='90' y='380' width='960' height='220' rx='16' fill='%23f6f4fb'/><text x='640' y='115' text-anchor='middle' font-family='Arial, Helvetica, sans-serif' font-size='30' font-weight='700' fill='%236a1b9a'>Portal preview available after secure login</text><text x='640' y='645' text-anchor='middle' font-family='Arial, Helvetica, sans-serif' font-size='22' fill='%23697083'>No third-party embedded preview image loaded on this page</text></svg>" alt="Portal dashboard preview" loading="lazy" decoding="async" referrerpolicy="strict-origin-when-cross-origin">
             </div>
           </div>
         </div>
@@ -428,7 +448,7 @@
         </div>
       </section>
 
-      <section id="page-services" class="page">
+      <section id="page-services" class="page" aria-hidden="true" hidden>
         <div class="panel">
           <div class="eyebrow">Services</div>
           <h2>Services that make sense in the real world</h2>
@@ -475,7 +495,7 @@
         </div>
       </section>
 
-      <section id="page-about" class="page">
+      <section id="page-about" class="page" aria-hidden="true" hidden>
         <div class="panel">
           <div class="eyebrow">About</div>
           <h2>Sharon and Mitchell</h2>
@@ -504,7 +524,7 @@
         </div>
       </section>
 
-      <section id="page-portal" class="page">
+      <section id="page-portal" class="page" aria-hidden="true" hidden>
         <div class="panel">
           <div class="eyebrow">Portal</div>
           <h2>One place to run the moving parts</h2>
@@ -530,15 +550,15 @@
           </div>
         </div>
         <div class="panel section-gap">
-          <img class="hero-shot" src="https://152367768-799925207664624360.preview.editmysite.com/uploads/1/5/2/3/152367768/screenshot-76_orig.jpg" alt="Portal dashboard preview">
+          <img class="hero-shot" src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='1280' height='720' viewBox='0 0 1280 720'><rect width='1280' height='720' fill='%23fbf9fd'/><rect x='40' y='40' width='1200' height='640' rx='24' fill='%23ffffff' stroke='%23e8e0f0' stroke-width='3'/><rect x='90' y='95' width='250' height='40' rx='20' fill='%23f4eef8'/><rect x='90' y='165' width='300' height='170' rx='16' fill='%23f6f4fb'/><rect x='420' y='165' width='300' height='170' rx='16' fill='%23f6f4fb'/><rect x='750' y='165' width='300' height='170' rx='16' fill='%23f6f4fb'/><rect x='90' y='380' width='960' height='220' rx='16' fill='%23f6f4fb'/><text x='640' y='115' text-anchor='middle' font-family='Arial, Helvetica, sans-serif' font-size='30' font-weight='700' fill='%236a1b9a'>Portal preview available after secure login</text><text x='640' y='645' text-anchor='middle' font-family='Arial, Helvetica, sans-serif' font-size='22' fill='%23697083'>No third-party embedded preview image loaded on this page</text></svg>" alt="Portal dashboard preview" loading="lazy" decoding="async" referrerpolicy="strict-origin-when-cross-origin">
           <div class="button-row">
-            <a class="btn btn-primary" href="https://portal.sharonogier.com/" target="_blank" rel="noopener">Go to Portal</a>
+            <a class="btn btn-primary" href="https://portal.sharonogier.com/" target="_blank" rel="noopener noreferrer">Go to Portal</a>
           </div>
         </div>
       </section>
 
 
-      <section id="page-why" class="page">
+      <section id="page-why" class="page" aria-hidden="true" hidden>
         <div class="panel">
           <div class="eyebrow">Why Sharon</div>
           <h2>More than bookkeeping — financial analysis that actually helps.</h2>
@@ -589,14 +609,14 @@
           <h3>Ready to get clarity on your numbers?</h3>
           <p>Start with a free 15-minute review. No obligation — just a conversation about where things are and what could be better.</p>
           <div class="button-row" style="justify-content:center;margin-top:1rem;">
-            <a class="btn btn-primary" href="https://calendly.com/sharonogier-info" target="_blank" rel="noopener">Book a Free Review</a>
+            <a class="btn btn-primary" href="https://calendly.com/sharonogier-info" target="_blank" rel="noopener noreferrer">Book a Free Review</a>
             <a class="btn btn-secondary" href="tel:1300017167">Call 1300 017 167</a>
           </div>
         </div>
       </section>
 
 
-      <section id="page-mitchell" class="page">
+      <section id="page-mitchell" class="page" aria-hidden="true" hidden>
         <div class="panel">
           <div class="eyebrow">Mitchell — Farm Equipment &amp; Machinery Advisory</div>
           <h2>Don't buy the wrong gear. Get a second opinion first.</h2>
@@ -647,13 +667,13 @@
           <h3>Need a pre-purchase inspection or equipment assessment?</h3>
           <p>Get in touch before your next major purchase. A conversation with Mitchell could save you from a very expensive mistake.</p>
           <div class="button-row" style="justify-content:center;margin-top:1rem;">
-            <a class="btn btn-primary" href="https://calendly.com/sharonogier-info" target="_blank" rel="noopener">Book a Consultation</a>
+            <a class="btn btn-primary" href="https://calendly.com/sharonogier-info" target="_blank" rel="noopener noreferrer">Book a Consultation</a>
             <a class="btn btn-secondary" href="tel:1300017167">Call 1300 017 167</a>
           </div>
         </div>
       </section>
 
-      <section id="page-contact" class="page">
+      <section id="page-contact" class="page" aria-hidden="true" hidden>
         <div class="panel">
           <div class="eyebrow">Contact</div>
           <h2>Ready to tidy things up?</h2>
@@ -673,8 +693,8 @@
               <h3>Next step</h3>
               <p>Use the booking link for a review or head straight into the portal if you are already a client.</p>
               <div class="button-row">
-                <a class="btn btn-primary" href="https://calendly.com/sharonogier-info" target="_blank" rel="noopener">Book a Review</a>
-                <a class="btn btn-secondary" href="https://portal.sharonogier.com/" target="_blank" rel="noopener">Portal Login</a>
+                <a class="btn btn-primary" href="https://calendly.com/sharonogier-info" target="_blank" rel="noopener noreferrer">Book a Review</a>
+                <a class="btn btn-secondary" href="https://portal.sharonogier.com/" target="_blank" rel="noopener noreferrer">Portal Login</a>
               </div>
             </div>
           </div>
@@ -683,20 +703,34 @@
     </main>
   </div>
 
-  <script>
-    const buttons = document.querySelectorAll('.menu-btn');
-    const pages = document.querySelectorAll('.page');
+  <script nonce="sharon-static-2026">
+    document.addEventListener("DOMContentLoaded", () => {
+      const buttons = Array.from(document.querySelectorAll(".menu-btn"));
+      const pages = Array.from(document.querySelectorAll(".page"));
+      const allowedTargets = new Set(buttons.map((button) => String(button.dataset.page || "").trim()).filter(Boolean));
 
-    buttons.forEach((button) => {
-      button.addEventListener('click', () => {
-        const target = button.dataset.page;
+      const activatePage = (target) => {
+        if (!allowedTargets.has(target)) return;
 
-        buttons.forEach((btn) => btn.classList.remove('active'));
-        pages.forEach((page) => page.classList.remove('active'));
+        buttons.forEach((btn) => {
+          const isActive = btn.dataset.page === target;
+          btn.classList.toggle("active", isActive);
+          btn.setAttribute("aria-pressed", String(isActive));
+        });
 
-        button.classList.add('active');
-        const activePage = document.getElementById('page-' + target);
-        if (activePage) activePage.classList.add('active');
+        pages.forEach((page) => {
+          const isActive = page.id === `page-${target}`;
+          page.classList.toggle("active", isActive);
+          page.hidden = !isActive;
+          page.setAttribute("aria-hidden", String(!isActive));
+        });
+      };
+
+      buttons.forEach((button) => {
+        button.addEventListener("click", () => {
+          const target = String(button.dataset.page || "").trim();
+          activatePage(target);
+        });
       });
     });
   </script>
