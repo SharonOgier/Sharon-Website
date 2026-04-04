@@ -851,7 +851,14 @@ ${purchaseOrderBlock}
     ? `<a href="${stripeCheckoutUrl}" target="_blank" rel="noreferrer" style="display:inline-block; margin-right:10px; background:#6A1B9A; color:#FFFFFF; text-decoration:none; padding:10px 16px; border-radius:10px; font-weight:700;">Pay with Card</a>`
     : ""
   }
-  <button onclick="if(window.opener && window.opener.payInvoiceWithPayPal) { window.opener.payInvoiceWithPayPal(${JSON.stringify({ id: invoice.id, invoiceNumber: invoice.invoiceNumber, total: invoice.total, currencyCode: invoice.currencyCode || 'AUD', clientId: invoice.clientId })}); } else { alert('Please use the Pay with PayPal button in the portal.'); }" style="display:inline-block; background:#003087; color:#FFFFFF; border:none; padding:10px 16px; border-radius:10px; font-weight:700; cursor:pointer;">Pay with PayPal</button>
+  <button
+    onclick="var d=this.dataset; if(window.opener&&window.opener.payInvoiceWithPayPal){window.opener.payInvoiceWithPayPal({id:d.id,invoiceNumber:d.inv,total:parseFloat(d.total),currencyCode:d.currency,clientId:d.client});}else{alert('Please open this from the portal to pay with PayPal.');}"
+    data-id="${invoice.id}"
+    data-inv="${invoice.invoiceNumber || ''}"
+    data-total="${safeNumber(invoice.total).toFixed(2)}"
+    data-currency="${invoice.currencyCode || 'AUD'}"
+    data-client="${invoice.clientId || ''}"
+    style="display:inline-block; background:#003087; color:#FFFFFF; border:none; padding:10px 16px; border-radius:10px; font-weight:700; cursor:pointer;">Pay with PayPal</button>
 </div>
 </div>
 
