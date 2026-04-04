@@ -760,7 +760,6 @@ th { text-align:left; color:#64748B; }
 <div id="preview-email-status" class="preview-status"></div>
 <div class="toolbar-actions">
   ${allowEmail ? `<button id="preview-email-button" class="email-button" onclick="window.opener && window.opener.sendInvoiceFromPreview && window.opener.sendInvoiceFromPreview(${JSON.stringify(invoice.id)}, window)">Email Invoice</button>` : ""}
-  <button class="paypal-button" onclick="if(window.opener && window.opener.payInvoiceWithPayPal) { window.opener.payInvoiceWithPayPal(${JSON.stringify({ id: invoice.id, invoiceNumber: invoice.invoiceNumber, total: invoice.total, currencyCode: invoice.currencyCode || 'AUD', clientId: invoice.clientId, description: invoice.description })}); } else { alert('Please use the Pay with PayPal button in the portal.'); }">Pay with PayPal</button>
   <a href="javascript:void(0)" class="print-button" onclick="window.print()">Print / Download PDF</a>
 </div>
 </div>

@@ -494,12 +494,6 @@ export default function InvoicesPage(props) {
                         <button style={buttonSecondary} onClick={() => markInvoicePaid(row.id, "Bank Transfer")}>
                           Mark Paid (Bank)
                         </button>
-                        <button
-                          style={{ ...buttonSecondary, background: "#003087", color: "#fff", borderColor: "#003087" }}
-                          onClick={() => payInvoiceWithPayPal(row)}
-                        >
-                          Pay with PayPal
-                        </button>
                         <button style={buttonSecondary} onClick={() => markInvoicePaid(row.id, "PayPal")}>
                           Mark Paid (PayPal)
                         </button>
