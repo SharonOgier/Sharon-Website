@@ -63,6 +63,7 @@ export default function InvoicesPage(props) {
     saveARCreditNote,
     createStripeCheckoutForInvoice,
     payInvoiceWithStripe,
+    payInvoiceWithPayPal = () => {},
     getClientName,
     getClientById,
     clientIsGstExempt,
@@ -441,7 +442,7 @@ export default function InvoicesPage(props) {
                 <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                   <button style={buttonSecondary} onClick={openInvoicePreview}>Preview PDF</button>
                   <button style={{ ...buttonSecondary, opacity: savingInvoice ? 0.6 : 1 }} disabled={savingInvoice} onClick={async () => { setInvoiceForm((prev) => ({ ...prev, status: "Draft" })); const ok = await saveInvoice(); if (ok) setInvoiceWizardStep(1); }}>Save Draft</button>
-                  <button style={{ ...buttonPrimary, opacity: savingInvoice ? 0.6 : 1 }} disabled={savingInvoice} onClick={async () => { const ok = await saveInvoice(); if (ok) setInvoiceWizardStep(1); }}>{savingInvoice ? "Saving..." : "Save Invoice"}</button>
+                  <button style={{ ...buttonPrimary, opacity: savingInvoice ? 0.6 : 1 }} disabled={savingInvoice} onClick={async () => { const ok = await saveInvoice(); if (ok) setInvoiceWizardStep(1); }}>{savingInvoice ? "Saving..." : "Save Invoice Paid"}</button>
                 </div>
               </div>
             </div>
@@ -467,7 +468,7 @@ export default function InvoicesPage(props) {
                   background: row.type === "credit_note" ? "#F5ECFB" : v === "Paid" ? "#dcfce7" : v === "Draft" ? "#f1f5f9" : "#fef9c3",
                   color: row.type === "credit_note" ? colours.purple : v === "Paid" ? "#16a34a" : v === "Draft" ? "#64748b" : "#b45309",
                 }}>
-                  {row.type === "credit_note" ? "CN" : v === "Paid" ? "Paid" : v || "Draft"}
+                  {row.type === "credit_note" ? "CN" : v === "Paid" ? "Paid PAID" : v || "Draft"}
                 </span>
               )},
               {
@@ -491,7 +492,16 @@ export default function InvoicesPage(props) {
                     {row.status !== "Paid" ? (
                       <>
                         <button style={buttonSecondary} onClick={() => markInvoicePaid(row.id, "Bank Transfer")}>
-                          Record Bank Transfer
+                          Mark Paid (Bank)
+                        </button>
+                        <button
+                          style={{ ...buttonSecondary, background: "#003087", color: "#fff", borderColor: "#003087" }}
+                          onClick={() => payInvoiceWithPayPal(row)}
+                        >
+                          Pay with PayPal
+                        </button>
+                        <button style={buttonSecondary} onClick={() => markInvoicePaid(row.id, "PayPal")}>
+                          Mark Paid (PayPal)
                         </button>
                       </>
                     ) : (

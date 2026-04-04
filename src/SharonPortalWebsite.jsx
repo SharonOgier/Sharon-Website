@@ -1643,45 +1643,51 @@ export default function AccountingPortalPrototype() {
     return "";
   };
 
-  const buildPayPalCheckoutUrl = (documentRecord = {}) => {
-    const businessEmail = getResolvedPayPalBusinessEmail();
-    if (!businessEmail) return "";
-
-    const resolvedTotal = safeNumber(
-      documentRecord?.total ??
-      documentRecord?.grandTotal ??
-      documentRecord?.invoiceTotal ??
-      documentRecord?.amount ??
-      documentRecord?.totalAmount
+  const createPayPalOrderForInvoice = async (invoice) => {
+    const serverBaseUrl = getApiBaseUrl(profile?.stripeServerUrl);
+    const selectedClient = getClientById(invoice?.clientId) || {};
+    const rawTotal = safeNumber(
+      invoice?.total ?? invoice?.grandTotal ?? invoice?.invoiceTotal ?? invoice?.amount ?? invoice?.totalAmount
     );
+    if (!rawTotal || rawTotal <= 0) {
+      throw new Error(`Invoice total could not be determined for ${invoice?.invoiceNumber || invoice?.id}. Please open and re-save the invoice.`);
+    }
+    const payload = {
+      invoiceId: invoice?.id,
+      invoiceNumber: invoice?.invoiceNumber,
+      customerName: selectedClient?.name || selectedClient?.businessName || "",
+      customerEmail: selectedClient?.email || "",
+      description: invoice?.description || `Invoice ${invoice?.invoiceNumber || invoice?.id || ""}`,
+      currency: String(invoice?.currencyCode || "AUD").toUpperCase(),
+      amount: Number(rawTotal.toFixed(2)),
+      total: Number(rawTotal.toFixed(2)),
+      successUrl: `${window.location.origin}?paypal=success&invoice=${encodeURIComponent(invoice?.invoiceNumber || "")}&invoiceId=${encodeURIComponent(String(invoice?.id || ""))}`,
+      cancelUrl: `${window.location.origin}?paypal=cancel&invoice=${encodeURIComponent(invoice?.invoiceNumber || "")}&invoiceId=${encodeURIComponent(String(invoice?.id || ""))}`,
+    };
+    let response;
+    try {
+      response = await fetch(`${serverBaseUrl}/api/create-paypal-order`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    } catch (error) {
+      throw new Error(`Could not reach the server for PayPal. Check your backend deployment.`);
+    }
+    const data = await response.json();
+    if (!response.ok) throw new Error(data?.error || "PayPal order creation failed");
+    if (!data?.url) throw new Error("PayPal checkout URL was not returned");
+    return data.url;
+  };
 
-    if (resolvedTotal <= 0) return "";
-
-    const currencyCode = String(documentRecord?.currencyCode || "AUD").trim().toUpperCase() || "AUD";
-    const documentNumber = String(
-      documentRecord?.invoiceNumber ||
-      documentRecord?.quoteNumber ||
-      documentRecord?.paymentReference ||
-      documentRecord?.id ||
-      "Portal payment"
-    ).trim();
-
-    const params = new URLSearchParams({
-      cmd: '_xclick',
-      business: businessEmail,
-      amount: resolvedTotal.toFixed(2),
-      currency_code: currencyCode,
-      item_name: documentRecord?.invoiceNumber
-        ? `Invoice ${documentNumber}`
-        : documentRecord?.quoteNumber
-          ? `Quote ${documentNumber}`
-          : documentNumber,
-      invoice: documentNumber,
-      custom: documentRecord?.paymentReference || documentNumber,
-      no_shipping: '1',
-    });
-
-    return `https://www.paypal.com/cgi-bin/webscr?${params.toString()}`;
+  const payInvoiceWithPayPal = async (invoice) => {
+    try {
+      const checkoutUrl = await createPayPalOrderForInvoice(invoice);
+      window.open(checkoutUrl, "_blank");
+    } catch (error) {
+      console.error("PAYPAL CHECKOUT ERROR:", error);
+      toast.error(error.message || "PayPal checkout failed");
+    }
   };
 
   const sendSavedDocumentEmail = async ({ documentType, documentRecord }) => {
@@ -1739,7 +1745,8 @@ export default function AccountingPortalPrototype() {
     emailDocumentRecord?.totalAmount
   );
 
-  const paypalCheckoutUrl = documentType === "invoice" ? buildPayPalCheckoutUrl(emailDocumentRecord) : "";
+  // PayPal URL is generated dynamically via /api/create-paypal-order -- not built statically
+  const paypalCheckoutUrl = "";
 
   // Build self-contained HTML email body -- no logo, no interactive buttons
   const emailClient = getClientById(emailDocumentRecord?.clientId);
@@ -1869,7 +1876,7 @@ export default function AccountingPortalPrototype() {
       </tr>
 
       <!-- Payment Details (invoices only) -->
-      ${isInvoice && (profile?.bankName || profile?.bsb || profile?.accountNumber || profile?.payId || profile?.stripePaymentLink || paypalCheckoutUrl || stripeCheckoutUrl || emailDocumentRecord?.paymentReference) ? `
+      ${isInvoice && (profile?.bankName || profile?.bsb || profile?.accountNumber || profile?.payId || profile?.stripePaymentLink || stripeCheckoutUrl || emailDocumentRecord?.paymentReference || true) ? `
       <tr>
         <td colspan="2" style="padding:16px 32px 0;">
           <div style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:10px;padding:18px 20px;">
@@ -1899,7 +1906,7 @@ export default function AccountingPortalPrototype() {
             ${(stripeCheckoutUrl || profile?.stripePaymentLink || paypalCheckoutUrl) ? `
             <div style="margin-top:14px;padding-top:14px;border-top:1px solid #BBF7D0;">
               ${(stripeCheckoutUrl || profile?.stripePaymentLink) ? `<a href="${stripeCheckoutUrl || profile.stripePaymentLink}" style="display:inline-block;background:#6A1B9A;color:#ffffff;text-decoration:none;font-weight:700;font-size:14px;padding:11px 28px;border-radius:8px;margin-right:10px;">Pay with Card</a>` : ""}
-              ${paypalCheckoutUrl ? `<a href="${paypalCheckoutUrl}" style="display:inline-block;background:#003087;color:#ffffff;text-decoration:none;font-weight:700;font-size:14px;padding:11px 28px;border-radius:8px;">Pay with PayPal</a>` : ""}
+              <a href="${window?.location?.origin || ''}" style="display:inline-block;background:#003087;color:#ffffff;text-decoration:none;font-weight:700;font-size:14px;padding:11px 28px;border-radius:8px;">Pay with PayPal via Portal</a>
             </div>` : ""}
           </div>
         </td>
@@ -3952,6 +3959,7 @@ export default function AccountingPortalPrototype() {
               saveARCreditNote={saveARCreditNote}
               createStripeCheckoutForInvoice={createStripeCheckoutForInvoice}
               payInvoiceWithStripe={payInvoiceWithStripe}
+                  payInvoiceWithPayPal={payInvoiceWithPayPal}
               getClientName={getClientName} getClientById={getClientById}
               clientIsGstExempt={clientIsGstExempt} gstAppliesToClient={gstAppliesToClient}
               calculateFormGst={calculateFormGst} computeLineItemTotals={computeLineItemTotals}
