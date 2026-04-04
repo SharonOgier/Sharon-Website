@@ -291,7 +291,7 @@ const escapeHtml = (value) =>
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
 
-// Only allow genuine base64 image data URLs — prevents HTML/script injection via logo field
+// Only allow genuine base64 image data URLs -- prevents HTML/script injection via logo field
 const safeLogoDataUrl = (value) =>
   typeof value === "string" && /^data:image\/(png|jpeg|jpg|gif|webp|svg\+xml);base64,[A-Za-z0-9+/=]+$/.test(value.trim())
     ? value.trim()
@@ -299,7 +299,7 @@ const safeLogoDataUrl = (value) =>
 
 const nl2br = (value) => escapeHtml(value).replace(/\n/g, "<br/>");
 
-// Parse YYYY-MM-DD as LOCAL date (not UTC) — prevents day-shift in AU timezones
+// Parse YYYY-MM-DD as LOCAL date (not UTC) -- prevents day-shift in AU timezones
 const parseLocalDate = (dateString) => {
   if (!dateString) return new Date();
   const parts = String(dateString).slice(0, 10).split("-");
@@ -461,6 +461,7 @@ th { text-align:left; color:#667085; }
 .preview-status { font-size:13px; color:#64748B; }
 .print-button { background:#6A1B9A; color:#fff; border:none; border-radius:10px; padding:10px 16px; font-weight:700; cursor:pointer; text-decoration:none; display:inline-block; }
 .email-button { background:#006D6D; color:#fff; border:none; border-radius:10px; padding:10px 16px; font-weight:700; cursor:pointer; }
+.paypal-button { background:#003087; color:#fff; border:none; border-radius:10px; padding:10px 16px; font-weight:700; cursor:pointer; }
 @media print {
   .print-toolbar { display:none !important; }
   body { padding: 0; }
@@ -746,6 +747,7 @@ th { text-align:left; color:#64748B; }
 .preview-status { font-size:13px; color:#64748B; }
 .print-button { background:#6A1B9A; color:#fff; border:none; border-radius:10px; padding:10px 16px; font-weight:700; cursor:pointer; text-decoration:none; display:inline-block; }
 .email-button { background:#006D6D; color:#fff; border:none; border-radius:10px; padding:10px 16px; font-weight:700; cursor:pointer; }
+.paypal-button { background:#003087; color:#fff; border:none; border-radius:10px; padding:10px 16px; font-weight:700; cursor:pointer; }
 @media print {
   .print-toolbar { display:none !important; }
   body { padding: 0; }
@@ -758,6 +760,7 @@ th { text-align:left; color:#64748B; }
 <div id="preview-email-status" class="preview-status"></div>
 <div class="toolbar-actions">
   ${allowEmail ? `<button id="preview-email-button" class="email-button" onclick="window.opener && window.opener.sendInvoiceFromPreview && window.opener.sendInvoiceFromPreview(${JSON.stringify(invoice.id)}, window)">Email Invoice</button>` : ""}
+  <button class="paypal-button" onclick="if(window.opener && window.opener.payInvoiceWithPayPal) { window.opener.payInvoiceWithPayPal(${JSON.stringify({ id: invoice.id, invoiceNumber: invoice.invoiceNumber, total: invoice.total, currencyCode: invoice.currencyCode || 'AUD', clientId: invoice.clientId, description: invoice.description })}); } else { alert('Please use the Pay with PayPal button in the portal.'); }">Pay with PayPal</button>
   <a href="javascript:void(0)" class="print-button" onclick="window.print()">Print / Download PDF</a>
 </div>
 </div>
@@ -842,21 +845,15 @@ ${purchaseOrderBlock}
 <div style="margin-top:10px; font-size:13px; color:#555;">
   Please use reference: ${paymentReference}
 </div>
-${stripeCheckoutUrl || paypalCheckoutUrl
-    ? `<div style="margin-top:16px; padding:14px; border:1px solid #E2E8F0; border-radius:12px; background:#F7F6F5;">
-        <div style="font-weight:700; color:#14202B; margin-bottom:8px;">Pay Online</div>
-        <div style="font-size:13px; color:#555; margin-bottom:10px;">Choose your preferred payment method below.</div>
-        ${stripeCheckoutUrl
-      ? `<a href="${stripeCheckoutUrl}" target="_blank" rel="noreferrer" style="display:inline-block; margin-right:10px; background:#6A1B9A; color:#FFFFFF; text-decoration:none; padding:10px 16px; border-radius:10px; font-weight:700;">Pay with Card</a>`
-      : ""
-    }
-        ${paypalCheckoutUrl
-      ? `<a href="${paypalCheckoutUrl}" target="_blank" rel="noreferrer" style="display:inline-block; background:#0070BA; color:#FFFFFF; text-decoration:none; padding:10px 16px; border-radius:10px; font-weight:700;">Pay with PayPal</a>`
-      : ""
-    }
-      </div>`
+<div style="margin-top:16px; padding:14px; border:1px solid #E2E8F0; border-radius:12px; background:#F7F6F5;">
+  <div style="font-weight:700; color:#14202B; margin-bottom:8px;">Pay Online</div>
+  <div style="font-size:13px; color:#555; margin-bottom:10px;">Choose your preferred payment method below.</div>
+  ${stripeCheckoutUrl
+    ? `<a href="${stripeCheckoutUrl}" target="_blank" rel="noreferrer" style="display:inline-block; margin-right:10px; background:#6A1B9A; color:#FFFFFF; text-decoration:none; padding:10px 16px; border-radius:10px; font-weight:700;">Pay with Card</a>`
     : ""
   }
+  <button onclick="if(window.opener && window.opener.payInvoiceWithPayPal) { window.opener.payInvoiceWithPayPal(${JSON.stringify({ id: invoice.id, invoiceNumber: invoice.invoiceNumber, total: invoice.total, currencyCode: invoice.currencyCode || 'AUD', clientId: invoice.clientId })}); } else { alert('Please use the Pay with PayPal button in the portal.'); }" style="display:inline-block; background:#003087; color:#FFFFFF; border:none; padding:10px 16px; border-radius:10px; font-weight:700; cursor:pointer;">Pay with PayPal</button>
+</div>
 </div>
 
 <div class="footer">

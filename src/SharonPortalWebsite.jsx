@@ -655,9 +655,11 @@ export default function AccountingPortalPrototype() {
   useEffect(() => {
     window.sendInvoiceFromPreview = sendInvoiceFromPreview;
     window.sendQuoteFromPreview = sendQuoteFromPreview;
+    window.payInvoiceWithPayPal = payInvoiceWithPayPal;
     return () => {
       delete window.sendInvoiceFromPreview;
       delete window.sendQuoteFromPreview;
+      delete window.payInvoiceWithPayPal;
     };
   }, [invoices, quotes, profile, clients]);
 
@@ -1903,11 +1905,13 @@ export default function AccountingPortalPrototype() {
                 <td style="padding:4px 0;font-size:13px;color:#14532D;font-weight:600;">${profile.payId}</td>
               </tr>` : ""}
             </table>
-            ${(stripeCheckoutUrl || profile?.stripePaymentLink || paypalCheckoutUrl) ? `
+            ${(stripeCheckoutUrl || profile?.stripePaymentLink) ? `
             <div style="margin-top:14px;padding-top:14px;border-top:1px solid #BBF7D0;">
               ${(stripeCheckoutUrl || profile?.stripePaymentLink) ? `<a href="${stripeCheckoutUrl || profile.stripePaymentLink}" style="display:inline-block;background:#6A1B9A;color:#ffffff;text-decoration:none;font-weight:700;font-size:14px;padding:11px 28px;border-radius:8px;margin-right:10px;">Pay with Card</a>` : ""}
-              <a href="${window?.location?.origin || ''}" style="display:inline-block;background:#003087;color:#ffffff;text-decoration:none;font-weight:700;font-size:14px;padding:11px 28px;border-radius:8px;">Pay with PayPal via Portal</a>
             </div>` : ""}
+            <div style="margin-top:14px;padding-top:14px;border-top:1px solid #BBF7D0;">
+              <a href="${window.location.origin}?paypal=pay&invoiceId=${emailDocumentRecord?.id || ""}&invoice=${emailDocumentRecord?.invoiceNumber || ""}" style="display:inline-block;background:#003087;color:#ffffff;text-decoration:none;font-weight:700;font-size:14px;padding:11px 28px;border-radius:8px;">Pay with PayPal</a>
+            </div>
           </div>
         </td>
       </tr>` : ""}
